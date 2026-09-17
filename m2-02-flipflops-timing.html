@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flip-flops &amp; Timing</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 2 / Flip-flops &amp; timing</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 2 · Memory &amp; State <span class="tag class">From class notes · L05 part II, Lab 0101 &amp; L06</span></div>
+  <h1>Flip-flops &amp; timing: storing a bit at exactly the right moment</h1>
+  <p class="idea">A <strong>flip-flop</strong> stores one bit, like a latch, but it only looks at its input at one instant: the <strong>clock edge</strong>. Between edges it ignores its input completely. That makes every register in a CPU update together, in step with the clock.</p>
+  <div class="analogy"><b>Think of it like this:</b> a photo camera. A latch is a live video feed: whatever moves in front of it shows up. A flip-flop is a photo: it captures one instant when the shutter clicks (the clock edge) and shows that picture until the next click. The subject must hold still just before and just after the click, or the photo blurs.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Clock (CLK)</dt><dd>A signal that goes 0, 1, 0, 1 forever at a fixed rate. It tells every flip-flop when to act.</dd></div>
+  <div class="term"><dt>Period (T) &amp; frequency (f)</dt><dd>T is the time for one full 0-1 cycle. f = 1/T is how many cycles per second (Hz).</dd></div>
+  <div class="term"><dt>Rising edge</dt><dd>The instant the clock goes from 0 to 1. An edge is a <em>moment</em>, not a duration.</dd></div>
+  <div class="term"><dt>Level-triggered</dt><dd>Active for the whole time a signal is at a level (latches).</dd></div>
+  <div class="term"><dt>Edge-triggered</dt><dd>Acts only at the edge (flip-flops). Drawn with a small triangle ▷ on the clock pin.</dd></div>
+  <div class="term"><dt>Q⁺ (next state)</dt><dd>The value Q will have just after the next clock edge.</dd></div>
+  <div class="term"><dt>Setup / hold time</dt><dd>How long D must stay steady before / after the edge.</dd></div>
+  <div class="term"><dt>Metastability</dt><dd>An in-between, undecided output caused by D changing too close to the edge.</dd></div>
+</dl>
+
+<h2>1. The clock</h2>
+<p>The clock is the drummer the whole orchestra follows. Flip-flops sample their inputs on each <strong>rising edge</strong>.</p>
+<div class="formula">f = 1 / T<small>A 3 GHz CPU: T = 1 / 3,000,000,000 s ≈ 0.33 ns, so 3 billion edges every second. A 3.5 GHz clock: T ≈ 0.29 ns. (1 ns = one billionth of a second.)</small></div>
+
+<h2>2. Level vs edge triggering</h2>
+<div class="vs">
+  <div><h3>Level-triggered (latch)</h3><p>Active the whole time the clock/enable is high. Transparent. Fewer gates. <b>Risky:</b> data can slip through while it is open.</p></div>
+  <div><h3>Edge-triggered (flip-flop)</h3><p>Samples at one instant (0→1). More gates (about 2× a latch). The <b>safe choice</b> for registers and pipelines.</p></div>
+</div>
+<div class="callout tip"><b>Rule of thumb</b><p>If a clock <b>edge</b> triggers it, it's a flip-flop. If a <b>level</b> does, it's a latch.</p></div>
+
+<h2>3. The D flip-flop</h2>
+<p>On each rising edge, Q takes the value D has at that moment, then holds it until the next rising edge. Glitches on D between edges are ignored.</p>
+<div class="formula">Q⁺ = D  (at the rising edge)</div>
+
+<h3>Same D, same clock: latch vs flip-flop</h3>
+<p>Below, one D signal feeds both a D latch (enabled while CLK = 1) and a D flip-flop. Watch how differently they respond.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 600 240" width="600" role="img" aria-label="Timing diagram comparing a D flip-flop and a D latch fed by the same D and clock. The flip-flop changes only at rising edges. The latch passes short glitches through while the clock is high.">
+    <g class="grid">
+      <path d="M122 18 V212 M206 18 V212 M290 18 V212 M374 18 V212 M458 18 V212 M542 18 V212"/>
+    </g>
+    <text x="8" y="45" class="m b">CLK</text>
+    <text x="8" y="95" class="m b">D</text>
+    <text x="8" y="145" class="m b">Q (FF)</text>
+    <text x="8" y="195" class="m b">Q (latch)</text>
+    <path class="w" d="M80 50 H122 V30 H164 V50 H206 V30 H248 V50 H290 V30 H332 V50 H374 V30 H416 V50 H458 V30 H500 V50 H542 V30 H584"/>
+    <path class="w" d="M80 100 H138.8 V80 H151.4 V100 H185 V80 H264.8 V100 H353 V80 H386.6 V100 H399.2 V80 H521 V100 H584"/>
+    <path class="w" d="M80 130 H122 M80 150 H122 M80 180 H122 M80 200 H122" stroke-dasharray="3 3"/>
+    <text x="95" y="144" class="m dim">?</text>
+    <text x="95" y="194" class="m dim">?</text>
+    <path class="w-g" d="M122 150 H206 V130 H290 V150 H374 V130 H542 V150 H584"/>
+    <path class="w-hi" d="M122 200 H138.8 V180 H151.4 V200 H206 V180 H290 V200 H374 V180 H386.6 V200 H399.2 V180 H542 V200 H584"/>
+    <text x="100" y="230" class="m r">glitch leaks</text>
+    <text x="350" y="230" class="m r">glitch leaks</text>
+  </svg>
+  <figcaption>Faint vertical lines = rising edges. The flip-flop (green) changes only on an edge and never shows a glitch. The latch (copper) is open while CLK = 1, so the two short D spikes reach its output. Q starts unknown (?) because nothing has been stored yet.</figcaption>
+</figure>
+
+<div class="scroll"><table>
+  <tr><th></th><th>D latch</th><th>D flip-flop</th></tr>
+  <tr><td>Control</td><td>Enable (a level)</td><td>Clock (an edge)</td></tr>
+  <tr><td>While active</td><td>Q follows D</td><td>Q samples once, then holds</td></tr>
+  <tr><td>Transparent?</td><td>Yes</td><td>No</td></tr>
+  <tr><td>Glitches get through?</td><td>Yes</td><td>No</td></tr>
+  <tr><td>Verilog</td><td><code>assign</code> / <code>always @(*)</code></td><td><code>always @(posedge clk)</code></td></tr>
+  <tr><td>Output declared as</td><td>wire</td><td>reg</td></tr>
+  <tr><td>Used in modern CPUs?</td><td>Rarely</td><td>Everywhere</td></tr>
+</table></div>
+<p style="font-size:15px">This is called "the most-asked digital-design interview question". Learn this table.</p>
+
+<h3>How it's built: master-slave</h3>
+<p>Put two D latches in a row. The first (<b>master</b>) is open while CLK = 0. The second (<b>slave</b>) is open while CLK = 1. They are <strong>never open at the same time</strong>, like a two-door airlock for one bit. At the rising edge the master closes (freezing D) and the slave opens (showing that frozen value). So Q changes only at the edge.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 560 175" width="560" role="img" aria-label="Master-slave flip-flop: D enters a master latch open when CLK is 0, then a slave latch open when CLK is 1, then Q.">
+    <text x="16" y="69" class="b">D</text>
+    <path class="w" d="M36 65 H90"/>
+    <rect x="90" y="30" width="140" height="70" rx="8" class="box-b"/>
+    <text x="112" y="58" class="b">Master latch</text>
+    <text x="100" y="84" class="m dim">open when CLK=0</text>
+    <path class="w" d="M230 65 H320"/>
+    <text x="268" y="58" class="m dim">x</text>
+    <rect x="320" y="30" width="140" height="70" rx="8" class="box-g"/>
+    <text x="346" y="58" class="b">Slave latch</text>
+    <text x="330" y="84" class="m dim">open when CLK=1</text>
+    <path class="w-g" d="M460 65 H520"/>
+    <text x="528" y="70" class="g">Q</text>
+    <text x="8" y="145" class="m b">CLK</text>
+    <path class="w-hi" d="M40 140 H390 V100"/>
+    <path class="w-hi" d="M160 140 V108"/>
+    <circle cx="160" cy="104" r="4" class="box-hi"/>
+    <circle cx="160" cy="140" r="3.5" class="fill-ink"/>
+    <text x="170" y="128" class="m hi">inverted</text>
+  </svg>
+  <figcaption>The bubble inverts the clock for the master. Only one latch is ever open, so D can never run straight through to Q.</figcaption>
+</figure>
+
+<h3>The Verilog, line by line</h3>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · d_ff.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="com">// Positive-edge-triggered D flip-flop</span></td><td class="n">"Positive edge" = rising edge (0→1).</td></tr>
+    <tr><td class="c"><span class="kw">module</span> d_ff (</td><td class="n">A block called <code>d_ff</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">input wire</span> clk,</td><td class="n">The clock pin.</td></tr>
+    <tr><td class="c">  <span class="kw">input wire</span> d,</td><td class="n">The data pin.</td></tr>
+    <tr><td class="c">  <span class="kw">output reg</span> q <span class="com">// reg, not wire</span></td><td class="n"><code>reg</code> means "this holds its value between updates". Anything assigned inside <code>always</code> must be a reg.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always @(posedge</span> clk<span class="kw">) begin</span></td><td class="n">"Every time clk rises, do the lines below." Nothing happens at any other time.</td></tr>
+    <tr><td class="c">    q &lt;= d; <span class="com">// nonblocking</span></td><td class="n">Copy d into q. <code>&lt;=</code> is the <b>non-blocking</b> assignment: all such updates at this edge happen together.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">End of the edge action.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · ff_tb.v (from the lab)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> ff_tb;</td><td class="n">The testbench block.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span> clk, d; <span class="kw">wire</span> q;</td><td class="n">clk and d are driven by the test; q is watched.</td></tr>
+    <tr><td class="c">  d_ff dut(.clk(clk), .d(d), .q(q));</td><td class="n">Place the flip-flop under test.</td></tr>
+    <tr><td class="c">  <span class="kw">initial</span> clk = <span class="num">0</span>;</td><td class="n">The clock starts at 0.</td></tr>
+    <tr><td class="c">  <span class="kw">always</span> #<span class="num">5</span> clk = ~clk; <span class="com">// period = 10 ns</span></td><td class="n">Forever: wait 5, flip the clock. High 5 + low 5 = period 10. Rising edges at t = 5, 15, 25…</td></tr>
+    <tr><td class="c">  <span class="kw">initial begin</span></td><td class="n">The test steps, run once.</td></tr>
+    <tr><td class="c">    <span class="kw">$dumpfile</span>(<span class="str">"ff.vcd"</span>); <span class="kw">$dumpvars</span>(<span class="num">0</span>, ff_tb);</td><td class="n">Record the waveform.</td></tr>
+    <tr><td class="c">    d = <span class="num">0</span>; #<span class="num">3</span>;  <span class="com">// before 1st edge</span></td><td class="n">t = 0: d = 0. Wait until t = 3.</td></tr>
+    <tr><td class="c">    d = <span class="num">1</span>; #<span class="num">1</span>;  <span class="com">// glitch up</span></td><td class="n">t = 3: a short spike up. Wait until t = 4.</td></tr>
+    <tr><td class="c">    d = <span class="num">0</span>; #<span class="num">1</span>;  <span class="com">// glitch down</span></td><td class="n">t = 4: spike ends. Wait until t = 5 (the first edge). The spike happened between edges, so q ignores it.</td></tr>
+    <tr><td class="c">    d = <span class="num">1</span>; #<span class="num">6</span>;  <span class="com">// settle to 1</span></td><td class="n">t = 5: d becomes 1 <b>at the same instant</b> as the edge (see the warning below). Wait until t = 11.</td></tr>
+    <tr><td class="c">    d = <span class="num">1</span>; #<span class="num">10</span>; <span class="com">// hold across 2 edges</span></td><td class="n">t = 11: d stays 1. The edge at t = 15 stores 1.</td></tr>
+    <tr><td class="c">    d = <span class="num">0</span>; #<span class="num">10</span>;</td><td class="n">t = 21: d = 0. The edge at t = 25 stores 0.</td></tr>
+    <tr><td class="c">    <span class="kw">$finish</span>;</td><td class="n">t = 31: stop.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<div class="callout fix"><b>Two things to notice in this testbench</b>
+<ul>
+  <li><b>A simulation race at t = 5.</b> d changes to 1 at exactly the moment clk rises. The simulator may store the old 0 or the new 1, so q after the first edge is not guaranteed. In real hardware this is a setup violation. Safer: change d only when the clock is low (e.g. at t = 2 or 7, not 5).</li>
+  <li><b>No reset.</b> q is X (unknown) until the first edge. Real designs add a reset, shown below.</li>
+</ul></div>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · d_ff with reset</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">always @(posedge</span> clk<span class="kw">) begin</span></td><td class="n">On each rising edge…</td></tr>
+    <tr><td class="c">  <span class="kw">if</span> (rst) q &lt;= <span class="num">1'b0</span>;</td><td class="n">…if reset is 1, force q to 0. <code>1'b0</code> means "a 1-bit binary 0".</td></tr>
+    <tr><td class="c">  <span class="kw">else</span>     q &lt;= d;</td><td class="n">…otherwise store d as normal.</td></tr>
+    <tr><td class="c"><span class="kw">end</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h2>4. The four flip-flop types</h2>
+<p>Keep this one table. Q⁺ means "Q after the next edge", Q' means NOT Q, + means OR.</p>
+<div class="scroll"><table>
+  <tr><th>Type</th><th>Inputs</th><th>Behaviour</th><th>Next state</th><th>Used for</th></tr>
+  <tr><td><b>SR</b></td><td>S, R</td><td>set, reset or hold; S = R = 1 not allowed</td><td><code>Q⁺ = S + R'Q</code></td><td>latches</td></tr>
+  <tr><td><b>D</b></td><td>D</td><td>copies D on the edge</td><td><code>Q⁺ = D</code></td><td>registers, pipelines</td></tr>
+  <tr><td><b>JK</b></td><td>J, K</td><td>like SR, but 11 toggles</td><td><code>Q⁺ = JQ' + K'Q</code></td><td>general design</td></tr>
+  <tr><td><b>T</b></td><td>T</td><td>T = 1 flips, T = 0 holds</td><td><code>Q⁺ = T ⊕ Q</code></td><td>counters, dividers</td></tr>
+</table></div>
+
+<h3>Characteristic tables</h3>
+<div class="vs">
+  <div><div class="scroll" style="margin:0"><table class="tt">
+    <tr><th>S</th><th>R</th><th class="out">Q⁺</th></tr>
+    <tr><td>0</td><td>0</td><td class="out">Q (hold)</td></tr>
+    <tr><td>0</td><td>1</td><td class="out zero">0</td></tr>
+    <tr><td>1</td><td>0</td><td class="out one">1</td></tr>
+    <tr class="hl"><td>1</td><td>1</td><td class="out">not allowed</td></tr>
+  </table></div></div>
+  <div><div class="scroll" style="margin:0"><table class="tt">
+    <tr><th>J</th><th>K</th><th class="out">Q⁺</th></tr>
+    <tr><td>0</td><td>0</td><td class="out">Q (hold)</td></tr>
+    <tr><td>0</td><td>1</td><td class="out zero">0</td></tr>
+    <tr><td>1</td><td>0</td><td class="out one">1</td></tr>
+    <tr class="hl"><td>1</td><td>1</td><td class="out">Q' (toggle)</td></tr>
+  </table></div></div>
+  <div><div class="scroll" style="margin:0"><table class="tt">
+    <tr><th>D</th><th class="out">Q⁺</th></tr>
+    <tr><td>0</td><td class="out zero">0</td></tr>
+    <tr><td>1</td><td class="out one">1</td></tr>
+  </table></div></div>
+  <div><div class="scroll" style="margin:0"><table class="tt">
+    <tr><th>T</th><th class="out">Q⁺</th></tr>
+    <tr><td>0</td><td class="out">Q (hold)</td></tr>
+    <tr><td>1</td><td class="out">Q' (toggle)</td></tr>
+  </table></div></div>
+</div>
+<ul>
+  <li><b>JK</b> fixes SR's forbidden row: J = K = 1 now means "toggle".</li>
+  <li><b>T flip-flop</b>: tie J and K together, or use a D flip-flop with <code>D = T ⊕ Q</code> (an XOR in front).</li>
+  <li>Modern chips and every FPGA use <b>D flip-flops almost exclusively</b>. You may reason in T; the synthesis tool builds it from a D and an XOR.</li>
+</ul>
+
+<h3>Divide-by-2</h3>
+<p>A T flip-flop with T = 1 flips on every rising edge, so its output completes one cycle every <b>two</b> clock cycles. That halves the frequency. Chain n of them and you divide by 2ⁿ. Counting and dividing are the same operation (see <a href="m2-04-counters.html">Counters</a>).</p>
+<div class="formula">f_out = f_in / 2ⁿ<small>A watch crystal at 32,768 Hz = 2¹⁵ Hz. After 15 stages: 32,768 / 32,768 = 1 Hz, one tick per second.</small></div>
+
+<h2>5. Asynchronous vs synchronous reset</h2>
+<div class="scroll"><table>
+  <tr><th></th><th>Asynchronous</th><th>Synchronous</th></tr>
+  <tr><td>Acts</td><td>immediately</td><td>at the next clock edge</td></tr>
+  <tr><td>Needs the clock?</td><td>no</td><td>yes</td></tr>
+  <tr><td>Timing risk</td><td>can violate setup/hold when released</td><td>none</td></tr>
+  <tr><td>Typical use</td><td>power-on reset</td><td>mod-N wrap, FSM restart</td></tr>
+</table></div>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · asynchronous reset</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">always @(posedge</span> clk <span class="kw">or posedge</span> rst<span class="kw">)</span></td><td class="n">Wake up on a clock rise <b>or</b> the moment rst rises. That is what makes it asynchronous.</td></tr>
+    <tr><td class="c">  <span class="kw">if</span> (rst) q &lt;= <span class="num">0</span>;</td><td class="n">Reset wins immediately, no clock needed.</td></tr>
+    <tr><td class="c">  <span class="kw">else</span>     q &lt;= d;</td><td class="n">Otherwise it is a normal D flip-flop.</td></tr>
+  </table>
+</div>
+<p>The synchronous version is the one shown earlier: only <code>posedge clk</code> in the list, with <code>if (rst)</code> inside.</p>
+<div class="callout tip"><b>Why reset at all?</b><p>A flip-flop powers up holding a random value. Without a reset, "a counter might start at 173". It may look fine in simulation (which shows X) and then hang on real hardware.</p></div>
+
+<h2>6. Timing: setup, hold and clock-to-Q</h2>
+<dl class="terms">
+  <div class="term"><dt>t_setup</dt><dd>How long D must be stable <b>before</b> the edge.</dd></div>
+  <div class="term"><dt>t_hold</dt><dd>How long D must stay stable <b>after</b> the edge.</dd></div>
+  <div class="term"><dt>t_cq (clock-to-Q)</dt><dd>Delay from the edge until Q shows the new value.</dd></div>
+</dl>
+<figure class="diagram">
+  <svg viewBox="0 0 600 225" width="600" role="img" aria-label="Setup and hold window around a clock edge. D must be stable from t_setup before the edge until t_hold after it. Q changes t_cq after the edge.">
+    <path class="grid" d="M300 18 V200"/>
+    <text x="10" y="50" class="m b">CLK</text>
+    <text x="10" y="110" class="m b">D</text>
+    <text x="10" y="180" class="m b">Q</text>
+    <path class="w" d="M60 60 H300 V30 H540"/>
+    <rect x="240" y="88" width="60" height="34" class="box-g" opacity="0.6"/>
+    <rect x="300" y="88" width="30" height="34" class="box-hi" opacity="0.6"/>
+    <path class="w" d="M60 90 H175 L185 120 H390 L400 90 H540 M60 120 H175 L185 90 H390 L400 120 H540"/>
+    <text x="100" y="110" class="m dim">old</text>
+    <text x="450" y="110" class="m dim">next</text>
+    <text x="222" y="80" class="m g">must not change here</text>
+    <text x="238" y="140" class="m g">t_setup</text>
+    <text x="304" y="140" class="m hi">t_hold</text>
+    <path class="w" d="M60 160 H345 L355 190 H540 M60 190 H345 L355 160 H540"/>
+    <text x="100" y="180" class="m dim">old Q</text>
+    <text x="420" y="180" class="m dim">new Q</text>
+    <path class="w-hi" d="M300 208 H350"/>
+    <path class="w-hi" d="M300 203 V213 M350 203 V213"/>
+    <text x="358" y="212" class="m hi">t_cq</text>
+  </svg>
+  <figcaption>The faint vertical line is the rising edge. D must be steady through the whole green + copper window. Q shows the new value t_cq after the edge.</figcaption>
+</figure>
+<ul>
+  <li><b>Setup violation:</b> D changes too <em>late</em> (inside the green part).</li>
+  <li><b>Hold violation:</b> D changes too <em>soon after</em> the edge (inside the copper part).</li>
+</ul>
+
+<h3>Metastability</h3>
+<p>Either violation can leave the flip-flop <strong>metastable</strong>: its output hovers between 0 and 1 for an unpredictable time before falling to one side.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 360 180" width="360" role="img" aria-label="A ball balanced on top of a hill between a valley labelled 0 and a valley labelled 1.">
+    <path class="w" d="M30 120 Q80 160 130 120 Q180 30 230 120 Q280 160 330 120"/>
+    <circle cx="180" cy="66" r="9" class="fill-hi"/>
+    <text x="140" y="40" class="hi">metastable</text>
+    <text x="52" y="165" class="m">stable 0</text>
+    <text x="252" y="165" class="m">stable 1</text>
+  </svg>
+  <figcaption>A ball balanced on a hilltop. It will roll into the 0 or 1 valley, but nobody can say which or exactly when.</figcaption>
+</figure>
+<ul>
+  <li>Most common when an input comes from an <b>unrelated clock</b>: a button press, another chip.</li>
+  <li>It <b>cannot be eliminated</b>, because such an input can always change near an edge.</li>
+  <li>It can be made extremely rare with a <b>synchronizer</b>: 2–3 flip-flops in a row. Each gives the signal one more clock cycle to settle. Designers aim for an MTBF (mean time between failures) of thousands of years.</li>
+  <li>It is a physical fact, not a "bug" in your code.</li>
+</ul>
+
+<h3>How fast can the clock go?</h3>
+<p>Between two flip-flops sits some combinational logic. In one clock period, the signal must leave the first flip-flop, pass through the logic, and arrive before the second flip-flop's setup window. The slowest such path is the <strong>critical path</strong>, and it sets the speed limit.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 560 120" width="560" role="img" aria-label="Flip-flop A, then combinational logic, then flip-flop B. The clock period must cover t_cq, t_logic and t_setup.">
+    <rect x="20" y="20" width="80" height="50" rx="6" class="box-b"/>
+    <text x="42" y="50" class="b">FF A</text>
+    <path class="w" d="M100 45 H200"/>
+    <rect x="200" y="20" width="160" height="50" rx="6" class="box"/>
+    <text x="222" y="50" class="b">logic (adder…)</text>
+    <path class="w" d="M360 45 H460"/>
+    <rect x="460" y="20" width="80" height="50" rx="6" class="box-b"/>
+    <text x="482" y="50" class="b">FF B</text>
+    <path class="w-hi" d="M60 95 H540"/>
+    <path class="w-hi" d="M60 88 V102 M150 88 V102 M420 88 V102 M540 88 V102"/>
+    <text x="84" y="115" class="m hi">t_cq</text>
+    <text x="256" y="115" class="m hi">t_logic</text>
+    <text x="452" y="115" class="m hi">t_setup</text>
+  </svg>
+  <figcaption>One clock period must cover all three delays.</figcaption>
+</figure>
+<div class="formula">T ≥ t_cq + t_logic + t_setup &nbsp;&nbsp;→&nbsp;&nbsp; f_max = 1 / T_min<small>Static timing analysis (STA) tools such as PrimeTime check this for every path. Overclocking shrinks the margin until a path fails.</small></div>
+
+<h3>Worked examples</h3>
+<ol class="steps">
+  <li><b>Class homework.</b> Path delay (t_cq + logic) = 0.28 ns, setup = 0.05 ns.<br>T ≥ 0.28 + 0.05 = <b>0.33 ns</b>.<br>f_max = 1 / 0.33 ns = 1 / 0.33 × 10⁹ Hz ≈ <b>3.03 GHz</b>.</li>
+  <li><b>All three given.</b> t_cq = 0.05 ns, t_logic = 0.20 ns, t_setup = 0.05 ns.<br>T ≥ 0.05 + 0.20 + 0.05 = <b>0.30 ns</b>, so f_max = 1 / 0.30 ns ≈ <b>3.33 GHz</b>.</li>
+  <li><b>What if you clock it at 3.5 GHz?</b> T = 1 / 3.5 GHz ≈ 0.286 ns, which is less than 0.30 ns. The signal arrives late: a <b>setup violation</b>. The chip may compute wrong values.</li>
+</ol>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Mixing up latches (level) and flip-flops (edge).</li>
+  <li>Allowing S = R = 1 in an SR flip-flop.</li>
+  <li>Ignoring a latch's transparency window.</li>
+  <li>Forgetting hold time: it is measured <em>after</em> the edge.</li>
+  <li>Calling metastability a "bug". It is physics and can only be made rare.</li>
+  <li>Clocking with zero timing margin.</li>
+  <li>Declaring <code>q</code> as a <code>wire</code>. Anything set inside <code>always</code> must be a <code>reg</code>.</li>
+  <li>Using <code>=</code> instead of <code>&lt;=</code> inside <code>always @(posedge clk)</code>.</li>
+  <li>Forgetting <code>begin</code>/<code>end</code> when an <code>always</code> block has more than one line.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>Latch vs flip-flop in one sentence.</summary><div class="a"><p>A latch is <b>level</b>-sensitive and transparent while enabled; a flip-flop is <b>edge</b>-triggered and samples its input only at the clock edge.</p></div></details>
+  <details class="q"><summary>What is metastability, and why can't it be eliminated?</summary><div class="a"><p>An undecided output (between 0 and 1) caused by D changing inside the setup/hold window. Inputs from unrelated clocks can always change near an edge, so it can't be removed, only made rare with a 2–3 flip-flop synchronizer.</p></div></details>
+  <details class="q"><summary>A JK flip-flop has Q = 1. J = 1, K = 1. What is Q after the edge? Check with the formula.</summary><div class="a"><p>11 means toggle, so <b>Q⁺ = 0</b>. Formula: Q⁺ = JQ' + K'Q = 1·0 + 0·1 = 0 ✓</p></div></details>
+  <details class="q"><summary>A T flip-flop starts at Q = 0 with T = 1. What is Q after 1, 2, 3 edges?</summary><div class="a"><p>It toggles every edge: <b>1, 0, 1</b>. Its output frequency is half the clock's.</p></div></details>
+  <details class="q"><summary>t_cq = 60 ps, t_logic = 340 ps, t_setup = 100 ps. Find T_min and f_max.</summary><div class="a"><p>T_min = 60 + 340 + 100 = <b>500 ps = 0.5 ns</b>. f_max = 1 / 0.5 ns = <b>2 GHz</b>.</p></div></details>
+  <details class="q"><summary>How many T flip-flops divide 1 MHz down to about 1 Hz?</summary><div class="a"><p>We need 2ⁿ ≈ 1,000,000. 2²⁰ = 1,048,576, so <b>20 stages</b> give about 0.95 Hz.</p></div></details>
+  <details class="q"><summary>Why is an asynchronous reset risky when it is released?</summary><div class="a"><p>If rst goes low very close to a clock edge, the flip-flop sees a change inside its setup/hold window and can go metastable. A synchronous reset only acts on the edge, so it has no such risk.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=YW-_GkUguMM" target="_blank" rel="noopener"><i class="play"></i><span><b>D flip-flop</b><small>Ben Eater</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=m1QBxTeVaNs" target="_blank" rel="noopener"><i class="play"></i><span><b>Difference between Latch and Flip Flop</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=5ykewHgHYBI" target="_blank" rel="noopener"><i class="play"></i><span><b>Behaviour of Master Slave D Flip Flop</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=5PRuPVIjEcs" target="_blank" rel="noopener"><i class="play"></i><span><b>How does a flip flop work, what is metastability and why does it have setup &amp; hold time?</b><small>Zero To ASIC Course</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

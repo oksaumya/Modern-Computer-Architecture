@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Von Neumann vs Harvard</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 3 / Von Neumann vs Harvard</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>Von Neumann vs Harvard architecture</h1>
+  <p class="idea">A computer has a CPU, memory, I/O and wires (buses) that connect them. There are two classic ways to connect them. <b>Von Neumann</b> keeps program and data in one memory on one bus. <b>Harvard</b> gives the program and the data their own memories and their own buses.</p>
+  <div class="analogy"><b>Think of it like this:</b> a kitchen. In a von Neumann kitchen, the recipe book and the ingredients sit on <em>one</em> shelf, and the cook uses <em>one</em> door to reach it. The cook has to take turns: fetch the recipe, then fetch the flour. In a Harvard kitchen, recipes are on one shelf and ingredients on another, each with its own door. The cook can grab both at once.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>CPU</dt><dd>Central Processing Unit. The part that <b>computes</b>: control unit + ALU + registers.</dd></div>
+  <div class="term"><dt>Memory</dt><dd>The part that <b>stores</b> things. Each byte sits at a numbered place called an <b>address</b>.</dd></div>
+  <div class="term"><dt>I/O</dt><dd>Input/Output. How the computer <b>talks to the world</b>: keyboard, screen, disk, network.</dd></div>
+  <div class="term"><dt>Bus</dt><dd>A bundle of shared wires that <b>connects</b> the parts. It carries an address, data and control signals.</dd></div>
+  <div class="term"><dt>Instruction</dt><dd>One small command for the CPU, e.g. "add these two registers". In MIPS it is a 32-bit number.</dd></div>
+  <div class="term"><dt>Stored-program concept</dt><dd>The program is kept in memory as numbers, just like data. To change the program, you just change the memory.</dd></div>
+  <div class="term"><dt>Bottleneck</dt><dd>The narrowest point that slows everything down, like the neck of a bottle.</dd></div>
+  <div class="term"><dt>Cache</dt><dd>A small, very fast memory (SRAM) next to the CPU that keeps copies of recently used bytes.</dd></div>
+  <div class="term"><dt>Microcontroller</dt><dd>A whole tiny computer on one chip (CPU + memory + I/O), e.g. the AVR chip on an Arduino.</dd></div>
+  <div class="term"><dt>DSP</dt><dd>Digital Signal Processor. A chip built to process audio, radio or sensor signals very fast.</dd></div>
+</dl>
+
+<h2>1. The parts, and the big question</h2>
+<p>Every computer has the same four parts: <b>CPU</b> (compute), <b>MEMORY</b> (store), <b>I/O</b> (talk to the world) and <b>BUS</b> (connect). The class notes (L09) then ask: <em>how do they connect, and how many buses?</em> Two classic blueprints answer that question: von Neumann and Harvard.</p>
+
+<h2>2. The stored-program concept</h2>
+<p>The earliest computers (e.g. ENIAC, 1945) were programmed by <b>re-plugging cables</b>. Changing the program took days. John von Neumann's 1945 report described a better idea:</p>
+<div class="callout tip"><b>Programs ARE data</b><p>An instruction is just a number. So store the program <b>in memory, next to the data</b>. The CPU reads the next instruction from memory, does it, and moves on. To run a different program, load different numbers into memory.</p></div>
+<p>Example: the MIPS instruction <code>add $t0, $s1, $s2</code> is stored in memory as the number <code>0x02324020</code>. To memory it looks exactly like any other 32-bit value. (See <a href="m3-03-mips-registers-formats.html">MIPS instruction formats</a> for how that number is built.)</p>
+<p>This is von Neumann's superpower. Because programs are data, other programs can create, load or change them:</p>
+<ul>
+  <li><b>Compilers</b> write out programs as data.</li>
+  <li><b>OS loaders</b> copy a program from disk into memory, then run it.</li>
+  <li><b>JIT compilers</b> (Java, JavaScript) generate machine code while the program runs.</li>
+  <li><b>Self-modifying code</b> changes its own instructions.</li>
+</ul>
+<p>It is also the root of whole classes of security attacks (see section 7).</p>
+
+<h3>How the CPU runs a stored program</h3>
+<ol class="flow arrows">
+  <li><b>Fetch</b>Read the instruction at address PC from memory.</li>
+  <li><b>Decode</b>Work out what it means (which operation, which registers).</li>
+  <li><b>Execute</b>Do it, e.g. add in the ALU, or read/write data in memory.</li>
+  <li><b>Next</b>PC ← PC + 4, then repeat forever.</li>
+</ol>
+<p>PC means <b>Program Counter</b>: a register that holds the address of the next instruction. Module 4 builds this cycle in hardware (<a href="m4-01-single-cycle-datapath.html">single-cycle datapath</a>).</p>
+
+<h2>3. Von Neumann architecture</h2>
+<p>One memory holds <b>both</b> the program and the data. <b>One bus</b> connects that memory to the CPU.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 620 240" width="620" role="img" aria-label="Von Neumann block diagram: CPU, one memory holding program and data, and I/O, all on one shared bus">
+    <rect x="20" y="20" width="180" height="150" rx="10" class="box-hi"/>
+    <text x="110" y="42" class="b" text-anchor="middle">CPU</text>
+    <rect x="36" y="54" width="148" height="30" rx="6" class="box"/>
+    <text x="110" y="74" text-anchor="middle">Control unit</text>
+    <rect x="36" y="92" width="148" height="30" rx="6" class="box"/>
+    <text x="110" y="112" text-anchor="middle">ALU</text>
+    <rect x="36" y="130" width="148" height="30" rx="6" class="box"/>
+    <text x="110" y="150" text-anchor="middle">Registers + PC</text>
+
+    <rect x="240" y="20" width="200" height="150" rx="10" class="box-b"/>
+    <text x="340" y="42" class="b" text-anchor="middle">Memory (one)</text>
+    <rect x="256" y="54" width="168" height="48" rx="6" class="box"/>
+    <text x="340" y="75" text-anchor="middle">Program</text>
+    <text x="340" y="92" class="m dim" text-anchor="middle">instructions</text>
+    <rect x="256" y="110" width="168" height="48" rx="6" class="box"/>
+    <text x="340" y="131" text-anchor="middle">Data</text>
+    <text x="340" y="148" class="m dim" text-anchor="middle">variables, arrays</text>
+
+    <rect x="480" y="20" width="120" height="150" rx="10" class="box-g"/>
+    <text x="540" y="42" class="b" text-anchor="middle">I/O</text>
+    <text x="540" y="80" class="dim" text-anchor="middle">keyboard</text>
+    <text x="540" y="100" class="dim" text-anchor="middle">screen</text>
+    <text x="540" y="120" class="dim" text-anchor="middle">disk</text>
+
+    <path class="w-hi" d="M110 170 V198 M340 170 V198 M540 170 V198"/>
+    <rect x="20" y="198" width="580" height="26" rx="6" class="box-hi"/>
+    <text x="310" y="216" class="b" text-anchor="middle">ONE shared bus: address + data + control</text>
+  </svg>
+  <figcaption>Von Neumann: instructions and data live in the same memory and travel on the same bus.</figcaption>
+</figure>
+
+<h3>The von Neumann bottleneck</h3>
+<p>Every instruction and every piece of data must travel over the <b>same single bus</b>. The CPU fetches an instruction, then the data, then the next instruction: <b>one at a time</b>. The bus is the neck of the bottle.</p>
+<p>It gets worse because the CPU is much faster than main memory. Main memory is DRAM, which takes about <b>50–100 ns</b> to answer. SRAM answers in <b>a few ns</b> (see <a href="m2-07-sram-dram.html">SRAM vs DRAM</a>). The CPU spends a lot of time waiting. Module 5 calls this the <a href="m5-01-memory-wall-locality.html">memory wall</a>.</p>
+<div class="vs">
+  <div><h3>Good</h3><ul><li>Simple: one memory, one bus.</li><li>Flexible: any memory byte can be code or data.</li><li>Programs can load and create programs.</li></ul></div>
+  <div><h3>Bad</h3><ul><li>Bottleneck: code and data take turns on one bus.</li><li>A bug or attack can make the CPU run data as code.</li></ul></div>
+</div>
+
+<h2>4. Harvard architecture</h2>
+<p>The program and the data get <b>separate memories</b> and <b>separate buses</b>. The name comes from the Harvard Mark I (1944), which read its program from punched paper tape and kept data in other storage.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 620 240" width="620" role="img" aria-label="Harvard block diagram: instruction memory and data memory on either side of the CPU, each with its own bus">
+    <rect x="10" y="40" width="150" height="110" rx="10" class="box-b"/>
+    <text x="85" y="72" class="b" text-anchor="middle">Instruction</text>
+    <text x="85" y="90" class="b" text-anchor="middle">memory</text>
+    <text x="85" y="112" class="dim" text-anchor="middle">program only</text>
+    <text x="85" y="132" class="m dim" text-anchor="middle">e.g. Flash</text>
+
+    <rect x="235" y="30" width="150" height="130" rx="10" class="box-hi"/>
+    <text x="310" y="70" class="b" text-anchor="middle">CPU</text>
+    <text x="310" y="96" text-anchor="middle">Control unit</text>
+    <text x="310" y="118" text-anchor="middle">ALU + registers</text>
+
+    <rect x="460" y="40" width="150" height="110" rx="10" class="box-g"/>
+    <text x="535" y="72" class="b" text-anchor="middle">Data</text>
+    <text x="535" y="90" class="b" text-anchor="middle">memory</text>
+    <text x="535" y="112" class="dim" text-anchor="middle">variables only</text>
+    <text x="535" y="132" class="m dim" text-anchor="middle">e.g. SRAM</text>
+
+    <path class="w-hi" d="M235 80 H170"/>
+    <polygon points="160,80 172,75 172,85" class="fill-hi"/>
+    <text x="197" y="72" class="m" text-anchor="middle">addr</text>
+    <path class="w-hi" d="M160 120 H225"/>
+    <polygon points="235,120 223,115 223,125" class="fill-hi"/>
+    <text x="197" y="140" class="m" text-anchor="middle">instr</text>
+
+    <path class="w" d="M385 80 H450"/>
+    <polygon points="460,80 448,75 448,85" class="fill-ink"/>
+    <text x="422" y="72" class="m" text-anchor="middle">addr</text>
+    <path class="w" d="M460 120 H395"/>
+    <polygon points="385,120 397,115 397,125" class="fill-ink"/>
+    <text x="422" y="140" class="m" text-anchor="middle">data</text>
+
+    <text x="85" y="182" class="hi" text-anchor="middle">Bus 1 (code)</text>
+    <text x="535" y="182" class="b" text-anchor="middle">Bus 2 (data)</text>
+    <text x="310" y="222" class="g" text-anchor="middle">Two buses: fetch an instruction AND read data at the same time</text>
+  </svg>
+  <figcaption>Harvard: the program and the data never share a memory or a bus.</figcaption>
+</figure>
+<ul>
+  <li><b>Where it is used:</b> microcontrollers and DSPs. Example: the AVR ATmega328P on an Arduino Uno keeps the program in 32 KB of Flash and the data in 2 KB of SRAM, on separate buses.</li>
+  <li><b>Good:</b> no bottleneck between code and data. The CPU can never accidentally run data as code. The two memories can even use different technologies and sizes (Flash for code, SRAM for data).</li>
+  <li><b>Bad:</b> the split is fixed. Unused program memory cannot be used for data. Loading a new program while running is hard.</li>
+</ul>
+<div class="callout tip"><b>You will meet Harvard again in Module 4</b><p>The textbook single-cycle MIPS datapath draws a separate <b>instruction memory</b> and <b>data memory</b>. That is a Harvard-style model: it lets one clock cycle fetch the instruction and read/write data at the same time.</p></div>
+
+<h2>5. Modified Harvard: what modern CPUs really do</h2>
+<p>Laptops, phones and servers mix both ideas:</p>
+<ul>
+  <li><b>Close to the CPU core (Harvard-style):</b> the level-1 cache is split in two. <b>L1i</b> holds instructions and <b>L1d</b> holds data. Each has its own path to the core, so the core can fetch and read data at the same time. A typical size is 32–48 KB each, per core.</li>
+  <li><b>Further away (von Neumann-style):</b> the L2/L3 caches and the main memory (DRAM) hold code and data <b>together</b>, in one address space. So the OS can still load programs as data.</li>
+</ul>
+<figure class="diagram">
+  <svg viewBox="0 0 620 290" width="620" role="img" aria-label="Modified Harvard: CPU core with split L1i and L1d caches on top of shared L2/L3 caches and one main memory">
+    <rect x="220" y="10" width="180" height="50" rx="10" class="box-hi"/>
+    <text x="310" y="41" class="b" text-anchor="middle">CPU core</text>
+    <path class="w-hi" d="M270 60 L200 100"/>
+    <path class="w" d="M350 60 L420 100"/>
+    <rect x="120" y="100" width="160" height="50" rx="8" class="box-b"/>
+    <text x="200" y="122" class="b" text-anchor="middle">L1i cache</text>
+    <text x="200" y="140" class="m dim" text-anchor="middle">instructions</text>
+    <rect x="340" y="100" width="160" height="50" rx="8" class="box-g"/>
+    <text x="420" y="122" class="b" text-anchor="middle">L1d cache</text>
+    <text x="420" y="140" class="m dim" text-anchor="middle">data</text>
+    <text x="12" y="120" class="hi">Harvard-style</text>
+    <text x="12" y="138" class="dim">split caches</text>
+
+    <path class="w" d="M200 150 V180 M420 150 V180"/>
+    <rect x="120" y="180" width="380" height="32" rx="8" class="box"/>
+    <text x="310" y="201" text-anchor="middle">L2 / L3 caches (code + data mixed)</text>
+    <path class="w" d="M310 212 V236"/>
+    <rect x="120" y="236" width="380" height="40" rx="8" class="box-b"/>
+    <text x="310" y="261" class="b" text-anchor="middle">Main memory (DRAM): code + data together</text>
+    <text x="12" y="222" class="hi">von Neumann-</text>
+    <text x="12" y="240" class="hi">style</text>
+    <text x="12" y="258" class="dim">one memory</text>
+  </svg>
+  <figcaption>Modified Harvard: split L1 caches for speed, one shared main memory for flexibility.</figcaption>
+</figure>
+
+<h2>6. Comparison table</h2>
+<div class="scroll"><table>
+  <tr><th></th><th>Von Neumann</th><th>Harvard</th><th>Modified Harvard</th></tr>
+  <tr><td>Memories</td><td>One, for code + data</td><td>Two: code memory and data memory</td><td>Split L1 caches, one main memory</td></tr>
+  <tr><td>Buses</td><td>One shared bus</td><td>Two separate buses</td><td>Split paths near the core, shared further out</td></tr>
+  <tr><td>Fetch + data access</td><td>Take turns (bottleneck)</td><td>At the same time</td><td>At the same time (at L1)</td></tr>
+  <tr><td>Flexibility</td><td>High: any byte can be code or data</td><td>Low: fixed split</td><td>High</td></tr>
+  <tr><td>Can data run as code?</td><td>Yes, unless blocked (NX bit)</td><td>No, by design</td><td>Yes, unless blocked (NX bit)</td></tr>
+  <tr><td>Hardware cost</td><td>Lower</td><td>Higher (two memories, two buses)</td><td>Medium</td></tr>
+  <tr><td>Examples</td><td>Early PCs, simple CPUs, textbook "one memory" machines</td><td>AVR/Arduino, PIC, DSPs, Harvard Mark I</td><td>Modern x86, ARM and RISC-V CPUs</td></tr>
+</table></div>
+
+<h2>7. Security: when data becomes code</h2>
+<p>In a von Neumann memory, the CPU cannot tell code from data. It runs whatever the PC points to. Attackers use this in a <b>code-injection attack</b>:</p>
+<ol class="flow arrows">
+  <li><b>Inject</b>The attacker sends input that contains machine-code bytes.</li>
+  <li><b>Overflow</b>A bug copies too much input, e.g. past the end of an array on the stack.</li>
+  <li><b>Hijack</b>The extra bytes overwrite a saved return address so it points at the injected bytes.</li>
+  <li><b>Run</b>When the function returns, the CPU jumps into the attacker's "data" and runs it as code.</li>
+</ol>
+<div class="callout fix"><b>The defence: the NX bit</b><p>NX means <b>No-eXecute</b> (Intel calls it XD, Windows calls the feature DEP). Every page of memory gets a flag. The OS marks the stack and the heap as <b>writable but not executable</b>, and the code as <b>executable but not writable</b> (a rule called W^X, "write XOR execute"). If the PC jumps into an NX page, the CPU raises a fault and the OS stops the program. This brings a bit of Harvard's safety to a von Neumann memory.</p></div>
+<p>Attackers adapted with <b>return-oriented programming (ROP)</b>, which reuses code that is already executable. So defences like address randomisation (ASLR) were added as well. Module 6 covers other hardware-level attacks (<a href="m6-07-spectre-meltdown.html">Spectre &amp; Meltdown</a>).</p>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>The von Neumann bottleneck is about the <b>single shared bus</b> (and slow memory). It is not about having "only one CPU".</li>
+  <li>Harvard does <b>not</b> mean "no stored program". Harvard machines still store the program in memory, just a separate one.</li>
+  <li>Modern PCs are <b>not</b> pure Harvard. Only the L1 cache is split; main memory is shared.</li>
+  <li>Arduino (AVR) is the standard Harvard example. A desktop PC is the standard von Neumann (modified Harvard) example.</li>
+  <li>The NX bit does not stop the buffer overflow itself. It stops the injected bytes from <b>running</b>.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>State the stored-program concept in one sentence.</summary><div class="a"><p>Instructions are encoded as numbers and kept in memory alongside data, so the CPU fetches and runs them from memory, and a new program can be loaded just by changing memory.</p></div></details>
+  <details class="q"><summary>What is the von Neumann bottleneck, and why does it slow the CPU?</summary><div class="a"><p>Instructions and data share one bus to one memory, so they must be moved one at a time. The CPU is also much faster than DRAM (50–100 ns per access), so it waits on that single path.</p></div></details>
+  <details class="q"><summary>Give two advantages and one disadvantage of the Harvard architecture.</summary><div class="a"><p>Advantages: instruction fetch and data access can happen at the same time; data can never be run as code; each memory can use a different technology (Flash / SRAM). Disadvantage: the code/data split is fixed, so spare program memory cannot hold data.</p></div></details>
+  <details class="q"><summary>Is an Arduino Uno von Neumann or Harvard? Why?</summary><div class="a"><p><b>Harvard.</b> Its AVR chip keeps the program in Flash and the data in SRAM, with separate buses and separate address spaces.</p></div></details>
+  <details class="q"><summary>Why do we call modern x86/ARM CPUs "modified Harvard"?</summary><div class="a"><p>Their L1 cache is split into L1i (instructions) and L1d (data), which is Harvard-style. But L2/L3 and main memory hold code and data together, which is von Neumann-style.</p></div></details>
+  <details class="q"><summary>How does a code-injection attack use the stored-program concept, and what does the NX bit do?</summary><div class="a"><p>The attacker's input (data) contains machine code. A bug redirects the PC to that input, and because memory does not separate code from data, the CPU runs it. The NX bit marks data pages (stack, heap) as non-executable, so the CPU faults instead of running the injected bytes.</p></div></details>
+  <details class="q"><summary>Name four things made possible by "programs are data".</summary><div class="a"><p>Compilers, OS program loaders, JIT compilers, and self-modifying code.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=kBXcrqwCVpQ" target="_blank" rel="noopener"><i class="play"></i><span><b>Von Neumann Architecture #COA #NesoAcademy #QuickConcepts</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=XjOlH_SAPEk" target="_blank" rel="noopener"><i class="play"></i><span><b>Princeton vs. Harvard Architecture #COA #NesoAcademy #QuickConcepts</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=Ml3-kVYLNr8" target="_blank" rel="noopener"><i class="play"></i><span><b>Von Neumann Architecture - Computerphile</b><small>Computerphile</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=j8NnE1YeSN0" target="_blank" rel="noopener"><i class="play"></i><span><b>L-1.2: Von Neumann's Architecture | Stored Memory Concept in Computer Architecture</b><small>Gate Smashers</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

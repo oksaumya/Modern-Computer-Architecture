@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Functions &amp; the Stack</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 3 / Functions &amp; stack</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>Functions, the stack and recursion in MIPS</h1>
+  <p class="idea">To call a function, MIPS uses <code>jal</code> (jump and remember where you came from) and returns with <code>jr $ra</code>. Arguments travel in <code>$a0–$a3</code> and the answer comes back in <code>$v0</code>. Anything that must survive the call is saved on the <b>stack</b>, an area of memory that grows <b>downward</b>.</p>
+  <div class="analogy"><b>Think of it like this:</b> you are reading a book and look up a word in the dictionary. You put a <b>bookmark</b> in the book first (<code>$ra</code>). If the dictionary entry sends you to an encyclopedia, you need a <em>second</em> bookmark, so you stack the first one on a pile of sticky notes (the stack). When you finish each lookup, you take the top note off the pile and go back to that place.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Function (procedure)</dt><dd>A named, reusable piece of code. It takes inputs (arguments) and gives back a result.</dd></div>
+  <div class="term"><dt>Caller / callee</dt><dd>The caller is the code that makes the call. The callee is the function being called.</dd></div>
+  <div class="term"><dt>Return address</dt><dd>Where to continue after the function ends: the instruction after the call. Kept in <code>$ra</code> (register 31).</dd></div>
+  <div class="term"><dt>Stack</dt><dd>A region of memory used like a pile: the last thing put on is the first taken off (LIFO).</dd></div>
+  <div class="term"><dt>Stack pointer <code>$sp</code></dt><dd>Register 29. Holds the address of the top item on the stack.</dd></div>
+  <div class="term"><dt>Push / pop</dt><dd>Push = put a value on the stack. Pop = take the top value off.</dd></div>
+  <div class="term"><dt>Stack frame</dt><dd>The block of stack space one function call uses: saved <code>$ra</code>, saved registers, local variables.</dd></div>
+  <div class="term"><dt>Leaf function</dt><dd>A function that calls no other function.</dd></div>
+  <div class="term"><dt>Recursion</dt><dd>A function that calls itself, on a smaller problem, until it reaches a simple "base case".</dd></div>
+  <div class="term"><dt>Calling convention</dt><dd>The agreed rules for which registers carry what and who must save them.</dd></div>
+</dl>
+
+<h2>1. A C function, in plain words</h2>
+<p><b>C:</b></p>
+<div class="code">
+  <div class="code-head"><span><b>c</b> · leaf_example</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">int</span> leaf_example(<span class="kw">int</span> g, <span class="kw">int</span> h, <span class="kw">int</span> i, <span class="kw">int</span> j)</td><td class="n">Define a function named leaf_example. It takes four whole numbers (g, h, i, j) and will give back a whole number (the first <code>int</code>).</td></tr>
+    <tr><td class="c">{</td><td class="n">The function's body starts.</td></tr>
+    <tr><td class="c">    <span class="kw">int</span> f;</td><td class="n">A local variable f that exists only inside this function.</td></tr>
+    <tr><td class="c">    f = (g + h) - (i + j);</td><td class="n">Compute the value and store it in f.</td></tr>
+    <tr><td class="c">    <span class="kw">return</span> f;</td><td class="n">Hand f back to the caller and end the function.</td></tr>
+    <tr><td class="c">}</td><td class="n">The body ends.</td></tr>
+  </table>
+</div>
+<p>Somewhere else, a caller writes e.g. <code>x = leaf_example(10, 7, 4, 2);</code> meaning "run the function with these four values and store the answer (11) in x".</p>
+
+<h2>2. The six steps of a call</h2>
+<ol class="flow arrows">
+  <li><b>1 · Args</b>Caller puts arguments in <code>$a0–$a3</code></li>
+  <li><b>2 · Call</b><code>jal func</code>: <code>$ra</code> = PC + 4, jump</li>
+  <li><b>3 · Save</b>Callee makes a stack frame, saves what it will change</li>
+  <li><b>4 · Work</b>Callee does its job</li>
+  <li><b>5 · Result</b>Put the answer in <code>$v0</code> (and <code>$v1</code>); restore, pop</li>
+  <li><b>6 · Return</b><code>jr $ra</code></li>
+</ol>
+
+<h3><code>jal</code> and <code>jr</code></h3>
+<ul>
+  <li><code>jal label</code> (jump and link, J-type): <b>saves PC + 4 into <code>$ra</code></b>, then jumps to label.</li>
+  <li><code>jr $ra</code> (jump register, R-type): sets PC = the value in <code>$ra</code>. This returns to the line after the call.</li>
+</ul>
+<figure class="diagram">
+  <svg viewBox="0 0 620 200" width="620" role="img" aria-label="jal at 0x0040001C jumps to fact at 0x00400048 and saves 0x00400020 in ra; jr ra returns to 0x00400020">
+    <text x="320" y="20" class="m hi" text-anchor="middle">jal: $ra = 0x00400020, PC = 0x00400048</text>
+    <rect x="20" y="30" width="250" height="140" rx="8" class="box"/>
+    <text x="30" y="50" class="b">main</text>
+    <text x="30" y="75" class="m dim">0x00400018 move $a0,$v0</text>
+    <text x="30" y="100" class="m hi">0x0040001C jal  fact</text>
+    <text x="30" y="125" class="m g">0x00400020 move $s0,$v0</text>
+    <text x="30" y="150" class="m dim">…</text>
+    <rect x="370" y="30" width="230" height="140" rx="8" class="box-b"/>
+    <text x="380" y="50" class="b">fact</text>
+    <text x="380" y="75" class="m">0x00400048 addi $sp,…</text>
+    <text x="380" y="100" class="m dim">…</text>
+    <text x="380" y="125" class="m dim">…</text>
+    <text x="380" y="150" class="m g">jr   $ra</text>
+    <path class="w-hi" d="M262 96 C320 96 320 71 360 71"/>
+    <polygon points="370,71 358,66 358,76" class="fill-hi"/>
+    <path class="w-g" d="M372 146 C320 146 320 121 286 121"/>
+    <polygon points="276,121 288,116 288,126" class="fill-ink"/>
+    <text x="320" y="192" class="m g" text-anchor="middle">jr $ra: PC = $ra = 0x00400020</text>
+  </svg>
+  <figcaption>Real addresses from the factorial program below, as shown in MARS.</figcaption>
+</figure>
+
+<h2>3. The calling convention</h2>
+<div class="scroll"><table>
+  <tr><th>Register</th><th>Job</th><th>Kept safe across a call?</th><th>Who must save it</th></tr>
+  <tr><td style="white-space:nowrap"><code>$a0–$a3</code></td><td>Arguments</td><td>No</td><td>Caller, if it still needs them</td></tr>
+  <tr><td style="white-space:nowrap"><code>$v0–$v1</code></td><td>Return values</td><td>No</td><td>—</td></tr>
+  <tr><td style="white-space:nowrap"><code>$t0–$t9</code></td><td>Temporaries</td><td>No (<b>caller-saved</b>)</td><td>Caller, if it needs them after the call</td></tr>
+  <tr class="hl"><td><code>$s0–$s7</code></td><td>Saved variables</td><td>Yes (<b>callee-saved</b>)</td><td>Callee, if it changes them</td></tr>
+  <tr class="hl"><td><code>$ra</code></td><td>Return address</td><td>Yes (callee-saved)</td><td>Callee, if it calls another function</td></tr>
+  <tr><td style="white-space:nowrap"><code>$sp</code></td><td>Stack pointer</td><td>Yes</td><td>Callee must put it back exactly</td></tr>
+  <tr><td style="white-space:nowrap"><code>$fp</code>, <code>$gp</code></td><td>Frame / global pointer</td><td>Yes</td><td>Callee</td></tr>
+</table></div>
+<div class="callout tip"><b>Easy memory trick</b><p><b>$s = "saved"</b>: a function promises they look unchanged when it returns. <b>$t = "temporary"</b>: any function may trash them.</p></div>
+
+<h2>4. The stack</h2>
+<p>In MIPS the stack starts at a <b>high</b> address (MARS: <code>$sp = 0x7FFFEFFC</code>) and <b>grows DOWN</b> toward lower addresses. <code>$sp</code> points at the top item (the lowest used address).</p>
+<div class="vs">
+  <div>
+    <h3>Push (save)</h3>
+    <div class="code" style="margin:0">
+      <div class="code-head"><span><b>mips</b></span><span></span></div>
+      <table class="ann">
+        <tr><td class="c"><span class="kw">addi</span> $sp, $sp, <span class="num">-4</span></td><td class="n">Make room: move the top down 4 bytes.</td></tr>
+        <tr><td class="c"><span class="kw">sw</span>   $s0, <span class="num">0</span>($sp)</td><td class="n">Write the value into the new slot.</td></tr>
+      </table>
+    </div>
+  </div>
+  <div>
+    <h3>Pop (restore)</h3>
+    <div class="code" style="margin:0">
+      <div class="code-head"><span><b>mips</b></span><span></span></div>
+      <table class="ann">
+        <tr><td class="c"><span class="kw">lw</span>   $s0, <span class="num">0</span>($sp)</td><td class="n">Read the value back.</td></tr>
+        <tr><td class="c"><span class="kw">addi</span> $sp, $sp, <span class="num">4</span></td><td class="n">Release the slot.</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+<p>To save several values, make room once (e.g. <code>addi $sp, $sp, -8</code> for two words) and use offsets 0, 4, …</p>
+<figure class="diagram">
+  <svg viewBox="0 0 620 210" width="620" role="img" aria-label="Stack before, during and after a push and pop of s0; sp moves down by 4 and back">
+    <text x="20" y="20" class="b">Before the call</text>
+    <text x="225" y="20" class="b">During (after push)</text>
+    <text x="430" y="20" class="b">After (after pop)</text>
+    <rect x="20" y="40" width="110" height="30" class="box"/>
+    <text x="75" y="60" class="m dim" text-anchor="middle">caller's data</text>
+    <rect x="20" y="70" width="110" height="30" fill="none" class="grid" stroke-dasharray="4 4"/>
+    <text x="75" y="90" class="m dim" text-anchor="middle">free</text>
+    <text x="136" y="60" class="m hi">← $sp</text>
+    <rect x="225" y="40" width="110" height="30" class="box"/>
+    <text x="280" y="60" class="m dim" text-anchor="middle">caller's data</text>
+    <rect x="225" y="70" width="110" height="30" class="box-hi"/>
+    <text x="280" y="90" class="m" text-anchor="middle">saved $s0</text>
+    <text x="341" y="90" class="m hi">← $sp</text>
+    <rect x="430" y="40" width="110" height="30" class="box"/>
+    <text x="485" y="60" class="m dim" text-anchor="middle">caller's data</text>
+    <rect x="430" y="70" width="110" height="30" fill="none" class="grid" stroke-dasharray="4 4"/>
+    <text x="485" y="90" class="m dim" text-anchor="middle">old $s0 (junk)</text>
+    <text x="546" y="60" class="m hi">← $sp</text>
+    <text x="75" y="130" class="m" text-anchor="middle">$sp = S</text>
+    <text x="280" y="130" class="m" text-anchor="middle">$sp = S − 4</text>
+    <text x="485" y="130" class="m" text-anchor="middle">$sp = S</text>
+    <text x="310" y="170" class="dim" text-anchor="middle">higher addresses at the top · push = subtract · pop = add</text>
+    <text x="310" y="194" class="dim" text-anchor="middle">popped data is not erased, just considered free</text>
+  </svg>
+  <figcaption>A push moves <code>$sp</code> down; the matching pop moves it back up.</figcaption>
+</figure>
+<p><b>A stack frame</b> (also called an activation record) holds, from top to bottom: the saved <code>$ra</code> (if the function calls others), saved <code>$s</code> registers it will change, and space for local variables or arrays. Some code also keeps <code>$fp</code> (frame pointer) pointing at the start of the frame, so locals have fixed offsets even if <code>$sp</code> moves.</p>
+
+<h2>5. Leaf example: <code>leaf_example(g, h, i, j)</code></h2>
+<p>g, h, i, j arrive in <code>$a0, $a1, $a2, $a3</code>. The body uses <code>$s0</code> for f, so the function must save and restore <code>$s0</code> (callee-saved). The temporaries <code>$t0, $t1</code> need no saving.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · leaf_example</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">leaf_example:</td><td class="n">The function's label: <code>jal leaf_example</code> jumps here.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $sp, $sp, <span class="num">-4</span></td><td class="n">Push: make room for one word.</td></tr>
+    <tr><td class="c">        <span class="kw">sw</span>   $s0, <span class="num">0</span>($sp)</td><td class="n">Save the caller's $s0, because we are about to change it.</td></tr>
+    <tr><td class="c">        <span class="kw">add</span>  $t0, $a0, $a1</td><td class="n">$t0 = g + h</td></tr>
+    <tr><td class="c">        <span class="kw">add</span>  $t1, $a2, $a3</td><td class="n">$t1 = i + j</td></tr>
+    <tr><td class="c">        <span class="kw">sub</span>  $s0, $t0, $t1</td><td class="n">f = (g + h) − (i + j)</td></tr>
+    <tr><td class="c">        <span class="kw">add</span>  $v0, $s0, $zero</td><td class="n">return f: copy it into $v0.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $s0, <span class="num">0</span>($sp)</td><td class="n">Restore the caller's $s0.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $sp, $sp, <span class="num">4</span></td><td class="n">Pop: give the word back.</td></tr>
+    <tr><td class="c">        <span class="kw">jr</span>   $ra</td><td class="n">Return to the caller. $ra was not changed (no jal here), so it needs no saving.</td></tr>
+  </table>
+</div>
+<p>Tested in MARS with g, h, i, j = 10, 7, 4, 2 and the caller's <code>$s0</code> = 99: it returns <b>11</b>, and <code>$s0</code> is still <b>99</b> afterwards.</p>
+<div class="callout tip"><b>Textbook note</b><p>Patterson &amp; Hennessy first show a version that pushes <b>three</b> words (<code>$t1</code>, <code>$t0</code>, <code>$s0</code>, with <code>addi $sp, $sp, -12</code>). It then points out that, by convention, <code>$t</code> registers need not be saved, so only <code>$s0</code> is needed, as above. Both give the same answer.</p></div>
+
+<h2>6. Non-leaf functions must save <code>$ra</code></h2>
+<p>If a function calls another function, its own <code>jal</code> <b>overwrites <code>$ra</code></b>. Without saving it, its final <code>jr $ra</code> would jump to the wrong place (usually an endless loop). It also must save any argument or <code>$t</code> value it still needs after the inner call, because the callee may change them.</p>
+
+<h2>7. Lab 3B: recursive factorial</h2>
+<p><b>C:</b></p>
+<div class="code">
+  <div class="code-head"><span><b>c</b> · fact</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">int</span> fact(<span class="kw">int</span> n) {</td><td class="n">A function <code>fact</code> that takes one whole number n and returns a whole number.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (n &lt; <span class="num">1</span>) <span class="kw">return</span> <span class="num">1</span>;</td><td class="n"><b>Base case:</b> if n is less than 1 (i.e. 0), the answer is 1. Stop here.</td></tr>
+    <tr><td class="c">    <span class="kw">else return</span> n * fact(n - <span class="num">1</span>);</td><td class="n"><b>Recursive case:</b> otherwise, work out fact(n − 1) by calling itself, then multiply by n (<code>*</code> means multiply).</td></tr>
+    <tr><td class="c">}</td><td class="n">So fact(3) = 3 × fact(2) = 3 × 2 × fact(1) = 3 × 2 × 1 × fact(0) = 6.</td></tr>
+  </table>
+</div>
+<p>fact is <b>not</b> a leaf: it calls itself. After the inner call it still needs <b>n</b> (to multiply) and its own <b>return address</b>. So each call saves both in an 8-byte frame.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · factorial.asm (runs in MARS)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n"></td></tr>
+    <tr><td class="c">prompt: .asciiz <span class="str">"Enter n: "</span></td><td class="n">Text to ask for n.</td></tr>
+    <tr><td class="c">res:    .asciiz <span class="str">"n! = "</span></td><td class="n">Text before the answer.</td></tr>
+    <tr><td class="c">        .text</td><td class="n"></td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">4</span></td><td class="n">print string…</td></tr>
+    <tr><td class="c">        <span class="kw">la</span>   $a0, prompt</td><td class="n">…"Enter n: "</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">read int: the number typed arrives in $v0.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $v0</td><td class="n">Step 1: argument n goes in $a0.</td></tr>
+    <tr><td class="c">        <span class="kw">jal</span>  fact</td><td class="n">Step 2: call. $ra = address of the next line.</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $s0, $v0</td><td class="n">Keep the result (the syscalls below reuse $v0).</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">4</span></td><td class="n">print "n! = "</td></tr>
+    <tr><td class="c">        <span class="kw">la</span>   $a0, res</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">print int…</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $s0</td><td class="n">…the result</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">exit</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">fact:   <span class="kw">addi</span> $sp, $sp, <span class="num">-8</span></td><td class="n">Make a frame of 2 words.</td></tr>
+    <tr><td class="c">        <span class="kw">sw</span>   $ra, <span class="num">4</span>($sp)</td><td class="n">Save the return address (upper word).</td></tr>
+    <tr><td class="c">        <span class="kw">sw</span>   $a0, <span class="num">0</span>($sp)</td><td class="n">Save n (lower word).</td></tr>
+    <tr><td class="c">        <span class="kw">slti</span> $t0, $a0, <span class="num">1</span></td><td class="n">$t0 = 1 if n &lt; 1</td></tr>
+    <tr><td class="c">        <span class="kw">beq</span>  $t0, $zero, L1</td><td class="n">If n ≥ 1, go to the recursive case (opposite condition).</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $v0, $zero, <span class="num">1</span></td><td class="n">Base case: return value = 1.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $sp, $sp, <span class="num">8</span></td><td class="n">Pop the frame. Nothing to restore: $a0 and $ra were not changed.</td></tr>
+    <tr><td class="c">        <span class="kw">jr</span>   $ra</td><td class="n">Return.</td></tr>
+    <tr><td class="c">L1:     <span class="kw">addi</span> $a0, $a0, <span class="num">-1</span></td><td class="n">Recursive case: argument = n − 1.</td></tr>
+    <tr><td class="c">        <span class="kw">jal</span>  fact</td><td class="n">Call fact(n − 1). This overwrites $ra (saved already). Result comes back in $v0.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $a0, <span class="num">0</span>($sp)</td><td class="n">Get our own n back.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $ra, <span class="num">4</span>($sp)</td><td class="n">Get our own return address back.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $sp, $sp, <span class="num">8</span></td><td class="n">Pop the frame.</td></tr>
+    <tr><td class="c">        <span class="kw">mul</span>  $v0, $a0, $v0</td><td class="n">$v0 = n × fact(n − 1). (<code>mul</code> keeps the low 32 bits of the product.)</td></tr>
+    <tr><td class="c">        <span class="kw">jr</span>   $ra</td><td class="n">Return to our caller.</td></tr>
+  </table>
+</div>
+<p><b>Tested in MARS:</b> input 0 → 1, 3 → 6, 5 → 120, 10 → 3628800. (13! overflows 32 bits and prints a wrong value.)</p>
+
+<h3>Watch the frames pile up: fact(3)</h3>
+<p>Addresses are the real ones MARS uses. Each frame shows the saved <code>$ra</code> (at <code>4($sp)</code>) and saved <code>$a0</code> (at <code>0($sp)</code>). Copper = newest frame; red = frame being popped.</p>
+<div class="stepper" data-stepper>
+  <div class="stage">
+    <p><b>Step 1 · main calls fact(3).</b> main puts 3 in <code>$a0</code>; <code>jal fact</code> sets <code>$ra = 0x00400020</code> (the line after the jal). fact subtracts 8 from <code>$sp</code> and saves <code>$ra</code> and <code>$a0</code>. 3 &lt; 1 is false, so it sets <code>$a0 = 2</code> and calls itself.</p>
+    <figure class="diagram" style="margin:8px 0 0">
+      <svg viewBox="0 0 620 286" width="620" role="img" aria-label="Stack with 1 factorial frames">
+      <text x="10" y="20" class="m dim">0x7FFFEFFC  start of stack (higher addresses above)</text>
+      <path class="w" d="M130 30 H330"/>
+      <rect x="130" y="34" width="200" height="26" class="box-hi"/>
+      <rect x="130" y="60" width="200" height="26" class="box-hi"/>
+      <text x="120" y="52" class="m dim" text-anchor="end">0x7FFFEFF8</text>
+      <text x="120" y="78" class="m dim" text-anchor="end">0x7FFFEFF4</text>
+      <text x="140" y="52" class="m">$ra = 0x00400020</text>
+      <text x="140" y="78" class="m">$a0 = 3</text>
+      <text x="342" y="65" class="b">fact(3)</text>
+      <rect x="130" y="90" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="121" class="m dim" text-anchor="middle">free</text>
+      <rect x="130" y="146" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="177" class="m dim" text-anchor="middle">free</text>
+      <rect x="130" y="202" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="233" class="m dim" text-anchor="middle">free</text>
+      <text x="440" y="78" class="m hi">← $sp = 0x7FFFEFF4</text>
+      <text x="10" y="278" class="dim">stack grows DOWN ↓ (each frame = 8 bytes)</text>
+      </svg>
+    </figure>
+  </div>
+  <div class="stage">
+    <p><b>Step 2 · fact(2) starts.</b> The <code>jal</code> inside fact overwrote <code>$ra</code> with <code>0x00400070</code> (the <code>lw $a0</code> line after it). That is why the old <code>$ra</code> had to be saved first. fact(2) pushes its own frame and calls fact(1).</p>
+    <figure class="diagram" style="margin:8px 0 0">
+      <svg viewBox="0 0 620 286" width="620" role="img" aria-label="Stack with 2 factorial frames">
+      <text x="10" y="20" class="m dim">0x7FFFEFFC  start of stack (higher addresses above)</text>
+      <path class="w" d="M130 30 H330"/>
+      <rect x="130" y="34" width="200" height="26" class="box-b"/>
+      <rect x="130" y="60" width="200" height="26" class="box-b"/>
+      <text x="120" y="52" class="m dim" text-anchor="end">0x7FFFEFF8</text>
+      <text x="120" y="78" class="m dim" text-anchor="end">0x7FFFEFF4</text>
+      <text x="140" y="52" class="m">$ra = 0x00400020</text>
+      <text x="140" y="78" class="m">$a0 = 3</text>
+      <text x="342" y="65" class="b">fact(3)</text>
+      <rect x="130" y="90" width="200" height="26" class="box-hi"/>
+      <rect x="130" y="116" width="200" height="26" class="box-hi"/>
+      <text x="120" y="108" class="m dim" text-anchor="end">0x7FFFEFF0</text>
+      <text x="120" y="134" class="m dim" text-anchor="end">0x7FFFEFEC</text>
+      <text x="140" y="108" class="m">$ra = 0x00400070</text>
+      <text x="140" y="134" class="m">$a0 = 2</text>
+      <text x="342" y="121" class="b">fact(2)</text>
+      <rect x="130" y="146" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="177" class="m dim" text-anchor="middle">free</text>
+      <rect x="130" y="202" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="233" class="m dim" text-anchor="middle">free</text>
+      <text x="440" y="134" class="m hi">← $sp = 0x7FFFEFEC</text>
+      <text x="10" y="278" class="dim">stack grows DOWN ↓ (each frame = 8 bytes)</text>
+      </svg>
+    </figure>
+  </div>
+  <div class="stage">
+    <p><b>Step 3 · fact(1) starts.</b> Another 8-byte frame: <code>$ra = 0x00400070</code>, <code>$a0 = 1</code>. 1 &lt; 1 is false, so it calls fact(0).</p>
+    <figure class="diagram" style="margin:8px 0 0">
+      <svg viewBox="0 0 620 286" width="620" role="img" aria-label="Stack with 3 factorial frames">
+      <text x="10" y="20" class="m dim">0x7FFFEFFC  start of stack (higher addresses above)</text>
+      <path class="w" d="M130 30 H330"/>
+      <rect x="130" y="34" width="200" height="26" class="box-b"/>
+      <rect x="130" y="60" width="200" height="26" class="box-b"/>
+      <text x="120" y="52" class="m dim" text-anchor="end">0x7FFFEFF8</text>
+      <text x="120" y="78" class="m dim" text-anchor="end">0x7FFFEFF4</text>
+      <text x="140" y="52" class="m">$ra = 0x00400020</text>
+      <text x="140" y="78" class="m">$a0 = 3</text>
+      <text x="342" y="65" class="b">fact(3)</text>
+      <rect x="130" y="90" width="200" height="26" class="box-b"/>
+      <rect x="130" y="116" width="200" height="26" class="box-b"/>
+      <text x="120" y="108" class="m dim" text-anchor="end">0x7FFFEFF0</text>
+      <text x="120" y="134" class="m dim" text-anchor="end">0x7FFFEFEC</text>
+      <text x="140" y="108" class="m">$ra = 0x00400070</text>
+      <text x="140" y="134" class="m">$a0 = 2</text>
+      <text x="342" y="121" class="b">fact(2)</text>
+      <rect x="130" y="146" width="200" height="26" class="box-hi"/>
+      <rect x="130" y="172" width="200" height="26" class="box-hi"/>
+      <text x="120" y="164" class="m dim" text-anchor="end">0x7FFFEFE8</text>
+      <text x="120" y="190" class="m dim" text-anchor="end">0x7FFFEFE4</text>
+      <text x="140" y="164" class="m">$ra = 0x00400070</text>
+      <text x="140" y="190" class="m">$a0 = 1</text>
+      <text x="342" y="177" class="b">fact(1)</text>
+      <rect x="130" y="202" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="233" class="m dim" text-anchor="middle">free</text>
+      <text x="440" y="190" class="m hi">← $sp = 0x7FFFEFE4</text>
+      <text x="10" y="278" class="dim">stack grows DOWN ↓ (each frame = 8 bytes)</text>
+      </svg>
+    </figure>
+  </div>
+  <div class="stage">
+    <p><b>Step 4 · fact(0): the base case.</b> It pushes a frame, then 0 &lt; 1 is true. So <code>$v0 = 1</code>, it pops its frame (<code>$sp += 8</code>) without restoring anything, and <code>jr $ra</code> returns to 0x00400070 inside fact(1). The stack is at its deepest: 4 frames = 32 bytes.</p>
+    <figure class="diagram" style="margin:8px 0 0">
+      <svg viewBox="0 0 620 286" width="620" role="img" aria-label="Stack with 4 factorial frames">
+      <text x="10" y="20" class="m dim">0x7FFFEFFC  start of stack (higher addresses above)</text>
+      <path class="w" d="M130 30 H330"/>
+      <rect x="130" y="34" width="200" height="26" class="box-b"/>
+      <rect x="130" y="60" width="200" height="26" class="box-b"/>
+      <text x="120" y="52" class="m dim" text-anchor="end">0x7FFFEFF8</text>
+      <text x="120" y="78" class="m dim" text-anchor="end">0x7FFFEFF4</text>
+      <text x="140" y="52" class="m">$ra = 0x00400020</text>
+      <text x="140" y="78" class="m">$a0 = 3</text>
+      <text x="342" y="65" class="b">fact(3)</text>
+      <rect x="130" y="90" width="200" height="26" class="box-b"/>
+      <rect x="130" y="116" width="200" height="26" class="box-b"/>
+      <text x="120" y="108" class="m dim" text-anchor="end">0x7FFFEFF0</text>
+      <text x="120" y="134" class="m dim" text-anchor="end">0x7FFFEFEC</text>
+      <text x="140" y="108" class="m">$ra = 0x00400070</text>
+      <text x="140" y="134" class="m">$a0 = 2</text>
+      <text x="342" y="121" class="b">fact(2)</text>
+      <rect x="130" y="146" width="200" height="26" class="box-b"/>
+      <rect x="130" y="172" width="200" height="26" class="box-b"/>
+      <text x="120" y="164" class="m dim" text-anchor="end">0x7FFFEFE8</text>
+      <text x="120" y="190" class="m dim" text-anchor="end">0x7FFFEFE4</text>
+      <text x="140" y="164" class="m">$ra = 0x00400070</text>
+      <text x="140" y="190" class="m">$a0 = 1</text>
+      <text x="342" y="177" class="b">fact(1)</text>
+      <rect x="130" y="202" width="200" height="26" class="box-r"/>
+      <rect x="130" y="228" width="200" height="26" class="box-r"/>
+      <text x="120" y="220" class="m dim" text-anchor="end">0x7FFFEFE0</text>
+      <text x="120" y="246" class="m dim" text-anchor="end">0x7FFFEFDC</text>
+      <text x="140" y="220" class="m">$ra = 0x00400070</text>
+      <text x="140" y="246" class="m">$a0 = 0</text>
+      <text x="342" y="233" class="b">fact(0)</text>
+      <text x="342" y="249" class="m r">popping</text>
+      <text x="440" y="246" class="m hi">← $sp = 0x7FFFEFDC</text>
+      <text x="10" y="278" class="dim">stack grows DOWN ↓ (each frame = 8 bytes)</text>
+      </svg>
+    </figure>
+  </div>
+  <div class="stage">
+    <p><b>Step 5 · back in fact(1).</b> It reloads <code>$a0 = 1</code> and <code>$ra = 0x00400070</code> from its frame and pops it. <code>$v0 = $a0 × $v0 = 1 × 1 = 1</code>. <code>jr $ra</code> returns into fact(2).</p>
+    <figure class="diagram" style="margin:8px 0 0">
+      <svg viewBox="0 0 620 286" width="620" role="img" aria-label="Stack with 3 factorial frames">
+      <text x="10" y="20" class="m dim">0x7FFFEFFC  start of stack (higher addresses above)</text>
+      <path class="w" d="M130 30 H330"/>
+      <rect x="130" y="34" width="200" height="26" class="box-b"/>
+      <rect x="130" y="60" width="200" height="26" class="box-b"/>
+      <text x="120" y="52" class="m dim" text-anchor="end">0x7FFFEFF8</text>
+      <text x="120" y="78" class="m dim" text-anchor="end">0x7FFFEFF4</text>
+      <text x="140" y="52" class="m">$ra = 0x00400020</text>
+      <text x="140" y="78" class="m">$a0 = 3</text>
+      <text x="342" y="65" class="b">fact(3)</text>
+      <rect x="130" y="90" width="200" height="26" class="box-b"/>
+      <rect x="130" y="116" width="200" height="26" class="box-b"/>
+      <text x="120" y="108" class="m dim" text-anchor="end">0x7FFFEFF0</text>
+      <text x="120" y="134" class="m dim" text-anchor="end">0x7FFFEFEC</text>
+      <text x="140" y="108" class="m">$ra = 0x00400070</text>
+      <text x="140" y="134" class="m">$a0 = 2</text>
+      <text x="342" y="121" class="b">fact(2)</text>
+      <rect x="130" y="146" width="200" height="26" class="box-r"/>
+      <rect x="130" y="172" width="200" height="26" class="box-r"/>
+      <text x="120" y="164" class="m dim" text-anchor="end">0x7FFFEFE8</text>
+      <text x="120" y="190" class="m dim" text-anchor="end">0x7FFFEFE4</text>
+      <text x="140" y="164" class="m">$ra = 0x00400070</text>
+      <text x="140" y="190" class="m">$a0 = 1</text>
+      <text x="342" y="177" class="b">fact(1)</text>
+      <text x="342" y="193" class="m r">popping</text>
+      <rect x="130" y="202" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="233" class="m dim" text-anchor="middle">free</text>
+      <text x="440" y="190" class="m hi">← $sp = 0x7FFFEFE4</text>
+      <text x="10" y="278" class="dim">stack grows DOWN ↓ (each frame = 8 bytes)</text>
+      </svg>
+    </figure>
+  </div>
+  <div class="stage">
+    <p><b>Step 6 · back in fact(2).</b> Reload <code>$a0 = 2</code>, pop. <code>$v0 = 2 × 1 = 2</code>. Return into fact(3).</p>
+    <figure class="diagram" style="margin:8px 0 0">
+      <svg viewBox="0 0 620 286" width="620" role="img" aria-label="Stack with 2 factorial frames">
+      <text x="10" y="20" class="m dim">0x7FFFEFFC  start of stack (higher addresses above)</text>
+      <path class="w" d="M130 30 H330"/>
+      <rect x="130" y="34" width="200" height="26" class="box-b"/>
+      <rect x="130" y="60" width="200" height="26" class="box-b"/>
+      <text x="120" y="52" class="m dim" text-anchor="end">0x7FFFEFF8</text>
+      <text x="120" y="78" class="m dim" text-anchor="end">0x7FFFEFF4</text>
+      <text x="140" y="52" class="m">$ra = 0x00400020</text>
+      <text x="140" y="78" class="m">$a0 = 3</text>
+      <text x="342" y="65" class="b">fact(3)</text>
+      <rect x="130" y="90" width="200" height="26" class="box-r"/>
+      <rect x="130" y="116" width="200" height="26" class="box-r"/>
+      <text x="120" y="108" class="m dim" text-anchor="end">0x7FFFEFF0</text>
+      <text x="120" y="134" class="m dim" text-anchor="end">0x7FFFEFEC</text>
+      <text x="140" y="108" class="m">$ra = 0x00400070</text>
+      <text x="140" y="134" class="m">$a0 = 2</text>
+      <text x="342" y="121" class="b">fact(2)</text>
+      <text x="342" y="137" class="m r">popping</text>
+      <rect x="130" y="146" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="177" class="m dim" text-anchor="middle">free</text>
+      <rect x="130" y="202" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="233" class="m dim" text-anchor="middle">free</text>
+      <text x="440" y="134" class="m hi">← $sp = 0x7FFFEFEC</text>
+      <text x="10" y="278" class="dim">stack grows DOWN ↓ (each frame = 8 bytes)</text>
+      </svg>
+    </figure>
+  </div>
+  <div class="stage">
+    <p><b>Step 7 · back in fact(3).</b> Reload <code>$a0 = 3</code> and <code>$ra = 0x00400020</code>, pop. <code>$v0 = 3 × 2 = 6</code>. <code>jr $ra</code> goes back to main.</p>
+    <figure class="diagram" style="margin:8px 0 0">
+      <svg viewBox="0 0 620 286" width="620" role="img" aria-label="Stack with 1 factorial frames">
+      <text x="10" y="20" class="m dim">0x7FFFEFFC  start of stack (higher addresses above)</text>
+      <path class="w" d="M130 30 H330"/>
+      <rect x="130" y="34" width="200" height="26" class="box-r"/>
+      <rect x="130" y="60" width="200" height="26" class="box-r"/>
+      <text x="120" y="52" class="m dim" text-anchor="end">0x7FFFEFF8</text>
+      <text x="120" y="78" class="m dim" text-anchor="end">0x7FFFEFF4</text>
+      <text x="140" y="52" class="m">$ra = 0x00400020</text>
+      <text x="140" y="78" class="m">$a0 = 3</text>
+      <text x="342" y="65" class="b">fact(3)</text>
+      <text x="342" y="81" class="m r">popping</text>
+      <rect x="130" y="90" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="121" class="m dim" text-anchor="middle">free</text>
+      <rect x="130" y="146" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="177" class="m dim" text-anchor="middle">free</text>
+      <rect x="130" y="202" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="233" class="m dim" text-anchor="middle">free</text>
+      <text x="440" y="78" class="m hi">← $sp = 0x7FFFEFF4</text>
+      <text x="10" y="278" class="dim">stack grows DOWN ↓ (each frame = 8 bytes)</text>
+      </svg>
+    </figure>
+  </div>
+  <div class="stage">
+    <p><b>Step 8 · back in main.</b> <code>$sp</code> is back to 0x7FFFEFFC, exactly where it started, and <code>$v0 = 6</code>. main prints <code>n! = 6</code>. Every push was matched by a pop.</p>
+    <figure class="diagram" style="margin:8px 0 0">
+      <svg viewBox="0 0 620 286" width="620" role="img" aria-label="Empty stack, sp back at start">
+      <text x="10" y="20" class="m dim">0x7FFFEFFC  start of stack (higher addresses above)</text>
+      <path class="w" d="M130 30 H330"/>
+      <rect x="130" y="34" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="65" class="m dim" text-anchor="middle">free</text>
+      <rect x="130" y="90" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="121" class="m dim" text-anchor="middle">free</text>
+      <rect x="130" y="146" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="177" class="m dim" text-anchor="middle">free</text>
+      <rect x="130" y="202" width="200" height="52" fill="none" class="grid" stroke-dasharray="4 4"/>
+      <text x="230" y="233" class="m dim" text-anchor="middle">free</text>
+      <text x="440" y="34" class="m hi">← $sp = 0x7FFFEFFC</text>
+      <text x="10" y="278" class="dim">stack grows DOWN ↓ (each frame = 8 bytes)</text>
+      </svg>
+    </figure>
+  </div>
+</div>
+
+<h2>8. Compare with the disassembly (Text Segment)</h2>
+<p>After Assemble (F3), MARS's <b>Execute</b> tab shows the Text Segment: address, machine code, the <b>Basic</b> (real) instruction, and your <b>Source</b>. Pseudo-instructions expand into real ones there. These are the actual rows for the factorial program:</p>
+<div class="scroll"><table>
+  <tr><th>Address</th><th>Code</th><th>Basic (real instruction)</th><th>Source</th></tr>
+  <tr><td><code>0x00400000</code></td><td><code>0x24020004</code></td><td><code>addiu $2,$0,4</code></td><td><code>li $v0, 4</code></td></tr>
+  <tr class="hl"><td><code>0x00400004</code></td><td><code>0x3c011001</code></td><td><code>lui $1,0x1001</code></td><td rowspan="2"><code>la $a0, prompt</code> → 2 instructions</td></tr>
+  <tr class="hl"><td><code>0x00400008</code></td><td><code>0x34240000</code></td><td><code>ori $4,$1,0x0000</code></td></tr>
+  <tr><td><code>0x00400018</code></td><td><code>0x00022021</code></td><td><code>addu $4,$0,$2</code></td><td><code>move $a0, $v0</code></td></tr>
+  <tr><td><code>0x0040001c</code></td><td><code>0x0c100012</code></td><td><code>jal 0x00400048</code></td><td><code>jal fact</code></td></tr>
+  <tr><td><code>0x00400048</code></td><td><code>0x23bdfff8</code></td><td><code>addi $29,$29,-8</code></td><td><code>fact: addi $sp,$sp,-8</code></td></tr>
+  <tr><td><code>0x00400058</code></td><td><code>0x11000003</code></td><td><code>beq $8,$0,3</code></td><td><code>beq $t0,$zero,L1</code></td></tr>
+  <tr><td><code>0x0040007c</code></td><td><code>0x70821002</code></td><td><code>mul $2,$4,$2</code></td><td><code>mul $v0,$a0,$v0</code></td></tr>
+</table></div>
+<ul>
+  <li><b>Register names become numbers:</b> <code>$v0</code> → 2, <code>$a0</code> → 4, <code>$sp</code> → 29, <code>$ra</code> → 31, <code>$at</code> → 1.</li>
+  <li><b>Labels become numbers:</b> <code>jal fact</code> stores 0x0100012 (= 0x00400048 ÷ 4). The branch to <code>L1</code> stores offset <b>3</b>: (0x00400068 − 0x0040005C) ÷ 4.</li>
+  <li><b>Pseudo-instructions expand:</b></li>
+</ul>
+<div class="scroll"><table>
+  <tr><th>Pseudo</th><th>Becomes (as MARS shows it)</th></tr>
+  <tr><td><code>li $v0, 4</code> (small constant)</td><td><code>addiu $v0, $zero, 4</code></td></tr>
+  <tr><td><code>li $t0, 100000</code> (needs &gt; 16 bits)</td><td><code>lui $at, 0x0001</code> + <code>ori $t0, $at, 0x86A0</code></td></tr>
+  <tr><td><code>la $a0, prompt</code></td><td><code>lui $at, 0x1001</code> + <code>ori $a0, $at, 0x0000</code></td></tr>
+  <tr><td><code>move $a0, $v0</code></td><td><code>addu $a0, $zero, $v0</code></td></tr>
+  <tr><td><code>blt $t0, $t1, L</code></td><td><code>slt $at, $t0, $t1</code> + <code>bne $at, $zero, L</code></td></tr>
+</table></div>
+<p>This is why <code>$at</code> is reserved: the assembler borrows it for these expansions. And because <code>la</code> takes 2 instructions, the addresses after it shift by 8, not 4.</p>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>Not saving <code>$ra</code></b> in a function that calls another. Its <code>jr $ra</code> then returns to the wrong place.</li>
+  <li><b>Pushing with <code>+</code></b>. The stack grows down: push = <code>addi $sp, $sp, -N</code>; pop = <code>+N</code>.</li>
+  <li><b>Unbalanced stack</b>: every <code>-8</code> needs a matching <code>+8</code> on <em>every</em> return path (including the base case).</li>
+  <li><b>Wrong offsets</b>: after <code>addi $sp,$sp,-8</code> the two slots are <code>0($sp)</code> and <code>4($sp)</code>. Never use negative offsets from the new <code>$sp</code>.</li>
+  <li>Restoring <code>$a0</code> <b>before</b> the <code>jal</code> instead of after it. The callee may have changed it.</li>
+  <li>Expecting <code>$t</code> registers to survive a call. They are caller-saved.</li>
+  <li>Using <code>j</code> instead of <code>jal</code> to call: <code>$ra</code> is never set.</li>
+  <li><code>jal</code> saves <b>PC + 4</b> (the next instruction), not PC.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>A <code>jal func</code> sits at address 0x00400100. What is in <code>$ra</code> after it runs?</summary><div class="a"><p><b>0x00400104</b> (PC + 4).</p></div></details>
+  <details class="q"><summary>A function changes <code>$s1</code>, <code>$s2</code> and calls another function. Write its entry (push) and exit (pop) code.</summary><div class="a"><p>Entry:<br><code>addi $sp, $sp, -12</code><br><code>sw $ra, 8($sp)</code><br><code>sw $s1, 4($sp)</code><br><code>sw $s2, 0($sp)</code><br>Exit:<br><code>lw $s2, 0($sp)</code><br><code>lw $s1, 4($sp)</code><br><code>lw $ra, 8($sp)</code><br><code>addi $sp, $sp, 12</code><br><code>jr $ra</code></p></div></details>
+  <details class="q"><summary>For fact(4), how many frames are on the stack at the deepest point, and how many bytes do they use?</summary><div class="a"><p>fact(4), fact(3), fact(2), fact(1), fact(0) = <b>5 frames</b> × 8 = <b>40 bytes</b>. <code>$sp</code> reaches 0x7FFFEFFC − 40 = 0x7FFFEFD4.</p></div></details>
+  <details class="q"><summary>Why doesn't the base case of fact restore <code>$a0</code> and <code>$ra</code> before popping?</summary><div class="a"><p>In the base case, nothing changed them (no <code>jal</code>, no change to <code>$a0</code>), so the registers still hold the right values. It only needs to move <code>$sp</code> back.</p></div></details>
+  <details class="q"><summary>Is <code>leaf_example</code> required to save <code>$t0</code> and <code>$t1</code>? Why?</summary><div class="a"><p>No. <code>$t</code> registers are caller-saved: a caller that needs them must save them itself. Only <code>$s0</code> (callee-saved) must be saved.</p></div></details>
+  <details class="q"><summary>Translate <code>int add3(int a, int b, int c) { return a + b + c; }</code> ("take three ints, give back their sum").</summary><div class="a"><p>A leaf that changes no <code>$s</code> register needs no stack:<br><code>add3: add $v0, $a0, $a1</code><br><code>      add $v0, $v0, $a2</code><br><code>      jr  $ra</code></p></div></details>
+  <details class="q"><summary>What real instructions does <code>la $a0, res</code> become if <code>res</code> is at 0x1001000A?</summary><div class="a"><p><code>lui $at, 0x1001</code> then <code>ori $a0, $at, 0x000A</code>. (MARS shows exactly this: <code>0x3c011001</code>, <code>0x3424000a</code>.)</p></div></details>
+  <details class="q"><summary>In fact, what goes wrong if you swap the order and write <code>lw $a0, 0($sp)</code> <i>before</i> <code>jal fact</code>?</summary><div class="a"><p>The <code>$a0</code> you just set to n − 1 is replaced by n, so fact calls itself with the same n forever (well, until the stack overflows). And after the call, <code>$a0</code> is no longer your n.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=easyXk-BUg0" target="_blank" rel="noopener"><i class="play"></i><span><b>MIPS Tutorial 15 Introduction to Functions</b><small>Amell Peralta</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=3napwKvocSU" target="_blank" rel="noopener"><i class="play"></i><span><b>MIPS Tutorial 17 Saving Registers to the Stack</b><small>Amell Peralta</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=VWTfowHHlnU" target="_blank" rel="noopener"><i class="play"></i><span><b>MIPS Tutorial 33 Introduction to Recursion</b><small>Amell Peralta</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=B6ky4Weahm4" target="_blank" rel="noopener"><i class="play"></i><span><b>MIPS Tutorial 34 Recursive Factorial Program</b><small>Amell Peralta</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

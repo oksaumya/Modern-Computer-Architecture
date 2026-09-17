@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cache Coherence &amp; MESI</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 6 / MESI</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 6 · Parallelism &amp; Modern Architectures <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>Cache coherence &amp; the MESI protocol</h1>
+  <p class="idea">In a multicore chip, each core has its own cache. Two cores can hold copies of the same memory block. If one core changes its copy, the other copy is now wrong. <strong>MESI</strong> is a set of four labels (states) and rules that keep all the copies in agreement.</p>
+  <div class="analogy"><b>Think of it like this:</b> two students each photocopy the same page of class notes. If one student edits their copy, the other student's copy is out of date. The rule: before you edit, shout "throw your copy away!" If you are the only one with a copy, you can edit quietly.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Cache line (block)</dt><dd>The unit a cache stores, e.g. 64 bytes of memory. MESI keeps one state per line. See <a href="m5-02-cache-organization.html">cache organization</a>.</dd></div>
+  <div class="term"><dt>Stale copy</dt><dd>A cached copy that no longer matches the latest value.</dd></div>
+  <div class="term"><dt>Dirty</dt><dd>The cached copy has been changed and main memory has not been updated yet.</dd></div>
+  <div class="term"><dt>Clean</dt><dd>The cached copy is the same as the copy in main memory.</dd></div>
+  <div class="term"><dt>Write back</dt><dd>Copying a dirty line from the cache to main memory.</dd></div>
+  <div class="term"><dt>Broadcast / invalidate</dt><dd>A message sent to every other core: "your copy of this line is no longer valid".</dd></div>
+  <div class="term"><dt>Bus traffic</dt><dd>Messages between cores. They cost time, so good protocols avoid them.</dd></div>
+  <div class="term"><dt>Cache coherence</dt><dd>Keeping all the cached copies of the same data in agreement.</dd></div>
+</dl>
+
+<h2>1. The problem: stale copies</h2>
+<figure class="diagram">
+  <svg viewBox="0 0 600 240" width="600" role="img" aria-label="Core A has written X equal to 7 in its cache, core B still holds X equal to 5, main memory still holds 5">
+    <rect x="40" y="20" width="200" height="50" rx="8" class="box-b"/><text x="112" y="50" class="b">Core A</text>
+    <rect x="360" y="20" width="200" height="50" rx="8" class="box-b"/><text x="432" y="50" class="b">Core B</text>
+    <path class="w" d="M140 70 V90 M460 70 V90"/>
+    <rect x="40" y="90" width="200" height="56" rx="8" class="box-g"/>
+    <text x="56" y="112" class="m">A's cache</text>
+    <text x="56" y="134" class="g">X = 7 (just written)</text>
+    <rect x="360" y="90" width="200" height="56" rx="8" class="box-r"/>
+    <text x="376" y="112" class="m">B's cache</text>
+    <text x="376" y="134" class="r">X = 5 (stale!)</text>
+    <path class="w" d="M140 146 V180 H460 V146 M300 180 V190"/>
+    <rect x="200" y="190" width="200" height="40" rx="8" class="box"/>
+    <text x="222" y="215" class="b">Memory: X = 5</text>
+  </svg>
+  <figcaption>Core A wrote X = 7 into its own cache only. If Core B now reads X from its cache, it gets the old value 5. That is wrong.</figcaption>
+</figure>
+
+<div class="vs">
+  <div>
+    <h3>Cache coherence</h3>
+    <p>A <b>hardware mechanism</b>. It makes sure every cached copy of a block matches the latest written value, or is marked invalid.</p>
+  </div>
+  <div>
+    <h3>Memory consistency</h3>
+    <p>A <b>promise to programs</b> about what value a read returns when several processors share memory. The usual promise: "a read sees the most recent write". Coherence protocols like MESI are how the hardware keeps that promise.</p>
+  </div>
+</div>
+
+<h2>2. The four MESI states</h2>
+<p>Every line in every core's cache carries one of these labels (just 2 extra bits per line):</p>
+<div class="scroll"><table>
+  <tr><th>State</th><th>Who has a copy?</th><th>Matches memory?</th><th>Can I read it?</th><th>Can I write it?</th></tr>
+  <tr><td><b>M</b>odified</td><td>Only me</td><td>No: it is dirty</td><td>Yes</td><td>Yes, freely</td></tr>
+  <tr><td><b>E</b>xclusive</td><td>Only me</td><td>Yes: it is clean</td><td>Yes</td><td>Yes, silently (it becomes M)</td></tr>
+  <tr><td><b>S</b>hared</td><td>Maybe several cores</td><td>Yes: it is clean</td><td>Yes</td><td>Only after telling the others to invalidate</td></tr>
+  <tr><td><b>I</b>nvalid</td><td>(no valid copy here)</td><td>—</td><td>No: cache miss</td><td>No: cache miss</td></tr>
+</table></div>
+
+<h2>3. Transitions</h2>
+<div class="scroll"><table>
+  <tr><th>Event</th><th>My state change</th><th>What happens to the others</th></tr>
+  <tr><td>I read, miss, <b>no other copy</b> exists</td><td>I → <b>E</b></td><td>Nothing</td></tr>
+  <tr><td>I read, miss, <b>other copies</b> exist</td><td>I → <b>S</b></td><td>Their E or M copies become S (an M copy is written back first)</td></tr>
+  <tr><td>I write, and I hold it in <b>E</b></td><td>E → <b>M</b></td><td>Nothing. <b>Silent</b>: no bus traffic</td></tr>
+  <tr><td>I write, and I hold it in <b>S</b></td><td>S → <b>M</b></td><td>Broadcast "invalidate": their S copies become I</td></tr>
+  <tr><td>I write, and I had a miss (I)</td><td>I → <b>M</b></td><td>"Read for ownership": the others' copies become I</td></tr>
+  <tr><td>Another core <b>reads</b> a line I hold in M</td><td>Write back, then M → <b>S</b></td><td>The reader gets the fresh value, and its copy becomes S</td></tr>
+  <tr><td>Another core <b>writes</b> a line I hold in M</td><td>Write back, then M → <b>I</b></td><td>The writer's copy becomes M</td></tr>
+  <tr><td>Another core reads a line I hold in E</td><td>E → <b>S</b></td><td>—</td></tr>
+  <tr><td>Another core writes a line I hold in E or S</td><td>→ <b>I</b></td><td>—</td></tr>
+</table></div>
+
+<h3>State diagram A: my own core's actions</h3>
+<figure class="diagram">
+  <svg viewBox="0 0 640 380" width="640" role="img" aria-label="MESI transitions caused by this core: I to E on a read miss with no other copy, I to S on a read miss with other copies, E to M on a silent write, S to M on a write with broadcast, I to M on a write miss">
+    <defs><marker id="arA" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M0 0 L10 5 L0 10 Z" class="fill-hi"/></marker></defs>
+    <circle cx="100" cy="190" r="36" class="box-r"/><text x="94" y="195" class="b">I</text>
+    <circle cx="320" cy="70" r="36" class="box-b"/><text x="313" y="75" class="b">E</text>
+    <circle cx="540" cy="190" r="36" class="box-hi"/><text x="532" y="195" class="b">M</text>
+    <circle cx="320" cy="310" r="36" class="box-g"/><text x="314" y="315" class="b">S</text>
+    <path class="w-hi" d="M131.6 172.8 L288.4 87.2" marker-end="url(#arA)"/>
+    <path class="w-hi" d="M351.6 87.2 L508.4 172.8" marker-end="url(#arA)"/>
+    <path class="w-hi" d="M131.6 207.2 L288.4 292.8" marker-end="url(#arA)"/>
+    <path class="w-hi" d="M351.6 292.8 L508.4 207.2" marker-end="url(#arA)"/>
+    <path class="w-hi" d="M136 190 H504" marker-end="url(#arA)"/>
+    <text x="80" y="106" class="m">read miss,</text>
+    <text x="80" y="122" class="m">no other copy</text>
+    <text x="440" y="100" class="m">write</text>
+    <text x="440" y="116" class="m">(silent)</text>
+    <text x="40" y="266" class="m">read miss,</text>
+    <text x="40" y="282" class="m">others have it</text>
+    <text x="440" y="266" class="m">write: broadcast</text>
+    <text x="440" y="282" class="m">invalidate</text>
+    <text x="208" y="182" class="m">write miss (read-for-ownership)</text>
+  </svg>
+  <figcaption>Copper arrows: things <b>this</b> core does. Reads in M, E or S, and writes in M, keep the same state (those loops are not drawn).</figcaption>
+</figure>
+
+<h3>State diagram B: another core's actions</h3>
+<figure class="diagram">
+  <svg viewBox="0 0 640 380" width="640" role="img" aria-label="MESI transitions caused by other cores: M to S when another core reads, M to I when another writes, E to S when another reads, E to I and S to I when another writes">
+    <defs><marker id="arB" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M0 0 L10 5 L0 10 Z" class="fill-ink"/></marker></defs>
+    <circle cx="100" cy="190" r="36" class="box-r"/><text x="94" y="195" class="b">I</text>
+    <circle cx="320" cy="70" r="36" class="box-b"/><text x="313" y="75" class="b">E</text>
+    <circle cx="540" cy="190" r="36" class="box-hi"/><text x="532" y="195" class="b">M</text>
+    <circle cx="320" cy="310" r="36" class="box-g"/><text x="314" y="315" class="b">S</text>
+    <path class="w" stroke-dasharray="6 4" d="M288.4 87.2 L131.6 172.8" marker-end="url(#arB)"/>
+    <path class="w" stroke-dasharray="6 4" d="M508.4 207.2 L351.6 292.8" marker-end="url(#arB)"/>
+    <path class="w" stroke-dasharray="6 4" d="M288.4 292.8 L131.6 207.2" marker-end="url(#arB)"/>
+    <path class="w" stroke-dasharray="6 4" d="M504 190 H136" marker-end="url(#arB)"/>
+    <path class="w" stroke-dasharray="6 4" d="M320 106 V274" marker-end="url(#arB)"/>
+    <text x="80" y="114" class="m">other writes</text>
+    <text x="440" y="266" class="m">other reads</text>
+    <text x="440" y="282" class="m">(I write back first)</text>
+    <text x="40" y="282" class="m">other writes</text>
+    <text x="360" y="182" class="m">other writes</text>
+    <text x="360" y="208" class="m dim">(write back first)</text>
+    <text x="328" y="140" class="m">other reads</text>
+  </svg>
+  <figcaption>Dashed arrows: what happens to <b>my</b> copy when another core touches the same line. Any write elsewhere sends me to I. A read elsewhere turns my M or E into S.</figcaption>
+</figure>
+
+<h2>4. Worked example: two cores, one block X</h2>
+<p>Click through. Memory starts with X = 5, and neither cache holds X yet.</p>
+<div class="stepper" data-stepper>
+  <div class="stage">
+    <p><b>Step 0, start.</b> Core A: <b>I</b> · Core B: <b>I</b> · Memory X = 5.</p>
+  </div>
+  <div class="stage">
+    <p><b>Step 1, A reads X.</b> A has a miss and asks on the bus. Nobody else has a copy, so A loads X = 5 and marks it <b>E</b>.</p>
+    <p>A: <b>E</b> (5) · B: <b>I</b> · Memory 5. Bus: 1 read request.</p>
+  </div>
+  <div class="stage">
+    <p><b>Step 2, A writes X = 7.</b> A holds X in E, so it knows it is the only owner. It changes the value <b>silently</b>: E → <b>M</b>. No bus message is needed.</p>
+    <p>A: <b>M</b> (7, dirty) · B: <b>I</b> · Memory still 5. Bus: nothing. This is exactly why the E state exists.</p>
+  </div>
+  <div class="stage">
+    <p><b>Step 3, B reads X.</b> B has a miss and asks on the bus. A sees that it holds X in M, so A <b>writes 7 back</b> to memory and drops to <b>S</b>. B loads 7 and marks it <b>S</b>.</p>
+    <p>A: <b>S</b> (7) · B: <b>S</b> (7) · Memory 7. B read the correct value.</p>
+  </div>
+  <div class="stage">
+    <p><b>Step 4, B writes X = 9.</b> B holds X in S, so other copies might exist. B <b>broadcasts invalidate</b>. A's copy goes S → <b>I</b>. B goes S → <b>M</b>.</p>
+    <p>A: <b>I</b> · B: <b>M</b> (9, dirty) · Memory 7. Bus: 1 invalidate.</p>
+  </div>
+  <div class="stage">
+    <p><b>Step 5, A reads X again.</b> A has a miss (its copy is I). B holds X in M, so it writes 9 back and drops to <b>S</b>. A loads 9 and marks it <b>S</b>.</p>
+    <p>A: <b>S</b> (9) · B: <b>S</b> (9) · Memory 9. Every read saw the latest value.</p>
+  </div>
+</div>
+
+<div class="scroll"><table>
+  <tr><th>Step</th><th>Event</th><th>A</th><th>B</th><th>Memory X</th><th>Bus message?</th></tr>
+  <tr><td>0</td><td>start</td><td>I</td><td>I</td><td>5</td><td>—</td></tr>
+  <tr><td>1</td><td>A reads</td><td>E</td><td>I</td><td>5</td><td>read request</td></tr>
+  <tr class="hl"><td>2</td><td>A writes 7</td><td>M</td><td>I</td><td>5</td><td><b>none (silent)</b></td></tr>
+  <tr><td>3</td><td>B reads</td><td>S</td><td>S</td><td>7</td><td>read request + write back</td></tr>
+  <tr><td>4</td><td>B writes 9</td><td>I</td><td>M</td><td>7</td><td>invalidate</td></tr>
+  <tr><td>5</td><td>A reads</td><td>S</td><td>S</td><td>9</td><td>read request + write back</td></tr>
+</table></div>
+
+<h2>5. The family: MSI, MESI, MESIF, MOESI</h2>
+<div class="scroll"><table>
+  <tr><th>Protocol</th><th>Idea</th></tr>
+  <tr><td><b>MSI</b></td><td>No E state. Even when a core is the only owner, its first write must broadcast an invalidate. That is wasted bus traffic for the very common "read, then write" pattern.</td></tr>
+  <tr><td><b>MESI</b></td><td>Adds E, so the lone owner can write silently.</td></tr>
+  <tr><td><b>MESIF</b> (Intel)</td><td>Adds <b>F</b> (Forward): among the S copies, exactly one is marked F. Only that core answers requests for the line, so the others don't all reply at once.</td></tr>
+  <tr><td><b>MOESI</b> (AMD)</td><td>Adds <b>O</b> (Owned): this core is responsible for the line's latest value even though others hold shared copies.</td></tr>
+</table></div>
+
+<h2>6. False sharing: a coherence slowdown</h2>
+<p>MESI tracks whole cache lines, not single variables. If two unrelated variables sit in the <b>same 64-byte line</b>, and two cores each update "their own" variable, every write invalidates the other core's copy. The line ping-pongs between the cores.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 600 220" width="600" role="img" aria-label="False sharing: counter a used by core 0 and counter b used by core 1 sit in the same 64-byte cache line, so each write invalidates the other core's copy">
+    <rect x="30" y="20" width="140" height="44" rx="8" class="box-b"/><text x="60" y="47" class="b">Core 0</text>
+    <rect x="430" y="20" width="140" height="44" rx="8" class="box-b"/><text x="460" y="47" class="b">Core 1</text>
+    <text x="36" y="84" class="m">writes a++</text>
+    <text x="480" y="84" class="m">writes b++</text>
+    <rect x="130" y="110" width="340" height="50" rx="6" class="box"/>
+    <rect x="140" y="120" width="70" height="30" class="box-hi"/><text x="168" y="140" class="b">a</text>
+    <rect x="390" y="120" width="70" height="30" class="box-g"/><text x="419" y="140" class="b">b</text>
+    <text x="232" y="140" class="m dim">… other bytes …</text>
+    <text x="210" y="182" class="m">one 64-byte cache line</text>
+    <path class="w-hi" d="M150 64 V100 H175 V120"/>
+    <path class="w-g" d="M450 64 V100 H425 V120"/>
+    <text x="150" y="208" class="r">Each write sends the other core's copy to I → constant misses</text>
+  </svg>
+  <figcaption>a and b are unrelated, but they share a line, so MESI treats every write as a conflict.</figcaption>
+</figure>
+<div class="callout tip"><b>The fix</b><p>Keep data that different cores write in <b>different cache lines</b>: add padding between the variables, or give each thread its own local copy and combine them at the end.</p></div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>E → M is <b>silent</b>. S → M needs a <b>broadcast</b>. Examiners love this difference.</li>
+  <li>M means dirty and <b>only this core</b> has it. There is never an M copy and an S copy of the same line at the same time.</li>
+  <li>Before leaving M (for S or I), the core must <b>write the value back</b> to memory. Otherwise the update is lost.</li>
+  <li>A read miss goes to E only if <b>no other</b> core has a copy. Otherwise it goes to S.</li>
+  <li>False sharing is a <b>performance</b> problem, not a correctness bug. The answers are still right, just slow.</li>
+  <li>Don't mix up MESI (between caches of different cores) with <a href="m5-03-cache-policies.html">write policies</a> (between one cache and memory).</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>What do the four letters of MESI stand for, and what does each mean?</summary><div class="a"><p><b>M</b>odified: only mine, dirty. <b>E</b>xclusive: only mine, clean. <b>S</b>hared: maybe several copies, clean. <b>I</b>nvalid: no usable copy.</p></div></details>
+  <details class="q"><summary>Why does MESI add the E state to MSI?</summary><div class="a"><p>So a core that is the only owner can write <b>without any bus message</b> (E → M silently). In MSI, a lone reader's first write still needs a broadcast.</p></div></details>
+  <details class="q"><summary>Core A holds X in M. Core B reads X. Give both new states and what A must do.</summary><div class="a"><p>A writes its value back to memory, then A: M → <b>S</b>. B loads the fresh value and becomes <b>S</b>.</p></div></details>
+  <details class="q"><summary>Both cores hold X in S. Core B writes X. What happens?</summary><div class="a"><p>B broadcasts invalidate. A: S → <b>I</b>. B: S → <b>M</b>.</p></div></details>
+  <details class="q"><summary>Trace A-read, A-write, B-write starting with both in I. Give the final states.</summary><div class="a"><p>A-read: A = E, B = I. A-write: A = M (silent). B-write: B misses, and A writes back and goes to I. B = M. <b>Final: A = I, B = M.</b></p></div></details>
+  <details class="q"><summary>Two threads update different counters, but the program is slow. Profiling shows many cache misses. What could it be?</summary><div class="a"><p><b>False sharing</b>: the counters sit in the same cache line, so each write invalidates the other core's copy. Fix: pad them into separate lines, or use per-thread counters.</p></div></details>
+  <details class="q"><summary>What does the F in MESIF add?</summary><div class="a"><p>One shared copy is marked Forward. Only that core answers requests for the line, which avoids many duplicate replies.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=-p9tfMMu1PE" target="_blank" rel="noopener"><i class="play"></i><span><b>MESI Cache Coherence Protocol | Vasileios Trigonakis</b><small>Wandida, EPFL</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=AAplcLi-2_Q" target="_blank" rel="noopener"><i class="play"></i><span><b>Maintaining Cache Coherence with MESI</b><small>Jacob Schrum</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=zdDhAlHyXgE" target="_blank" rel="noopener"><i class="play"></i><span><b>MESI cache coherence example | Video 29c</b><small>Nanditha Rao</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=9k6UMsIDvBk" target="_blank" rel="noopener"><i class="play"></i><span><b>Computer Architecture - Lecture 20: Cache Coherence (Fall 2021)</b><small>Onur Mutlu Lectures</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

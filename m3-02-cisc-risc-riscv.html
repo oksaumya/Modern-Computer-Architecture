@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CISC, RISC &amp; RISC-V</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 3 / CISC vs RISC &amp; RISC-V</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>CISC vs RISC, and RISC-V's modular design</h1>
+  <p class="idea">There are two ways to design a CPU's instruction set. <b>CISC</b> offers many powerful instructions of different lengths. <b>RISC</b> offers a small set of simple instructions, all the same length, that are easy to run fast. <b>RISC-V</b> is a free RISC design: a small base plus optional add-on "extensions".</p>
+  <div class="analogy"><b>Think of it like this:</b> a CISC kitchen has a machine for every dish: press one button for "make pizza". A RISC kitchen has a few simple tools (knife, pan, oven) and a fast cook who chains simple steps. The RISC cook needs more steps, but each step is quick and predictable, so several cooks can work in an assembly line. RISC-V is like a basic kitchen kit where you add only the extra modules you need (a pizza oven, a mixer).</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>ISA</dt><dd>Instruction Set Architecture: the list of instructions a CPU understands and how they are encoded. It is the contract between software and hardware.</dd></div>
+  <div class="term"><dt>CISC</dt><dd>Complex Instruction Set Computer. Example: Intel/AMD x86.</dd></div>
+  <div class="term"><dt>RISC</dt><dd>Reduced Instruction Set Computer. Examples: MIPS, ARM, RISC-V.</dd></div>
+  <div class="term"><dt>Load/store</dt><dd>Only <code>load</code> (read memory) and <code>store</code> (write memory) instructions touch memory. All maths happens on registers.</dd></div>
+  <div class="term"><dt>Microcode</dt><dd>A tiny hidden program inside a CISC CPU that carries out one complex instruction as many small steps.</dd></div>
+  <div class="term"><dt>Micro-op (µop)</dt><dd>A simple internal step. Modern x86 chips turn each instruction into µops.</dd></div>
+  <div class="term"><dt>Pipelining</dt><dd>Running instructions like an assembly line: several instructions are in different stages at once (Module 4).</dd></div>
+  <div class="term"><dt>CPI</dt><dd>Cycles Per Instruction: the average number of clock cycles one instruction takes.</dd></div>
+  <div class="term"><dt>Royalty-free</dt><dd>Anyone can build and sell chips using it without paying a licence fee.</dd></div>
+  <div class="term"><dt>Extension</dt><dd>An optional add-on group of instructions in RISC-V, named by a letter (M, A, F, D, C, V…).</dd></div>
+</dl>
+
+<h2>1. CISC: powerful, variable-length instructions</h2>
+<p>In the 1970s memory was tiny and expensive. Designers wanted programs to be <b>short</b>, so each instruction did a lot of work. That is the CISC idea. x86 is the main CISC family today.</p>
+<ul>
+  <li><b>Variable length:</b> an x86 instruction is anywhere from <b>1 to 15 bytes</b> long. The CPU must decode the first bytes just to find where the instruction ends.</li>
+  <li><b>Complex, memory-to-memory instructions:</b> one instruction can read memory, compute, and write memory back, e.g. <code>add dword [ebx], 5</code>. <code>rep movsb</code> copies a whole block of memory.</li>
+  <li><b>Microcode:</b> complex instructions are run by an internal micro-program.</li>
+  <li><b>Fewer instructions per program</b> (dense code), but each one can take many clock cycles (high CPI).</li>
+  <li>Few general-purpose registers (8 in 32-bit x86, 16 in x86-64).</li>
+</ul>
+
+<h2>2. RISC: simple, fixed-length instructions</h2>
+<p>In the 1980s, researchers (Patterson at Berkeley, Hennessy at Stanford) found that programs mostly use simple instructions. So they made those simple ones very fast.</p>
+<ul>
+  <li><b>Fixed length:</b> every MIPS instruction is exactly <b>32 bits (4 bytes)</b>. The next instruction is always at PC + 4.</li>
+  <li><b>Load/store:</b> only <code>lw</code>/<code>sw</code> touch memory. <code>add</code> works only on registers.</li>
+  <li><b>Simple instructions</b> with only a few formats (MIPS has 3: R, I, J), so decoding is quick. Control can be plain hard-wired logic, not microcode.</li>
+  <li><b>Easy to pipeline:</b> every instruction takes about the same steps, so they flow smoothly through an assembly line.</li>
+  <li><b>More registers:</b> 32 in MIPS and RISC-V, so fewer slow memory trips.</li>
+</ul>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 340" width="640" role="img" aria-label="Instruction length: x86 instructions take 1, 2, 3, 5 or up to 15 bytes; every MIPS instruction takes exactly 4 bytes">
+    <text x="10" y="24" class="b r">x86 (CISC): 1 to 15 bytes</text>
+    <text x="10" y="57" class="m">ret</text>
+    <rect x="200" y="40" width="24" height="24" rx="3" class="box-r"/>
+    <text x="212" y="57" class="m" text-anchor="middle">C3</text>
+    <text x="232" y="57" class="m dim">1 B</text>
+    <text x="10" y="89" class="m">add eax, ebx</text>
+    <rect x="200" y="72" width="24" height="24" rx="3" class="box-r"/>
+    <text x="212" y="89" class="m" text-anchor="middle">01</text>
+    <rect x="226" y="72" width="24" height="24" rx="3" class="box-r"/>
+    <text x="238" y="89" class="m" text-anchor="middle">D8</text>
+    <text x="258" y="89" class="m dim">2 B</text>
+    <text x="10" y="121" class="m">add dword [ebx], 5</text>
+    <rect x="200" y="104" width="24" height="24" rx="3" class="box-r"/>
+    <text x="212" y="121" class="m" text-anchor="middle">83</text>
+    <rect x="226" y="104" width="24" height="24" rx="3" class="box-r"/>
+    <text x="238" y="121" class="m" text-anchor="middle">03</text>
+    <rect x="252" y="104" width="24" height="24" rx="3" class="box-r"/>
+    <text x="264" y="121" class="m" text-anchor="middle">05</text>
+    <text x="284" y="121" class="m dim">3 B</text>
+    <text x="10" y="153" class="m">mov eax, 0x12345678</text>
+    <rect x="200" y="136" width="24" height="24" rx="3" class="box-r"/>
+    <text x="212" y="153" class="m" text-anchor="middle">B8</text>
+    <rect x="226" y="136" width="24" height="24" rx="3" class="box-r"/>
+    <text x="238" y="153" class="m" text-anchor="middle">78</text>
+    <rect x="252" y="136" width="24" height="24" rx="3" class="box-r"/>
+    <text x="264" y="153" class="m" text-anchor="middle">56</text>
+    <rect x="278" y="136" width="24" height="24" rx="3" class="box-r"/>
+    <text x="290" y="153" class="m" text-anchor="middle">34</text>
+    <rect x="304" y="136" width="24" height="24" rx="3" class="box-r"/>
+    <text x="316" y="153" class="m" text-anchor="middle">12</text>
+    <text x="336" y="153" class="m dim">5 B</text>
+    <text x="10" y="185" class="m">longest legal x86</text>
+    <rect x="200" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="226" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="252" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="278" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="304" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="330" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="356" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="382" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="408" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="434" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="460" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="486" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="512" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="538" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <rect x="564" y="168" width="24" height="24" rx="3" class="box-r"/>
+    <text x="596" y="185" class="m dim">15 B</text>
+
+    <path class="grid" d="M10 214 H630"/>
+    <text x="10" y="240" class="b g">MIPS (RISC): always 4 bytes</text>
+    <text x="10" y="273" class="m">add $t0,$s1,$s2</text>
+    <rect x="200" y="256" width="104" height="24" rx="3" class="box-g"/>
+    <text x="252" y="273" class="m" text-anchor="middle">02 32 40 20</text>
+    <text x="312" y="273" class="m dim">4 B</text>
+    <text x="10" y="305" class="m">lw $t0,32($s3)</text>
+    <rect x="200" y="288" width="104" height="24" rx="3" class="box-g"/>
+    <text x="252" y="305" class="m" text-anchor="middle">8E 68 00 20</text>
+    <text x="312" y="305" class="m dim">4 B</text>
+    <text x="360" y="289" class="dim">next instruction is always at PC + 4</text>
+  </svg>
+  <figcaption>Real encodings. An x86 decoder must read the bytes to find where each instruction ends. A MIPS decoder always knows: 4 bytes.</figcaption>
+</figure>
+
+<h2>3. Same task in x86 and MIPS</h2>
+<p><b>Task:</b> a number <code>x</code> is stored in memory. Add 5 to it. The address of <code>x</code> is already in a register (<code>ebx</code> on x86, <code>$s0</code> on MIPS). In MIPS, <code>$s0</code> and <code>$t0</code> are two of the 32 registers: <code>$s</code> registers hold our variables and <code>$t</code> registers hold temporary scratch values (full list on the <a href="m3-03-mips-registers-formats.html">next page</a>).</p>
+<div class="vs">
+  <div>
+    <h3>x86 (CISC): 1 instruction</h3>
+    <div class="code" style="margin:0">
+      <div class="code-head"><span><b>x86</b></span><span>3 bytes</span></div>
+      <table class="ann">
+        <tr><td class="c"><span class="kw">add</span> dword [ebx], <span class="num">5</span></td><td class="n">Read memory at ebx, add 5, write the result back. All in one instruction.</td></tr>
+      </table>
+    </div>
+  </div>
+  <div>
+    <h3>MIPS (RISC): 3 instructions</h3>
+    <div class="code" style="margin:0">
+      <div class="code-head"><span><b>mips</b></span><span>12 bytes</span></div>
+      <table class="ann">
+        <tr><td class="c"><span class="kw">lw</span>   $t0, <span class="num">0</span>($s0)</td><td class="n">Load: copy x from memory into register $t0.</td></tr>
+        <tr><td class="c"><span class="kw">addi</span> $t0, $t0, <span class="num">5</span></td><td class="n">Add 5, in the register.</td></tr>
+        <tr><td class="c"><span class="kw">sw</span>   $t0, <span class="num">0</span>($s0)</td><td class="n">Store: write the result back to memory.</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+<p>The class example from L01 is the same story. Python's <code>A[i] = B[i] + C[i]</code> becomes <b><code>lw · lw · add · sw</code></b> in MIPS: load both values, add in registers, store the result.</p>
+
+<h2>4. The iron law ties it together</h2>
+<div class="formula">CPU time = Instruction count × CPI × Cycle time<small>How many instructions × how many clock cycles each takes (on average) × how long one clock cycle lasts</small></div>
+<ul>
+  <li><b>CISC</b> makes the <b>instruction count</b> small, but CPI is high and decoding is slow.</li>
+  <li><b>RISC</b> accepts a bigger instruction count, but gets a low CPI (pipelining) and a short cycle time (simple decoding).</li>
+</ul>
+<h3>Worked example (made-up numbers)</h3>
+<ol class="steps">
+  <li><b>CISC machine:</b> 1.0 million instructions, CPI = 3, cycle = 1 ns.<br>Time = 1.0×10⁶ × 3 × 1 ns = 3×10⁶ ns = <b>3.0 ms</b>.</li>
+  <li><b>RISC machine:</b> the same program needs 1.5 million instructions, CPI = 1.2, cycle = 0.8 ns.<br>Time = 1.5×10⁶ × 1.2 × 0.8 ns = 1.44×10⁶ ns = <b>1.44 ms</b>.</li>
+  <li><b>Result:</b> 3.0 / 1.44 ≈ <b>2.08× faster</b> for RISC, even with 50% more instructions. More in <a href="m4-04-performance.html">Performance: CPI, IPC &amp; Amdahl's Law</a>.</li>
+</ol>
+
+<h2>5. Today: the two ideas have merged</h2>
+<p>Modern x86 chips (Intel Core, AMD Ryzen) keep the x86 instruction set for old software. But inside, a decoder turns each x86 instruction into simple <b>RISC-like micro-ops</b>. A fast RISC-style core then runs those µops with pipelining.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 640 170" width="640" role="img" aria-label="Modern x86: a complex x86 instruction goes into a decoder and comes out as three simple micro-ops that a RISC-like core runs">
+    <rect x="10" y="50" width="160" height="60" rx="8" class="box-r"/>
+    <text x="90" y="75" class="b" text-anchor="middle">x86 instruction</text>
+    <text x="90" y="95" class="m" text-anchor="middle">add [ebx], 5</text>
+    <path class="w-hi" d="M170 80 H200"/>
+    <polygon points="210,80 198,75 198,85" class="fill-hi"/>
+    <rect x="210" y="50" width="110" height="60" rx="8" class="box-hi"/>
+    <text x="265" y="76" class="b" text-anchor="middle">Decoder</text>
+    <text x="265" y="96" class="dim" text-anchor="middle">(hardware)</text>
+    <path class="w-hi" d="M320 80 H350"/>
+    <polygon points="360,80 348,75 348,85" class="fill-hi"/>
+    <rect x="360" y="20" width="120" height="30" rx="6" class="box-g"/>
+    <text x="420" y="40" class="m" text-anchor="middle">µop: load</text>
+    <rect x="360" y="65" width="120" height="30" rx="6" class="box-g"/>
+    <text x="420" y="85" class="m" text-anchor="middle">µop: add 5</text>
+    <rect x="360" y="110" width="120" height="30" rx="6" class="box-g"/>
+    <text x="420" y="130" class="m" text-anchor="middle">µop: store</text>
+    <path class="w" d="M480 80 H510"/>
+    <polygon points="520,80 508,75 508,85" class="fill-ink"/>
+    <rect x="520" y="45" width="110" height="70" rx="8" class="box-b"/>
+    <text x="575" y="74" class="b" text-anchor="middle">RISC-like</text>
+    <text x="575" y="94" class="b" text-anchor="middle">core</text>
+    <text x="320" y="164" class="dim" text-anchor="middle">CISC outside (compatibility), RISC inside (speed)</text>
+  </svg>
+  <figcaption>The x86 "add to memory" instruction becomes three µops, the same shape as the MIPS lw · addi · sw version.</figcaption>
+</figure>
+
+<h2>6. CISC vs RISC comparison table</h2>
+<div class="scroll"><table>
+  <tr><th></th><th>CISC (x86)</th><th>RISC (MIPS, ARM, RISC-V)</th></tr>
+  <tr><td>Instruction length</td><td>Variable, 1–15 bytes</td><td>Fixed, 32 bits (RISC-V "C" adds 16-bit)</td></tr>
+  <tr><td>Number of formats</td><td>Many</td><td>Few (MIPS: R, I, J)</td></tr>
+  <tr><td>Memory access</td><td>Most instructions can use memory directly</td><td>Load/store only (<code>lw</code>/<code>sw</code>)</td></tr>
+  <tr><td>Instruction complexity</td><td>Complex, multi-step</td><td>Simple, one step each</td></tr>
+  <tr><td>Control unit</td><td>Microcode</td><td>Hard-wired logic</td></tr>
+  <tr><td>Instructions per program</td><td>Fewer</td><td>More</td></tr>
+  <tr><td>CPI</td><td>High and uneven</td><td>Low, about 1 when pipelined</td></tr>
+  <tr><td>Pipelining</td><td>Hard (done on µops)</td><td>Easy</td></tr>
+  <tr><td>Registers</td><td>Few (8 / 16)</td><td>Many (32)</td></tr>
+  <tr><td>Where used</td><td>Desktops, laptops, servers</td><td>Phones, embedded, Apple M-series, many servers, microcontrollers</td></tr>
+</table></div>
+
+<h2>7. RISC-V: an open, modular ISA</h2>
+<p>RISC-V (say "risk five") started at UC Berkeley in 2010. It is <b>open and royalty-free</b>: anyone can design a RISC-V chip without asking permission or paying a fee. (x86 is made only by Intel and AMD; ARM designs require a paid licence.)</p>
+<p>It looks a lot like MIPS: 32 registers (<code>x0</code>–<code>x31</code>), <code>x0</code> hardwired to 0 (just like <code>$zero</code>), fixed 32-bit instructions, load/store.</p>
+<h3>The modular extension model</h3>
+<p>Instead of one huge fixed instruction set, RISC-V has a <b>small base</b> that every chip must have, plus <b>optional extensions</b>. A tiny sensor chip takes only what it needs. A laptop chip takes much more.</p>
+<div class="scroll"><table>
+  <tr><th>Name</th><th>What it adds</th><th>Plain meaning</th></tr>
+  <tr><td><b>RV32I / RV64I</b></td><td>Base integer set (about 40 instructions)</td><td>Add, subtract, logic, shifts, load/store, branches, jumps. 32-bit or 64-bit registers. Always required.</td></tr>
+  <tr><td><b>M</b></td><td>Multiply / divide</td><td><code>mul</code>, <code>div</code>, <code>rem</code> in hardware.</td></tr>
+  <tr><td><b>A</b></td><td>Atomic</td><td>Instructions for safe sharing between threads (see <a href="m6-03-atomics-mutex.html">atomics &amp; mutexes</a>).</td></tr>
+  <tr><td><b>F / D</b></td><td>Float / double</td><td>Single- and double-precision decimal-point maths.</td></tr>
+  <tr><td><b>C</b></td><td>Compressed</td><td>16-bit short forms of common instructions. Code gets about 25–30% smaller.</td></tr>
+  <tr><td><b>V</b></td><td>Vector</td><td>SIMD: one instruction works on many numbers at once (see <a href="m6-06-simd-gpu-tpu.html">SIMD</a>).</td></tr>
+  <tr><td><b>G</b></td><td>"General" = <b>IMAFD</b> + Zicsr + Zifencei</td><td>A shorthand for the usual general-purpose set. Zicsr = control/status registers; Zifencei = an instruction-fetch sync instruction.</td></tr>
+</table></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 560 300" width="560" role="img" aria-label="RISC-V extensions stacked on the base integer set; the G bracket covers I, M, A, F and D">
+    <rect x="80" y="240" width="360" height="44" rx="8" class="box-b"/>
+    <text x="260" y="260" class="b" text-anchor="middle">Base: RV32I / RV64I</text>
+    <text x="260" y="276" class="m dim" text-anchor="middle">required on every chip</text>
+    <rect x="80" y="192" width="360" height="40" rx="8" class="box-g"/>
+    <text x="260" y="217" text-anchor="middle"><tspan font-weight="700">M</tspan> multiply / divide</text>
+    <rect x="80" y="144" width="360" height="40" rx="8" class="box-g"/>
+    <text x="260" y="169" text-anchor="middle"><tspan font-weight="700">A</tspan> atomic</text>
+    <rect x="80" y="96" width="176" height="40" rx="8" class="box-g"/>
+    <text x="168" y="121" text-anchor="middle"><tspan font-weight="700">F</tspan> float</text>
+    <rect x="264" y="96" width="176" height="40" rx="8" class="box-g"/>
+    <text x="352" y="121" text-anchor="middle"><tspan font-weight="700">D</tspan> double</text>
+    <rect x="80" y="48" width="176" height="40" rx="8" class="box-hi"/>
+    <text x="168" y="73" text-anchor="middle"><tspan font-weight="700">C</tspan> compressed</text>
+    <rect x="264" y="48" width="176" height="40" rx="8" class="box-hi"/>
+    <text x="352" y="73" text-anchor="middle"><tspan font-weight="700">V</tspan> vector</text>
+    <text x="260" y="30" class="dim" text-anchor="middle">optional blocks stack on top</text>
+    <path class="w-hi" d="M452 96 H466 V284 H452"/>
+    <text x="476" y="186" class="hi">G =</text>
+    <text x="476" y="204" class="hi">IMAFD</text>
+    <text x="476" y="222" class="m dim">+Zicsr</text>
+    <text x="476" y="238" class="m dim">+Zifencei</text>
+  </svg>
+  <figcaption>A chip picks its blocks. The copper bracket shows which blocks the letter G stands for.</figcaption>
+</figure>
+
+<h3>Reading a RISC-V name: RV64GC</h3>
+<ol class="flow arrows">
+  <li><b>RV</b>RISC-V</li>
+  <li><b>64</b>64-bit registers and addresses (base RV64I)</li>
+  <li><b>G</b>I + M + A + F + D (+ Zicsr, Zifencei)</li>
+  <li><b>C</b>plus compressed 16-bit instructions</li>
+</ol>
+<p>So <b>RV64GC</b> = RV64IMAFDC (+Zicsr, Zifencei). It is the usual target for Linux-capable RISC-V chips. A small microcontroller might be <b>RV32IMC</b>: 32-bit, multiply, compressed, and nothing else.</p>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>RISC does <b>not</b> mean "fewer instructions per program". It means simpler instructions, so programs usually need <b>more</b> of them.</li>
+  <li>x86 length is <b>1 to 15 bytes</b>, not "up to 16".</li>
+  <li>"Load/store" means only load/store instructions touch memory. <code>add $t0, 0($s0)</code> is not legal MIPS.</li>
+  <li>Don't say "x86 is pure CISC inside". Modern x86 translates to RISC-like µops.</li>
+  <li><b>G</b> is not a single extension. It is shorthand for IMAFD (+Zicsr, Zifencei). <b>C</b> is not part of G, which is why names say "GC".</li>
+  <li>RISC-V is an open <b>specification</b>. Being royalty-free does not mean every chip design is free or open-source.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>Give four features that make an ISA "RISC".</summary><div class="a"><p>Fixed-length instructions; load/store architecture; few simple instructions and formats; many general-purpose registers (and hence easy pipelining and hard-wired control).</p></div></details>
+  <details class="q"><summary>Why is a fixed instruction length good for pipelining?</summary><div class="a"><p>The CPU always knows the next instruction starts at PC + 4, and every field sits in the same bit position. So fetch and decode are quick and take the same time for every instruction, which lets them move through pipeline stages evenly.</p></div></details>
+  <details class="q"><summary>Program P: CISC needs 2 M instructions, CPI 4, cycle 1.2 ns. RISC needs 3 M instructions, CPI 1.5, cycle 1 ns. Which is faster, and by how much?</summary><div class="a"><p>CISC: 2×10⁶ × 4 × 1.2 ns = 9.6 ms. RISC: 3×10⁶ × 1.5 × 1 ns = 4.5 ms. <b>RISC is faster</b>, by 9.6 / 4.5 ≈ <b>2.13×</b>.</p></div></details>
+  <details class="q"><summary>Write the MIPS for x86 <code>add dword [ebx], 5</code> if the address is in <code>$s0</code>.</summary><div class="a"><p><code>lw $t0, 0($s0)</code> · <code>addi $t0, $t0, 5</code> · <code>sw $t0, 0($s0)</code>. Three instructions, because MIPS is load/store.</p></div></details>
+  <details class="q"><summary>Expand the name RV64GC letter by letter.</summary><div class="a"><p>RISC-V, 64-bit base integer set (I), M (multiply/divide), A (atomic), F (float), D (double), plus Zicsr and Zifencei (all from G), and C (compressed).</p></div></details>
+  <details class="q"><summary>Why is a modular ISA useful?</summary><div class="a"><p>A small chip (sensor, microcontroller) can implement only the base plus a few extensions, which saves area and power. A big chip adds more extensions. All of them still run the same base software.</p></div></details>
+  <details class="q"><summary>How does modern x86 get RISC-style speed while staying CISC?</summary><div class="a"><p>Its decoder translates each x86 instruction into simple RISC-like micro-ops, which a pipelined, out-of-order core then runs.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=ZW1gb3h-f9k" target="_blank" rel="noopener"><i class="play"></i><span><b>L-2.13: RISC vs CISC | Computer Organization &amp; Architecture</b><small>Gate Smashers</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=QKdiZSfwg-g" target="_blank" rel="noopener"><i class="play"></i><span><b>Lecture 3. ISA Tradeoffs - Carnegie Mellon - Computer Architecture 2015 - Onur Mutlu</b><small>Carnegie Mellon Computer Architecture</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=-Vv4UaG9o9k" target="_blank" rel="noopener"><i class="play"></i><span><b>[CS61C FA20] Lecture 07.3 - RISC-V Intro: RISC-V add/sub Instructions</b><small>CS 61C Departmental (UC Berkeley)</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

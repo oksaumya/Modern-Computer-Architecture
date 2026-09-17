@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Number Systems</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 1 / Number systems</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 1 · Digital Foundations <span class="tag class">From class notes · L04</span></div>
+  <h1>Number systems &amp; two's complement</h1>
+  <p class="idea">Computers store everything as bits (0s and 1s). This page covers how to write numbers in binary and hexadecimal, and how to store <b>negative</b> numbers using <b>two's complement</b>. Two's complement is the system every modern CPU uses, because one adder circuit can then do both addition and subtraction.</p>
+  <div class="analogy"><b>Think of it like this:</b> a car's odometer with 4 digits. Roll it back one step from 0000 and it shows 9999. Two's complement uses the same idea: step back one from <code>0000</code> and you get <code>1111</code>, and we agree that this pattern means −1.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Bit / nibble / byte</dt><dd>A bit is one binary digit (0 or 1). A nibble is 4 bits. A byte is 8 bits.</dd></div>
+  <div class="term"><dt>Base (radix)</dt><dd>How many different digits a number system uses. Decimal is base 10, binary is base 2, and hexadecimal is base 16.</dd></div>
+  <div class="term"><dt>MSB / LSB</dt><dd>The most significant bit is the leftmost bit, with the biggest weight. The least significant bit is the rightmost bit, with weight 1.</dd></div>
+  <div class="term"><dt>Unsigned</dt><dd>Every bit pattern means zero or a positive number. 4 bits give 0 to 15.</dd></div>
+  <div class="term"><dt>Signed</dt><dd>Patterns can mean negative numbers too. In two's complement, 4 bits give −8 to +7.</dd></div>
+  <div class="term"><dt>Sign bit</dt><dd>The MSB of a signed number. 0 means zero or positive; 1 means negative.</dd></div>
+  <div class="term"><dt>Hexadecimal (hex)</dt><dd>Base 16, with digits 0–9 and A–F. It is written with a <code>0x</code> prefix, as in <code>0x2A</code>.</dd></div>
+  <div class="term"><dt>Overflow</dt><dd>The true answer does not fit in the available bits. It happens <b>silently</b>, with no error message.</dd></div>
+</dl>
+
+<div class="callout tip"><b>One pattern, two meanings</b><p><code>11111111</code> is <b>255</b> if you read it as unsigned, and <b>−1</b> if you read it as signed. The bits are identical. "The CPU only knows which you meant by which instruction you use."</p></div>
+
+<h2>1. Positional notation</h2>
+<p>In any base, each position is worth the base raised to a power. Start at the right with power 0. Multiply each digit by its position's weight, then add everything up.</p>
+<div class="formula">value = Σ digit × base<sup>position</sup><small>Decimal: 237 = 2×100 + 3×10 + 7×1. Binary works the same way, but the weights are 1, 2, 4, 8, …</small></div>
+<div class="scroll"><table class="tt">
+  <tr><th>weight</th><th>128</th><th>64</th><th>32</th><th>16</th><th>8</th><th>4</th><th>2</th><th>1</th><th class="out">value</th></tr>
+  <tr><td>power</td><td>2⁷</td><td>2⁶</td><td>2⁵</td><td>2⁴</td><td>2³</td><td>2²</td><td>2¹</td><td>2⁰</td><td class="out"></td></tr>
+  <tr><td>101101</td><td class="zero">0</td><td class="zero">0</td><td class="one">1</td><td class="zero">0</td><td class="one">1</td><td class="one">1</td><td class="zero">0</td><td class="one">1</td><td class="out">32+8+4+1 = <b>45</b></td></tr>
+  <tr><td>101010</td><td class="zero">0</td><td class="zero">0</td><td class="one">1</td><td class="zero">0</td><td class="one">1</td><td class="zero">0</td><td class="one">1</td><td class="zero">0</td><td class="out">32+8+2 = <b>42</b></td></tr>
+</table></div>
+<p><b>Binary → decimal:</b> add up the weights wherever the bit is 1.</p>
+
+<h2>2. Decimal → binary: divide by 2</h2>
+<p>Divide by 2 again and again, writing down each remainder (0 or 1). Stop when you reach 0. Then <b>read the remainders from bottom to top</b>. The first remainder is the LSB.</p>
+<h3>Worked example: 42 to binary</h3>
+<div class="stepper" data-stepper>
+  <div class="stage"><p><b>42 ÷ 2 = 21</b>, remainder <b>0</b>. This is the LSB (bit 0).</p></div>
+  <div class="stage"><p><b>21 ÷ 2 = 10</b>, remainder <b>1</b> (bit 1).</p></div>
+  <div class="stage"><p><b>10 ÷ 2 = 5</b>, remainder <b>0</b> (bit 2).</p></div>
+  <div class="stage"><p><b>5 ÷ 2 = 2</b>, remainder <b>1</b> (bit 3).</p></div>
+  <div class="stage"><p><b>2 ÷ 2 = 1</b>, remainder <b>0</b> (bit 4).</p></div>
+  <div class="stage"><p><b>1 ÷ 2 = 0</b>, remainder <b>1</b> (bit 5, the MSB). The quotient is 0, so stop.</p></div>
+  <div class="stage"><p><b>Read bottom to top:</b> 1 0 1 0 1 0, so 42 = <code>101010</code>. Check: 32 + 8 + 2 = 42 ✓</p></div>
+</div>
+<div class="scroll"><table>
+  <tr><th>Division</th><th>Quotient</th><th>Remainder</th></tr>
+  <tr><td>42 ÷ 2</td><td>21</td><td>0 ← LSB</td></tr>
+  <tr><td>21 ÷ 2</td><td>10</td><td>1</td></tr>
+  <tr><td>10 ÷ 2</td><td>5</td><td>0</td></tr>
+  <tr><td>5 ÷ 2</td><td>2</td><td>1</td></tr>
+  <tr><td>2 ÷ 2</td><td>1</td><td>0</td></tr>
+  <tr><td>1 ÷ 2</td><td>0</td><td>1 ← MSB (read upward)</td></tr>
+</table></div>
+<div class="callout tip"><b>Faster way for small numbers</b><p>Subtract the biggest power of 2 that fits, and repeat. For 42: 42 − 32 = 10, then 10 − 8 = 2, then 2 − 2 = 0. So you need bits 32, 8 and 2, which gives <code>101010</code>.</p></div>
+
+<h2>3. Hexadecimal</h2>
+<p>Long binary numbers are hard to read. <strong>One hex digit is exactly 4 bits</strong>, so to convert, split the binary into groups of 4 starting from the right, and swap each group for its hex digit.</p>
+<div class="scroll"><table class="tt">
+  <tr><th>Dec</th><th>Bin</th><th class="out">Hex</th><th>Dec</th><th>Bin</th><th class="out">Hex</th></tr>
+  <tr><td>0</td><td>0000</td><td class="out">0</td><td>8</td><td>1000</td><td class="out">8</td></tr>
+  <tr><td>1</td><td>0001</td><td class="out">1</td><td>9</td><td>1001</td><td class="out">9</td></tr>
+  <tr><td>2</td><td>0010</td><td class="out">2</td><td>10</td><td>1010</td><td class="out one">A</td></tr>
+  <tr><td>3</td><td>0011</td><td class="out">3</td><td>11</td><td>1011</td><td class="out one">B</td></tr>
+  <tr><td>4</td><td>0100</td><td class="out">4</td><td>12</td><td>1100</td><td class="out one">C</td></tr>
+  <tr><td>5</td><td>0101</td><td class="out">5</td><td>13</td><td>1101</td><td class="out one">D</td></tr>
+  <tr><td>6</td><td>0110</td><td class="out">6</td><td>14</td><td>1110</td><td class="out one">E</td></tr>
+  <tr><td>7</td><td>0111</td><td class="out">7</td><td>15</td><td>1111</td><td class="out one">F</td></tr>
+</table></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 480 170" width="480" role="img" aria-label="10110101 split into nibbles 1011 and 0101, which are hex B and 5; 0xB5 equals 181">
+    <text x="50" y="20" class="m dim">8</text><text x="98" y="20" class="m dim">4</text><text x="146" y="20" class="m dim">2</text><text x="194" y="20" class="m dim">1</text>
+    <text x="266" y="20" class="m dim">8</text><text x="314" y="20" class="m dim">4</text><text x="362" y="20" class="m dim">2</text><text x="410" y="20" class="m dim">1</text>
+    <rect x="40" y="30" width="44" height="40" rx="6" class="box-b"/><text x="57" y="55" class="m">1</text>
+    <rect x="88" y="30" width="44" height="40" rx="6" class="box"/><text x="105" y="55" class="m">0</text>
+    <rect x="136" y="30" width="44" height="40" rx="6" class="box-b"/><text x="153" y="55" class="m">1</text>
+    <rect x="184" y="30" width="44" height="40" rx="6" class="box-b"/><text x="201" y="55" class="m">1</text>
+    <rect x="256" y="30" width="44" height="40" rx="6" class="box"/><text x="273" y="55" class="m">0</text>
+    <rect x="304" y="30" width="44" height="40" rx="6" class="box-b"/><text x="321" y="55" class="m">1</text>
+    <rect x="352" y="30" width="44" height="40" rx="6" class="box"/><text x="369" y="55" class="m">0</text>
+    <rect x="400" y="30" width="44" height="40" rx="6" class="box-b"/><text x="417" y="55" class="m">1</text>
+    <path class="w-hi" d="M40 80 V90 H228 V80 M134 90 V102"/>
+    <path class="w-hi" d="M256 80 V90 H444 V80 M350 90 V102"/>
+    <text x="134" y="122" class="hi" text-anchor="middle">8+2+1 = 11 = B</text>
+    <text x="350" y="122" class="hi" text-anchor="middle">4+1 = 5</text>
+    <text x="242" y="156" class="b" text-anchor="middle">0xB5 = 11×16 + 5 = 181</text>
+  </svg>
+  <figcaption>Group the bits in fours from the right, and each group becomes one hex digit. 10110101₂ = 0xB5 = 181.</figcaption>
+</figure>
+<p>More examples: <code>0x2A</code> = <code>0010 1010</code> = 2×16 + 10 = <b>42</b>. Hex shows up in colours (<code>#FF8800</code> means red FF, green 88, blue 00), memory addresses and MAC addresses.</p>
+<div class="formula">hex → decimal: each place is worth 16× the place to its right<small>0xB5 = B×16 + 5×1 = 176 + 5 = 181</small></div>
+
+<h2>4. Powers of 2 worth memorising</h2>
+<div class="scroll"><table class="tt">
+  <tr><th>2⁰</th><th>2¹</th><th>2²</th><th>2³</th><th>2⁴</th><th>2⁵</th><th>2⁶</th><th>2⁷</th><th>2⁸</th></tr>
+  <tr><td>1</td><td>2</td><td>4</td><td>8</td><td>16</td><td>32</td><td>64</td><td>128</td><td>256</td></tr>
+</table></div>
+<div class="scroll"><table>
+  <tr><th>Power</th><th>Value</th><th>Name</th></tr>
+  <tr><td>2¹⁰</td><td>1,024</td><td>1 KB (kilo)</td></tr>
+  <tr><td>2²⁰</td><td>1,048,576</td><td>1 MB (mega)</td></tr>
+  <tr><td>2³⁰</td><td>about 1.07 billion</td><td>1 GB (giga)</td></tr>
+  <tr><td>2⁴⁰</td><td>about 1.1 trillion</td><td>1 TB (tera)</td></tr>
+</table></div>
+<p><b>n bits give 2ⁿ different patterns.</b> 8 bits give 256, 16 bits give 65,536, and 32 bits give about 4.3 billion.</p>
+
+<h2>5. Three ways to store negative numbers</h2>
+<h3>Sign-magnitude</h3>
+<p>Use the MSB as a sign (0 = +, 1 = −) and the remaining bits as the size. +18 = <code>0<b>0010010</b></code>, −18 = <code>1<b>0010010</b></code>. It is simple, but it has <b>two zeros</b> (+0 and −0), and addition needs extra logic to compare signs. Today it is only used for the sign bit of floating-point numbers.</p>
+<h3>One's complement</h3>
+<p>To negate, <b>invert every bit</b>. +18 = <code>00010010</code>, so −18 = <code>11101101</code>. It still has two zeros (<code>00000000</code> and <code>11111111</code>), and addition needs an <b>end-around carry</b>: any carry out of the MSB must be added back in at the LSB.</p>
+<h3>Two's complement (the one CPUs use)</h3>
+<p>To negate, <b>invert every bit, then add 1</b>.</p>
+<ol class="flow arrows">
+  <li><b>Start</b>+18 = <code>00010010</code></li>
+  <li><b>Invert</b><code>11101101</code></li>
+  <li><b>Add 1</b><code>11101110</code> = −18</li>
+</ol>
+<p>This works in <b>both directions</b>: negate <code>11101110</code> and you get <code>00010001</code> + 1 = <code>00010010</code> = +18 again. There is only <b>one zero</b>, and the same adder does both addition and subtraction.</p>
+
+<div class="scroll"><table>
+  <tr><th></th><th>Sign-magnitude</th><th>One's complement</th><th>Two's complement</th></tr>
+  <tr><td>How to negate</td><td>Flip the sign bit</td><td>Invert all bits</td><td>Invert all bits, then add 1</td></tr>
+  <tr><td>−18 in 8 bits</td><td><code>10010010</code></td><td><code>11101101</code></td><td><code>11101110</code></td></tr>
+  <tr><td>Zeros</td><td>Two (+0, −0)</td><td>Two (+0, −0)</td><td><b>One</b></td></tr>
+  <tr><td>8-bit range</td><td>−127 … +127</td><td>−127 … +127</td><td><b>−128 … +127</b></td></tr>
+  <tr><td>Addition</td><td>Needs sign-checking logic</td><td>Needs an end-around carry</td><td><b>A plain adder works</b></td></tr>
+  <tr><td>Used today</td><td>Float sign bits only</td><td>Rarely (some checksums)</td><td><b>Every modern CPU</b></td></tr>
+</table></div>
+
+<h3>All 16 patterns in 4 bits, read four ways</h3>
+<div class="scroll"><table class="tt">
+  <tr><th>Bits</th><th>Unsigned</th><th>Sign-mag</th><th>One's</th><th class="out">Two's</th></tr>
+  <tr><td>0000</td><td>0</td><td>0</td><td>0</td><td class="out">0</td></tr>
+  <tr><td>0001</td><td>1</td><td>+1</td><td>+1</td><td class="out">+1</td></tr>
+  <tr><td>0010</td><td>2</td><td>+2</td><td>+2</td><td class="out">+2</td></tr>
+  <tr><td>0011</td><td>3</td><td>+3</td><td>+3</td><td class="out">+3</td></tr>
+  <tr><td>0100</td><td>4</td><td>+4</td><td>+4</td><td class="out">+4</td></tr>
+  <tr><td>0101</td><td>5</td><td>+5</td><td>+5</td><td class="out">+5</td></tr>
+  <tr><td>0110</td><td>6</td><td>+6</td><td>+6</td><td class="out">+6</td></tr>
+  <tr><td>0111</td><td>7</td><td>+7</td><td>+7</td><td class="out">+7</td></tr>
+  <tr class="hl"><td>1000</td><td>8</td><td>−0</td><td>−7</td><td class="out">−8</td></tr>
+  <tr><td>1001</td><td>9</td><td>−1</td><td>−6</td><td class="out">−7</td></tr>
+  <tr><td>1010</td><td>10</td><td>−2</td><td>−5</td><td class="out">−6</td></tr>
+  <tr><td>1011</td><td>11</td><td>−3</td><td>−4</td><td class="out">−5</td></tr>
+  <tr><td>1100</td><td>12</td><td>−4</td><td>−3</td><td class="out">−4</td></tr>
+  <tr><td>1101</td><td>13</td><td>−5</td><td>−2</td><td class="out">−3</td></tr>
+  <tr><td>1110</td><td>14</td><td>−6</td><td>−1</td><td class="out">−2</td></tr>
+  <tr class="hl"><td>1111</td><td>15</td><td>−7</td><td>−0</td><td class="out">−1</td></tr>
+</table></div>
+<p style="font-size:15px">The highlighted rows show where the systems disagree most. <code>1000</code> is −0 in sign-magnitude but <b>−8</b> in two's complement. <code>1111</code> is −0 in one's complement but <b>−1</b> in two's complement.</p>
+
+<div class="callout tip"><b>Shortcut for negating in two's complement</b><p>Starting from the right, copy every bit up to and including the <b>first 1</b>, then invert all the bits to its left. Example: +18 = <code>000100<u>10</u></code>. Copy "10" and invert the rest (000100 → 111011), which gives <code>11101110</code> = −18 ✓.</p></div>
+
+<h2>6. Reading a two's complement number: the MSB weight is negative</h2>
+<p>The fastest way to read a signed pattern: <strong>treat the MSB's weight as negative</strong>. In 8 bits the MSB is worth −128 instead of +128. In 4 bits it is worth −8.</p>
+<div class="scroll"><table class="tt">
+  <tr><th>weight</th><th class="out">−128</th><th>64</th><th>32</th><th>16</th><th>8</th><th>4</th><th>2</th><th>1</th></tr>
+  <tr class="hl"><td>11101110</td><td class="out one">1</td><td class="one">1</td><td class="one">1</td><td class="zero">0</td><td class="one">1</td><td class="one">1</td><td class="one">1</td><td class="zero">0</td></tr>
+</table></div>
+<div class="formula">11101110 = −128 + 64 + 32 + 8 + 4 + 2 = −18<small>The MSB gives a big negative weight, and the other bits add positive amounts back.</small></div>
+<p>Another check: an unsigned value minus 2ⁿ gives the signed value whenever the MSB is 1. <code>11101110</code> unsigned is 238, and 238 − 256 = −18 ✓.</p>
+
+<h2>7. The number wheel (4-bit two's complement)</h2>
+<p>Put all 16 patterns on a circle. Adding 1 moves one step clockwise, and subtracting 1 moves one step anticlockwise. Past the end, the numbers <b>wrap around</b>, just like the odometer.</p>
+<figure class="diagram">
+<svg viewBox="0 0 600 550" width="600" role="img" aria-label="Number wheel for 4-bit two's complement: 16 positions from 0000 at the top clockwise to 1111; 0000 to 0111 are 0 to +7, 1000 to 1111 are -8 to -1">
+<circle cx="300" cy="275" r="175" class="w"/>
+<circle cx="300.0" cy="100.0" r="5" class="fill-hi"/>
+<text x="300.0" y="50.0" class="m" text-anchor="middle">0000</text>
+<text x="300.0" y="66.0" class="b" text-anchor="middle">0</text>
+<text x="300.0" y="129.0" class="m dim" text-anchor="middle">0</text>
+<circle cx="367.0" cy="113.3" r="5" class="fill-ink"/>
+<text x="385.0" y="66.9" class="m" text-anchor="middle">0001</text>
+<text x="385.0" y="82.9" class="g" text-anchor="middle">+1</text>
+<text x="357.4" y="140.4" class="m dim" text-anchor="middle">1</text>
+<circle cx="423.7" cy="151.3" r="5" class="fill-ink"/>
+<text x="457.0" y="115.0" class="m" text-anchor="middle">0010</text>
+<text x="457.0" y="131.0" class="g" text-anchor="middle">+2</text>
+<text x="406.1" y="172.9" class="m dim" text-anchor="middle">2</text>
+<circle cx="461.7" cy="208.0" r="5" class="fill-ink"/>
+<text x="505.1" y="187.0" class="m" text-anchor="middle">0011</text>
+<text x="505.1" y="203.0" class="g" text-anchor="middle">+3</text>
+<text x="438.6" y="221.6" class="m dim" text-anchor="middle">3</text>
+<circle cx="475.0" cy="275.0" r="5" class="fill-ink"/>
+<text x="522.0" y="272.0" class="m" text-anchor="middle">0100</text>
+<text x="522.0" y="288.0" class="g" text-anchor="middle">+4</text>
+<text x="450.0" y="279.0" class="m dim" text-anchor="middle">4</text>
+<circle cx="461.7" cy="342.0" r="5" class="fill-ink"/>
+<text x="505.1" y="357.0" class="m" text-anchor="middle">0101</text>
+<text x="505.1" y="373.0" class="g" text-anchor="middle">+5</text>
+<text x="438.6" y="336.4" class="m dim" text-anchor="middle">5</text>
+<circle cx="423.7" cy="398.7" r="5" class="fill-ink"/>
+<text x="457.0" y="429.0" class="m" text-anchor="middle">0110</text>
+<text x="457.0" y="445.0" class="g" text-anchor="middle">+6</text>
+<text x="406.1" y="385.1" class="m dim" text-anchor="middle">6</text>
+<circle cx="367.0" cy="436.7" r="5" class="fill-hi"/>
+<text x="385.0" y="477.1" class="m" text-anchor="middle">0111</text>
+<text x="385.0" y="493.1" class="g" text-anchor="middle">+7</text>
+<text x="357.4" y="417.6" class="m dim" text-anchor="middle">7</text>
+<circle cx="300.0" cy="450.0" r="5" class="fill-hi"/>
+<text x="300.0" y="494.0" class="m" text-anchor="middle">1000</text>
+<text x="300.0" y="510.0" class="r" text-anchor="middle">−8</text>
+<text x="300.0" y="429.0" class="m dim" text-anchor="middle">8</text>
+<circle cx="233.0" cy="436.7" r="5" class="fill-ink"/>
+<text x="215.0" y="477.1" class="m" text-anchor="middle">1001</text>
+<text x="215.0" y="493.1" class="r" text-anchor="middle">−7</text>
+<text x="242.6" y="417.6" class="m dim" text-anchor="middle">9</text>
+<circle cx="176.3" cy="398.7" r="5" class="fill-ink"/>
+<text x="143.0" y="429.0" class="m" text-anchor="middle">1010</text>
+<text x="143.0" y="445.0" class="r" text-anchor="middle">−6</text>
+<text x="193.9" y="385.1" class="m dim" text-anchor="middle">10</text>
+<circle cx="138.3" cy="342.0" r="5" class="fill-ink"/>
+<text x="94.9" y="357.0" class="m" text-anchor="middle">1011</text>
+<text x="94.9" y="373.0" class="r" text-anchor="middle">−5</text>
+<text x="161.4" y="336.4" class="m dim" text-anchor="middle">11</text>
+<circle cx="125.0" cy="275.0" r="5" class="fill-ink"/>
+<text x="78.0" y="272.0" class="m" text-anchor="middle">1100</text>
+<text x="78.0" y="288.0" class="r" text-anchor="middle">−4</text>
+<text x="150.0" y="279.0" class="m dim" text-anchor="middle">12</text>
+<circle cx="138.3" cy="208.0" r="5" class="fill-ink"/>
+<text x="94.9" y="187.0" class="m" text-anchor="middle">1101</text>
+<text x="94.9" y="203.0" class="r" text-anchor="middle">−3</text>
+<text x="161.4" y="221.6" class="m dim" text-anchor="middle">13</text>
+<circle cx="176.3" cy="151.3" r="5" class="fill-ink"/>
+<text x="143.0" y="115.0" class="m" text-anchor="middle">1110</text>
+<text x="143.0" y="131.0" class="r" text-anchor="middle">−2</text>
+<text x="193.9" y="172.9" class="m dim" text-anchor="middle">14</text>
+<circle cx="233.0" cy="113.3" r="5" class="fill-hi"/>
+<text x="215.0" y="66.9" class="m" text-anchor="middle">1111</text>
+<text x="215.0" y="82.9" class="r" text-anchor="middle">−1</text>
+<text x="242.6" y="140.4" class="m dim" text-anchor="middle">15</text>
+<path class="w-hi" d="M268.8 118.1 L262.0 83.7" stroke-dasharray="4 3"/>
+<path class="w-hi" d="M331.2 431.9 L338.0 466.3" stroke-dasharray="4 3"/>
+<text x="300" y="197" class="m hi" text-anchor="middle">1111 → 0000</text>
+<text x="300" y="213" class="dim" text-anchor="middle">unsigned wraps (carry)</text>
+<text x="300" y="267" class="b" text-anchor="middle">+1 = one step clockwise</text>
+<text x="300" y="287" class="dim" text-anchor="middle">inner numbers: unsigned</text>
+<text x="300" y="343" class="m hi" text-anchor="middle">0111 → 1000</text>
+<text x="300" y="359" class="dim" text-anchor="middle">signed wraps (+7 → −8)</text>
+</svg>
+  <figcaption>Outer labels: the bit pattern and its signed value (green = positive, red = negative). Inner numbers: the same pattern read as unsigned. The two dashed copper marks are where the values wrap around: at the top for unsigned (15 → 0), at the bottom for signed (+7 → −8).</figcaption>
+</figure>
+
+<h2>8. Ranges</h2>
+<div class="formula">n-bit two's complement: −2ⁿ⁻¹ … +(2ⁿ⁻¹ − 1)<small>n-bit unsigned: 0 … 2ⁿ − 1</small></div>
+<div class="scroll"><table>
+  <tr><th>Bits</th><th>Signed (two's complement)</th><th>Unsigned</th></tr>
+  <tr><td>4</td><td>−8 … +7</td><td>0 … 15</td></tr>
+  <tr><td>8</td><td>−128 … +127</td><td>0 … 255</td></tr>
+  <tr><td>16</td><td>−32,768 … +32,767</td><td>0 … 65,535</td></tr>
+  <tr><td>32</td><td>−2,147,483,648 … +2,147,483,647 (about ±2.1 billion)</td><td>0 … 4,294,967,295 (about 4.3 billion)</td></tr>
+</table></div>
+<div class="callout trap"><b>The range is not symmetric</b><p>There is one more negative number than positive: −128 has no +128 twin in 8 bits. If you negate <code>10000000</code> (−128), you get invert → <code>01111111</code>, then +1 → <code>10000000</code>. That is −128 again! Also, <code>10000000</code> means <b>−128, not −0</b>.</p></div>
+
+<h2>9. Sign extension (making a number wider)</h2>
+<p>To copy a 4-bit signed number into 8 bits, <strong>fill the new bits with copies of the sign bit</strong>. This keeps the value the same.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 560 200" width="560" role="img" aria-label="4-bit 1011 (minus 5) sign-extended to 8-bit 11111011: the sign bit is copied into the four new positions">
+    <text x="10" y="43" class="b">4-bit: −5</text>
+    <rect x="284" y="20" width="36" height="36" rx="5" class="box-hi"/><text x="298" y="43" class="m">1</text>
+    <rect x="324" y="20" width="36" height="36" rx="5" class="box"/><text x="338" y="43" class="m">0</text>
+    <rect x="364" y="20" width="36" height="36" rx="5" class="box"/><text x="378" y="43" class="m">1</text>
+    <rect x="404" y="20" width="36" height="36" rx="5" class="box"/><text x="418" y="43" class="m">1</text>
+    <text x="452" y="43" class="m dim">−8+2+1</text>
+    <path class="w-hi" d="M302 56 L142 120 M302 56 L182 120 M302 56 L222 120 M302 56 L262 120 M302 56 V120"/>
+    <path class="w" d="M342 56 V120 M382 56 V120 M422 56 V120"/>
+    <text x="10" y="143" class="b">8-bit: −5</text>
+    <rect x="124" y="120" width="36" height="36" rx="5" class="box-hi"/><text x="138" y="143" class="m">1</text>
+    <rect x="164" y="120" width="36" height="36" rx="5" class="box-hi"/><text x="178" y="143" class="m">1</text>
+    <rect x="204" y="120" width="36" height="36" rx="5" class="box-hi"/><text x="218" y="143" class="m">1</text>
+    <rect x="244" y="120" width="36" height="36" rx="5" class="box-hi"/><text x="258" y="143" class="m">1</text>
+    <rect x="284" y="120" width="36" height="36" rx="5" class="box-hi"/><text x="298" y="143" class="m">1</text>
+    <rect x="324" y="120" width="36" height="36" rx="5" class="box"/><text x="338" y="143" class="m">0</text>
+    <rect x="364" y="120" width="36" height="36" rx="5" class="box"/><text x="378" y="143" class="m">1</text>
+    <rect x="404" y="120" width="36" height="36" rx="5" class="box"/><text x="418" y="143" class="m">1</text>
+    <text x="452" y="143" class="m dim">= −5 ✓</text>
+    <text x="10" y="186" class="dim">The sign bit (copper) is copied into every new position on the left.</text>
+  </svg>
+  <figcaption>1011 → 11111011. Check: −128 + 64 + 32 + 16 + 8 + 2 + 1 = −5 ✓.</figcaption>
+</figure>
+<div class="scroll"><table>
+  <tr><th>Value</th><th>4-bit</th><th>Sign-extended to 8-bit (correct)</th><th>Zero-padded (wrong for negatives)</th></tr>
+  <tr><td>+5</td><td><code>0101</code></td><td><code>00000101</code> = +5</td><td><code>00000101</code> = +5 (fine, because the sign bit is 0)</td></tr>
+  <tr class="hl"><td>−5</td><td><code>1011</code></td><td><code>11111011</code> = −5 ✓</td><td><code>00001011</code> = <b>+11</b> ✗</td></tr>
+</table></div>
+<p>You will see this again in MIPS assembly (Module 3). There, <code>lb</code> ("load byte") <b>sign-extends</b> the byte it reads, while <code>lbu</code> ("load byte unsigned") <b>zero-extends</b> it.</p>
+
+<h3>Negation and sign extension in Verilog</h3>
+<p>These are not lab files, just two one-line examples that use operators you already know.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · signs.v (extra example)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> signs (</td><td class="n">A small block with two jobs.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> [<span class="num">3</span>:<span class="num">0</span>] x,</td><td class="n">A 4-bit input number.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> [<span class="num">3</span>:<span class="num">0</span>] neg,</td><td class="n">Its negative (4 bits).</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> [<span class="num">7</span>:<span class="num">0</span>] wide</td><td class="n">The same value stretched to 8 bits.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> neg  = ~x + <span class="num">1</span>;</td><td class="n"><code>~x</code> inverts every bit, and <code>+ 1</code> adds one. That is two's complement negation.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> wide = {{<span class="num">4</span>{x[<span class="num">3</span>]}}, x};</td><td class="n"><code>{4{x[3]}}</code> repeats the sign bit 4 times. The outer <code>{ , }</code> glues those 4 copies in front of x. That is sign extension.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h2>10. Binary addition and subtraction</h2>
+<p>There are only four facts: <code>0+0 = 0</code>, <code>0+1 = 1</code>, <code>1+1 = 10</code> (write 0, carry 1), and <code>1+1+1 = 11</code> (write 1, carry 1).</p>
+<h3>Addition: 1101 + 1011 (13 + 11)</h3>
+<pre class="plain code" style="border-radius:var(--radius)"><span class="com">  carry 1 1 1 1</span>
+          1 1 0 1     (13)
+        + 1 0 1 1     (11)
+        ---------
+        1 1 0 0 0     (24)</pre>
+<ol class="steps">
+  <li><b>Bit 0:</b> 1 + 1 = 10. Write 0, carry 1.</li>
+  <li><b>Bit 1:</b> 0 + 1 + 1 = 10. Write 0, carry 1.</li>
+  <li><b>Bit 2:</b> 1 + 0 + 1 = 10. Write 0, carry 1.</li>
+  <li><b>Bit 3:</b> 1 + 1 + 1 = 11. Write 1, carry 1.</li>
+  <li><b>Result:</b> <code>1 1000</code> = 24 ✓. The answer needs <b>5 bits</b>. In a 4-bit register only <code>1000</code> is kept, and the carry-out of 1 shows the answer overflowed 4 unsigned bits.</li>
+</ol>
+
+<h3>Subtraction: add the negative</h3>
+<div class="formula">A − B = A + (~B + 1)<small>~B means "invert every bit of B". Throw away any carry out of the MSB.</small></div>
+<div class="vs">
+  <div>
+    <h3>5 − 3</h3>
+    <p>−3 = invert <code>0011</code> → <code>1100</code>, then +1 → <code>1101</code>.</p>
+    <p><code>0101 + 1101 = 1 0010</code>. Drop the carry to get <b><code>0010</code> = +2</b> ✓</p>
+  </div>
+  <div>
+    <h3>3 − 5</h3>
+    <p>−5 = invert <code>0101</code> → <code>1010</code>, then +1 → <code>1011</code>.</p>
+    <p><code>0011 + 1011 = 1110</code> (no carry out). Read it: −8 + 4 + 2 = <b>−2</b> ✓</p>
+  </div>
+</div>
+<div class="callout tip"><b>Why this is so useful</b><p>The CPU does not need a separate subtractor. It inverts B and feeds 1 into the adder's carry-in. See <a href="m1-06-overflow.html">the adder-subtractor</a> for the circuit.</p></div>
+
+<h2>11. Conversion drills: two's complement verification</h2>
+<p>These drills practise the syllabus exercise "check two's complement conversions". For each one, <b>negate</b> the number (invert, then add 1), then <b>verify</b> by reading the result with the −128 weight.</p>
+<div class="scroll"><table>
+  <tr><th>+n</th><th>+n in binary</th><th>Inverted</th><th>+1 = −n</th><th>Verify (−128 weight)</th></tr>
+  <tr><td>18</td><td><code>00010010</code></td><td><code>11101101</code></td><td><code>11101110</code></td><td>−128+64+32+8+4+2 = −18 ✓</td></tr>
+  <tr><td>45</td><td><code>00101101</code></td><td><code>11010010</code></td><td><code>11010011</code></td><td>−128+64+16+2+1 = −45 ✓</td></tr>
+  <tr><td>100</td><td><code>01100100</code></td><td><code>10011011</code></td><td><code>10011100</code></td><td>−128+16+8+4 = −100 ✓</td></tr>
+  <tr><td>73</td><td><code>01001001</code></td><td><code>10110110</code></td><td><code>10110111</code></td><td>−128+32+16+4+2+1 = −73 ✓</td></tr>
+  <tr><td>5</td><td><code>00000101</code></td><td><code>11111010</code></td><td><code>11111011</code></td><td>−128+64+32+16+8+2+1 = −5 ✓</td></tr>
+  <tr><td>127</td><td><code>01111111</code></td><td><code>10000000</code></td><td><code>10000001</code></td><td>−128+1 = −127 ✓</td></tr>
+  <tr><td>1</td><td><code>00000001</code></td><td><code>11111110</code></td><td><code>11111111</code></td><td>−128+127 = −1 ✓</td></tr>
+</table></div>
+<p><b>Another check:</b> add the number and its negative. The 8-bit result must be <code>00000000</code> (with a carry out of 1 that you drop). For example, <code>00101101 + 11010011 = 1 00000000</code> ✓.</p>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>Zero-padding a negative number.</b> −5 = <code>1011</code> must become <code>11111011</code>, not <code>00001011</code> (+11).</li>
+  <li><b>Forgetting the +1.</b> Inverting alone gives one's complement, not two's complement.</li>
+  <li><b>Reading <code>10000000</code> as −0.</b> In two's complement it is −128.</li>
+  <li><b>Assuming the range is symmetric.</b> 8 bits give −128 … +127.</li>
+  <li><b>Reading remainders top to bottom.</b> In the divide-by-2 method, the first remainder is the LSB.</li>
+  <li><b>Grouping hex digits from the left.</b> Always group from the right, padding the left with 0s: <code>101101</code> → <code>0010 1101</code> = 0x2D.</li>
+  <li><b>Thinking overflow raises an error.</b> It is SILENT. The hardware just keeps the low bits.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>Convert 0xB7 to binary. What is it as an unsigned number? As a signed (two's complement) number?</summary><div class="a"><p>B = 1011 and 7 = 0111, so 0xB7 = <code>1011 0111</code>.</p><p>Unsigned: 128+32+16+4+2+1 = <b>183</b>.<br>Signed: −128+32+16+4+2+1 = <b>−73</b> (or 183 − 256 = −73).</p></div></details>
+  <details class="q"><summary>Write −45 in 8-bit two's complement.</summary><div class="a"><p>45 = <code>00101101</code> → invert: <code>11010010</code> → +1: <b><code>11010011</code></b>.</p><p>Check: −128 + 64 + 16 + 2 + 1 = −45 ✓</p></div></details>
+  <details class="q"><summary>4-bit: 0110 + 1100. What is the result, the carry-out, and is there signed overflow?</summary><div class="a"><p>6 + (−4) = 2. <code>0110 + 1100 = 1 0010</code>, so the 4-bit result is <b><code>0010</code> = 2</b> and the <b>carry-out is 1</b>.</p><p><b>No signed overflow</b>: the two inputs have different signs, and adding a positive to a negative can never overflow. The carry-out is irrelevant for signed numbers.</p></div></details>
+  <details class="q"><summary>What is 0xFF as a signed 8-bit number?</summary><div class="a"><p><code>11111111</code> = −128 + 127 = <b>−1</b>. (Unsigned, it is 255.)</p></div></details>
+  <details class="q"><summary>Convert 100 to binary and to hex.</summary><div class="a"><p>100 − 64 = 36, 36 − 32 = 4, 4 − 4 = 0. So bits 64, 32 and 4 are set: <b><code>01100100</code></b>.</p><p>Group as <code>0110 0100</code> = <b>0x64</b>. Check: 6×16 + 4 = 100 ✓</p></div></details>
+  <details class="q"><summary>Add 25 + (−10) in 8-bit two's complement.</summary><div class="a"><p>25 = <code>00011001</code>. 10 = <code>00001010</code> → invert <code>11110101</code> → +1 <code>11110110</code> = −10.</p><p><code>00011001 + 11110110 = 1 00001111</code>. Drop the carry to get <b><code>00001111</code> = 15</b> ✓</p></div></details>
+  <details class="q"><summary>Sign-extend the 4-bit value 1001 to 8 bits. What value is it?</summary><div class="a"><p>The sign bit is 1, so fill with 1s: <b><code>11111001</code></b>.</p><p>4-bit: −8 + 1 = −7. 8-bit: −128+64+32+16+8+1 = −7 ✓. The value is unchanged.</p></div></details>
+  <details class="q"><summary>What is the range of a 16-bit signed integer? Why is it not symmetric?</summary><div class="a"><p><b>−32,768 … +32,767</b>. There are 65,536 patterns. One of them is zero, and zero uses a pattern with sign bit 0, so the positive side gets one fewer value than the negative side.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=w7ZLvYAi6pY" target="_blank" rel="noopener"><i class="play"></i><span><b>Binary Number System</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=hCvAW_5-cJE" target="_blank" rel="noopener"><i class="play"></i><span><b>Conversion from Decimal Number System</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=S_fPMrrIA30" target="_blank" rel="noopener"><i class="play"></i><span><b>1's and 2's Complement</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=4qH4unVtJkE" target="_blank" rel="noopener"><i class="play"></i><span><b>Twos complement: Negative numbers in binary</b><small>Ben Eater</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

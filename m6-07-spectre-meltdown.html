@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spectre &amp; Meltdown</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 6 / Spectre &amp; Meltdown</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 6 · Parallelism &amp; Modern Architectures <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>Spectre &amp; Meltdown: when speed tricks leak secrets</h1>
+  <p class="idea">In 2018, researchers showed that <strong>speculative execution</strong> can be tricked into touching secret data. The CPU throws the wrong results away, but the <strong>cache</strong> still remembers what was touched. By timing memory accesses, an attacker can read that secret back.</p>
+  <div class="analogy"><b>Think of it like this:</b> a librarian fetches a book before checking whether you are allowed to read it. When the check fails, she puts it back, but it now sits on the "recently used" shelf by the desk. You can't read it, but you can notice <em>which</em> book is on that shelf, because it comes back instantly when you ask for it.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Speculative execution</dt><dd>Running instructions before the CPU knows they are needed (for example, past an unresolved branch). See <a href="m6-05-ilp-superscalar-ooo.html">OoO</a>.</dd></div>
+  <div class="term"><dt>Transient instructions</dt><dd>Instructions that ran speculatively and were then squashed. Officially they never happened.</dd></div>
+  <div class="term"><dt>Side channel</dt><dd>Leaking information through a side effect (timing, power, cache state) instead of the normal output.</dd></div>
+  <div class="term"><dt>Flush+Reload</dt><dd>A cache timing trick: empty some cache lines, let the victim run, then time which lines became fast.</dd></div>
+  <div class="term"><dt>Bounds check</dt><dd>An <code>if</code> that makes sure an array index is inside the array.</dd></div>
+  <div class="term"><dt>Kernel memory</dt><dd>Memory used by the operating system. User programs must never read it.</dd></div>
+  <div class="term"><dt>KPTI</dt><dd>Kernel Page Table Isolation: the Meltdown fix that hides kernel memory from user page tables.</dd></div>
+  <div class="term"><dt>Retpoline</dt><dd>A compiler trick that stops the CPU from guessing where indirect jumps go (the Spectre v2 fix).</dd></div>
+</dl>
+
+<h2>1. The ingredients</h2>
+<ol class="flow arrows">
+  <li><b>Branch prediction</b>The CPU guesses a branch's direction (<a href="m4-03-hazards-forwarding.html">prediction</a>).</li>
+  <li><b>Speculation</b>It runs ahead on that guess (OoO).</li>
+  <li><b>Squash</b>A wrong guess is thrown away, but only the <em>architectural</em> state (registers, memory) is undone.</li>
+  <li><b>Cache stays warm</b>The data loaded during speculation is still in the cache (<a href="m5-02-cache-organization.html">cache</a>).</li>
+  <li><b>Timing leak</b>Cached memory reads are much faster, and that can be measured.</li>
+</ol>
+
+<h2>2. Flush+Reload: reading the cache by timing</h2>
+<ol class="steps">
+  <li><b>Flush:</b> the attacker removes 256 specific memory pages (one per possible byte value 0–255) from the cache. On x86 there is even an instruction for this: <code>clflush</code>.</li>
+  <li><b>Victim runs:</b> it (speculatively) reads the page whose number equals the secret byte. That page gets loaded into the cache.</li>
+  <li><b>Reload:</b> the attacker reads all 256 pages and times each read. 255 are slow (DRAM). <b>One is fast</b> (cache). Its number is the secret.</li>
+</ol>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 170" width="640" role="img" aria-label="Twelve of the 256 probe pages, numbered 70 to 81; page 75 is hot in the cache after speculation">
+    <text x="20" y="22" class="b">Probe pages after the attack (showing pages 70–81 of 0–255)</text>
+    <rect x="20" y="40" width="44" height="50" rx="4" class="box"/><text x="32" y="70" class="m">70</text>
+    <rect x="70" y="40" width="44" height="50" rx="4" class="box"/><text x="82" y="70" class="m">71</text>
+    <rect x="120" y="40" width="44" height="50" rx="4" class="box"/><text x="132" y="70" class="m">72</text>
+    <rect x="170" y="40" width="44" height="50" rx="4" class="box"/><text x="182" y="70" class="m">73</text>
+    <rect x="220" y="40" width="44" height="50" rx="4" class="box"/><text x="232" y="70" class="m">74</text>
+    <rect x="270" y="40" width="44" height="50" rx="4" class="box-hi"/><text x="282" y="70" class="hi">75</text>
+    <rect x="320" y="40" width="44" height="50" rx="4" class="box"/><text x="332" y="70" class="m">76</text>
+    <rect x="370" y="40" width="44" height="50" rx="4" class="box"/><text x="382" y="70" class="m">77</text>
+    <rect x="420" y="40" width="44" height="50" rx="4" class="box"/><text x="432" y="70" class="m">78</text>
+    <rect x="470" y="40" width="44" height="50" rx="4" class="box"/><text x="482" y="70" class="m">79</text>
+    <rect x="520" y="40" width="44" height="50" rx="4" class="box"/><text x="532" y="70" class="m">80</text>
+    <rect x="570" y="40" width="44" height="50" rx="4" class="box"/><text x="582" y="70" class="m">81</text>
+    <path class="w-hi" d="M292 90 V120"/>
+    <text x="200" y="140" class="hi">HOT: in cache → the secret byte is 75</text>
+    <text x="20" y="162" class="m dim">all other pages: cold (not in cache)</text>
+  </svg>
+  <figcaption>Speculation touched page 75 only. The page number <em>is</em> the secret byte (75 = the letter 'K' in ASCII).</figcaption>
+</figure>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 260" width="640" role="img" aria-label="Illustrative bar chart of access time per probe page: all bars tall except page 75 which is very short">
+    <g class="grid"><path d="M60 30 H620 M60 80 H620 M60 130 H620 M60 180 H620 M60 210 H620 M60 30 V210"/></g>
+    <text x="10" y="24" class="m dim">access time</text>
+    <text x="20" y="84" class="m dim">slow</text>
+    <text x="20" y="206" class="m dim">fast</text>
+    <rect x="70" y="62" width="30" height="148" class="box-b"/>
+    <rect x="115" y="56" width="30" height="154" class="box-b"/>
+    <rect x="160" y="66" width="30" height="144" class="box-b"/>
+    <rect x="205" y="58" width="30" height="152" class="box-b"/>
+    <rect x="250" y="64" width="30" height="146" class="box-b"/>
+    <rect x="295" y="192" width="30" height="18" class="box-hi"/>
+    <rect x="340" y="60" width="30" height="150" class="box-b"/>
+    <rect x="385" y="54" width="30" height="156" class="box-b"/>
+    <rect x="430" y="63" width="30" height="147" class="box-b"/>
+    <rect x="475" y="59" width="30" height="151" class="box-b"/>
+    <rect x="520" y="65" width="30" height="145" class="box-b"/>
+    <rect x="565" y="57" width="30" height="153" class="box-b"/>
+    <g>
+      <text x="76" y="228" class="m">70</text><text x="121" y="228" class="m">71</text><text x="166" y="228" class="m">72</text><text x="211" y="228" class="m">73</text><text x="256" y="228" class="m">74</text><text x="301" y="228" class="hi">75</text>
+      <text x="346" y="228" class="m">76</text><text x="391" y="228" class="m">77</text><text x="436" y="228" class="m">78</text><text x="481" y="228" class="m">79</text><text x="526" y="228" class="m">80</text><text x="571" y="228" class="m">81</text>
+    </g>
+    <text x="280" y="182" class="m hi">fast!</text>
+    <text x="60" y="252" class="dim">Illustrative shape, not measured data</text>
+  </svg>
+  <figcaption>What the attacker measures (illustrative). A cache hit takes a few nanoseconds; a DRAM read takes tens of nanoseconds (compare <a href="m2-07-sram-dram.html">SRAM vs DRAM</a>). One outlier gives the secret away.</figcaption>
+</figure>
+
+<h2>3. Spectre variant 1: bounds check bypass</h2>
+<p>The victim code is ordinary, correct-looking C. It is explained line by line below; no C knowledge is needed.</p>
+<div class="code">
+  <div class="code-head"><span><b>c</b> · victim function</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">if</span> (x &lt; array1_size)</td><td class="n">"Only if x is smaller than the size of array1…" This is the <b>bounds check</b>. It makes sure x is a valid position.</td></tr>
+    <tr><td class="c">    y = array2[array1[x] * <span class="num">4096</span>];</td><td class="n">"…read the number at position x of array1, multiply it by 4096, and read array2 at that position." <code>array[i]</code> means "item number i of the array".</td></tr>
+  </table>
+</div>
+<p><b>Why 4096?</b> It is the size of one memory page. Multiplying by 4096 sends each possible byte value (0–255) to a <b>different page</b> of array2, so the Flush+Reload step can tell the values apart.</p>
+
+<h3>The attack, step by step</h3>
+<div class="stepper" data-stepper>
+  <div class="stage"><p><b>1. Setup.</b> Say array1 has 16 items (array1_size = 16). Somewhere else in the same program's memory is a secret byte, 75 ('K'). array2 is 256 pages big.</p></div>
+  <div class="stage"><p><b>2. Train the predictor.</b> The attacker calls the function many times with valid x values (0–15). The check always passes, so the branch predictor learns "this <code>if</code> is always true".</p></div>
+  <div class="stage"><p><b>3. Flush.</b> The attacker makes sure none of array2's 256 pages is in the cache. (Also, if <code>array1_size</code> itself isn't cached, the check will be slow to finish, which gives speculation more time.)</p></div>
+  <div class="stage"><p><b>4. Attack call.</b> The attacker passes a huge, <b>out-of-bounds</b> x, chosen so that <code>array1[x]</code> lands exactly on the secret byte. The CPU hasn't finished comparing x with array1_size yet, so it <b>predicts "true"</b> and runs the body speculatively.</p></div>
+  <div class="stage"><p><b>5. Speculative reads.</b> <code>array1[x]</code> reads the secret: 75. Then <code>array2[75 × 4096]</code> = <code>array2[307200]</code> is read, so <b>page 75 is now in the cache</b>.</p></div>
+  <div class="stage"><p><b>6. Squash.</b> The comparison finishes: x ≥ 16, so the guess was wrong. The CPU throws away y and continues correctly. No register or memory value changed, but the cache still holds page 75.</p></div>
+  <div class="stage"><p><b>7. Reload.</b> The attacker times reads of all 256 pages. Page 75 is fast, so the secret byte = 75 = 'K'. Repeat with x + 1, x + 2, … to read the secret byte by byte.</p></div>
+</div>
+
+<h2>4. Meltdown: reading kernel memory</h2>
+<p>For speed, operating systems used to map kernel memory into every program's page table, marked "kernel only" (see <a href="m5-05-virtual-memory.html">virtual memory</a>). Meltdown abuses that:</p>
+<div class="code">
+  <div class="code-head"><span><b>pseudocode</b> · Meltdown core</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">v = read_byte(kernel_address)</td><td class="n">Illegal! A user program reading kernel memory. The CPU will raise a fault, but only when this instruction <b>commits</b>.</td></tr>
+    <tr><td class="c">y = array2[v * <span class="num">4096</span>]</td><td class="n">On affected CPUs, OoO execution has already fetched v and runs this line <b>before</b> the fault is handled. The page for v gets cached.</td></tr>
+    <tr><td class="c"><span class="com"># fault arrives, results squashed</span></td><td class="n">The attacker catches the fault (or avoids it), then uses Flush+Reload to learn v.</td></tr>
+  </table>
+</div>
+<ul>
+  <li>It needs no mistrained branch: the <b>permission check</b> simply arrives too late.</li>
+  <li>It mostly affected <b>Intel</b> CPUs of that era (some ARM and IBM designs too). Most AMD CPUs were not affected.</li>
+  <li><b>Fix: KPTI.</b> User-mode page tables no longer map (almost any) kernel memory, so there is nothing to read transiently. The cost: every system call must switch page tables.</li>
+</ul>
+
+<figure class="diagram">
+  <svg viewBox="0 0 620 220" width="620" role="img" aria-label="Before KPTI, the user page table maps user memory and kernel memory. After KPTI, the user page table maps only user memory plus a tiny entry stub">
+    <text x="20" y="20" class="b">Before: one page table</text>
+    <rect x="20" y="34" width="250" height="70" rx="8" class="box-g"/><text x="36" y="74" class="b">user memory</text>
+    <rect x="20" y="110" width="250" height="70" rx="8" class="box-r"/><text x="36" y="142" class="b">kernel memory</text><text x="36" y="162" class="m">mapped, "kernel only"</text>
+    <text x="20" y="206" class="r">transient read possible</text>
+    <path class="grid" d="M310 10 V210"/>
+    <text x="340" y="20" class="b">After KPTI (in user mode)</text>
+    <rect x="340" y="34" width="250" height="70" rx="8" class="box-g"/><text x="356" y="74" class="b">user memory</text>
+    <rect x="340" y="110" width="250" height="24" rx="6" class="box-hi"/><text x="356" y="127" class="m">tiny entry/exit stub</text>
+    <rect x="340" y="140" width="250" height="40" rx="6" fill="none" class="w" stroke-dasharray="6 4"/><text x="356" y="165" class="m dim">kernel not mapped</text>
+    <text x="340" y="206" class="g">nothing to leak</text>
+  </svg>
+  <figcaption>KPTI keeps two page tables. The kernel's full table is switched in only while the kernel runs.</figcaption>
+</figure>
+
+<h2>5. Spectre fixes</h2>
+<div class="scroll"><table>
+  <tr><th>Fix</th><th>Idea</th><th>For</th></tr>
+  <tr><td><code>lfence</code> after bounds checks</td><td>An x86 instruction that stops speculation from continuing past that point.</td><td>Spectre v1</td></tr>
+  <tr><td>Index masking</td><td>Force x into the valid range with a bit mask (<code>x &amp; mask</code>) before using it. Even a wrong guess can't reach far memory.</td><td>Spectre v1</td></tr>
+  <tr><td>Retpoline</td><td>Replaces indirect jumps with a "return trampoline" whose speculation goes nowhere useful.</td><td>Spectre v2 (branch target injection)</td></tr>
+  <tr><td>Microcode &amp; new hardware (e.g. IBRS)</td><td>CPU updates and newer designs that isolate or flush predictor state between programs.</td><td>v2 and later variants</td></tr>
+  <tr><td>Site isolation in browsers</td><td>Keep different websites in different processes; lower timer precision.</td><td>JavaScript-based attacks</td></tr>
+</table></div>
+
+<h3>The performance cost</h3>
+<p>The fixes remove or limit exactly the speed tricks that made CPUs fast. How much it costs <b>depends heavily on the workload</b>. Programs that make many system calls (file and network I/O, databases) were hit hardest by KPTI, especially on older CPUs without PCID support (a feature that makes page-table switches cheaper). Ordinary desktop use was affected much less. Newer CPUs fix much of this in hardware, which lowers the cost.</p>
+
+<h2>6. Spectre vs Meltdown</h2>
+<div class="scroll"><table>
+  <tr><th></th><th>Spectre</th><th>Meltdown</th></tr>
+  <tr><td>Exploits</td><td>Branch <b>prediction</b> (mistrained)</td><td>OoO execution before the <b>permission check</b></td></tr>
+  <tr><td>Reads</td><td>Memory the victim program itself can access</td><td>Kernel memory from a user program</td></tr>
+  <tr><td>Affected</td><td>Almost all speculative CPUs (Intel, AMD, ARM)</td><td>Mainly Intel (plus some ARM/IBM)</td></tr>
+  <tr><td>Leak channel</td><td>Cache timing (Flush+Reload)</td><td>Cache timing (Flush+Reload)</td></tr>
+  <tr><td>Main fixes</td><td>lfence / index masking (v1), retpoline (v2), microcode</td><td>KPTI; fixed in later hardware</td></tr>
+  <tr><td>Difficulty to fix</td><td>Hard: a whole class of attacks</td><td>Easier: one clear OS fix</td></tr>
+</table></div>
+
+<div class="callout tip"><b>The big lesson</b><p>Lecture L09 said von Neumann's "programs are data" idea is also the root of whole classes of security exploits. Spectre and Meltdown add a second lesson: <b>any shared, hidden state</b> (caches, predictors) that speeds things up can also leak information. Security is now an architecture problem, not only a software one.</p></div>
+
+<h2>Course wrap-up: the whole journey</h2>
+<p>Every topic in this course builds on the one before it. Here is the whole path in one line. Click any step to revisit it.</p>
+<ol class="flow arrows">
+  <li><b><a href="m1-01-boolean-gates.html">Gates</a></b>AND, OR, XOR: Boolean logic in silicon.</li>
+  <li><b><a href="m1-04-adders.html">Adders</a></b>Gates combined into arithmetic → the ALU.</li>
+  <li><b><a href="m2-02-flipflops-timing.html">Flip-flops</a></b>Memory of 1 bit, clocked.</li>
+  <li><b><a href="m2-05-register-file.html">Register file</a></b>32 × 32-bit registers, 2 read ports, 1 write port.</li>
+  <li><b><a href="m3-03-mips-registers-formats.html">ISA</a></b>The contract between software and hardware (MIPS).</li>
+  <li><b><a href="m4-01-single-cycle-datapath.html">Datapath</a></b>ALU + registers + memory + FSM control.</li>
+  <li><b><a href="m4-02-pipeline-5-stage.html">Pipeline</a></b>Five stages at once for throughput.</li>
+  <li><b><a href="m5-02-cache-organization.html">Cache</a></b>Fast SRAM to beat the memory wall.</li>
+  <li><b><a href="m6-01-power-wall-multicore.html">Multicore</a></b>More cores once the power wall hit.</li>
+  <li><b><a href="m6-06-simd-gpu-tpu.html">Accelerators</a></b>SIMD, GPUs, NPUs, TPUs for work per watt.</li>
+</ol>
+
+<figure class="diagram">
+  <svg viewBox="0 0 600 300" width="600" role="img" aria-label="Abstraction stack from gates at the bottom to software at the top, with the module that covers each layer">
+    <rect x="80" y="250" width="440" height="36" rx="6" class="box"/><text x="96" y="273" class="b">Logic gates &amp; Boolean algebra</text><text x="440" y="273" class="m dim">Module 1</text>
+    <rect x="80" y="208" width="440" height="36" rx="6" class="box"/><text x="96" y="231" class="b">Adders, MUXes, flip-flops, FSMs</text><text x="424" y="231" class="m dim">Modules 1–2</text>
+    <rect x="80" y="166" width="440" height="36" rx="6" class="box-b"/><text x="96" y="189" class="b">ISA: MIPS instructions &amp; registers</text><text x="440" y="189" class="m dim">Module 3</text>
+    <rect x="80" y="124" width="440" height="36" rx="6" class="box-b"/><text x="96" y="147" class="b">Datapath, pipeline, performance</text><text x="440" y="147" class="m dim">Module 4</text>
+    <rect x="80" y="82" width="440" height="36" rx="6" class="box-g"/><text x="96" y="105" class="b">Memory hierarchy: cache &amp; VM</text><text x="440" y="105" class="m dim">Module 5</text>
+    <rect x="80" y="40" width="440" height="36" rx="6" class="box-hi"/><text x="96" y="63" class="b">Parallelism, accelerators, security</text><text x="440" y="63" class="m dim">Module 6</text>
+    <text x="80" y="24" class="m dim">software (Python, C, your programs) runs on top of all this</text>
+    <path class="w-hi" d="M40 280 V50"/><polygon points="40,42 35,54 45,54" class="fill-hi"/>
+    <text x="14" y="296" class="m dim">build up</text>
+  </svg>
+  <figcaption>Each layer hides the details of the one below. <code>A[i] = B[i] + C[i]</code> in Python becomes <code>lw · lw · add · sw</code> (L01), which the datapath runs using adders and flip-flops, with the cache feeding it data.</figcaption>
+</figure>
+
+<div class="scroll"><table>
+  <tr><th>Recurring idea</th><th>Where you saw it</th></tr>
+  <tr><td><b>Abstraction</b>: hide the details below</td><td>Gates → ALU → ISA → Python</td></tr>
+  <tr><td><b>Parallelism</b> for speed</td><td>Carry look-ahead, pipelining, superscalar, multicore, SIMD, GPUs</td></tr>
+  <tr><td><b>Prediction / speculation</b></td><td>Branch prediction, OoO, and its dark side: Spectre</td></tr>
+  <tr><td><b>Locality / hierarchy</b></td><td>Registers → cache → DRAM → disk; HBM next to the GPU</td></tr>
+  <tr><td><b>Amdahl's law</b>: speed up the common case</td><td>Performance, multicore, accelerators</td></tr>
+  <tr><td><b>Physical limits</b></td><td>Gate delay, the memory wall, the power wall</td></tr>
+</table></div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Spectre and Meltdown are <b>not bugs in one program</b>. They come from how the hardware speculates.</li>
+  <li>Squashing undoes registers and memory but <b>not the cache state</b>. That is the whole leak.</li>
+  <li>Meltdown = the <b>permission</b> check comes too late; Spectre = a <b>mistrained branch</b> predictor.</li>
+  <li>KPTI fixes <b>Meltdown</b>; retpoline fixes <b>Spectre v2</b>; lfence / masking fix <b>Spectre v1</b>.</li>
+  <li>The attacker never reads the secret directly. They infer it from <b>timing</b>.</li>
+  <li>The ×4096 exists to spread byte values across different pages. It is not part of the "real" program logic.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>In Spectre v1, the secret byte is 0x41 ('A' = 65). Which array2 offset gets cached?</summary><div class="a"><p>65 × 4096 = <b>266,240</b>, which is page 65 of array2.</p></div></details>
+  <details class="q"><summary>Why does the attacker train the branch predictor first?</summary><div class="a"><p>So the CPU predicts "bounds check passes" and runs the body <b>speculatively</b> even for the out-of-bounds x.</p></div></details>
+  <details class="q"><summary>The CPU squashes the speculative instructions. Why is the secret still leaked?</summary><div class="a"><p>Squashing restores registers and memory, but the cache still holds the page loaded during speculation. Timing reveals which page it was.</p></div></details>
+  <details class="q"><summary>Give one fix each for Meltdown, Spectre v1 and Spectre v2.</summary><div class="a"><p>Meltdown: <b>KPTI</b>. Spectre v1: <b>lfence</b> after the check, or <b>index masking</b>. Spectre v2: <b>retpoline</b> (or IBRS microcode).</p></div></details>
+  <details class="q"><summary>Why did KPTI slow down databases more than video games?</summary><div class="a"><p>KPTI adds a page-table switch to every system call. Databases make huge numbers of system calls (I/O). Games spend most of their time computing in user mode.</p></div></details>
+  <details class="q"><summary>Spectre or Meltdown: "a user program reads OS memory because the permission fault is handled too late"?</summary><div class="a"><p><b>Meltdown.</b></p></div></details>
+  <details class="q"><summary>Wrap-up: name three places in this course where parallelism was used for speed.</summary><div class="a"><p>Any three of: carry look-ahead adders (carries in parallel), pipelining, superscalar/OoO, multicore, SIMD, GPUs.</p></div></details>
+  <details class="q"><summary>Wrap-up: trace <code>A[i] = B[i] + C[i]</code> down through the layers.</summary><div class="a"><p>Python → MIPS <code>lw, lw, add, sw</code> (ISA) → the datapath fetches and decodes each instruction (FSM control) → the ALU (built from adders) adds → values sit in the register file (flip-flops) → the data comes from memory through the cache → all of it is gates.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=I5mRwzVvFGE" target="_blank" rel="noopener"><i class="play"></i><span><b>Spectre &amp; Meltdown - Computerphile</b><small>Computerphile</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=bs0xswK0eZk" target="_blank" rel="noopener"><i class="play"></i><span><b>Meltdown &amp; Spectre vulnerabilities - Simply Explained</b><small>Simply Explained</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=mgAN4w7LH2o" target="_blank" rel="noopener"><i class="play"></i><span><b>Spectre and Meltdown attacks explained understandably</b><small>Ymir Vigfusson</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

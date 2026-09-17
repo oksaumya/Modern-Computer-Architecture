@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Overflow Detection</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 1 / Adder-subtractor &amp; overflow</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 1 · Digital Foundations <span class="tag class">From class notes · L04 &amp; Lab 04 / Lab 1B</span></div>
+  <h1>Adder-subtractor &amp; overflow detection</h1>
+  <p class="idea"><b>Overflow</b> means the true answer does not fit in the available bits, so the stored result is wrong. The hardware gives <b>no error</b>: overflow is <b>silent</b>. It only raises two flags. <b>CF</b> (carry flag) warns about unsigned overflow, and <b>OF</b> (overflow flag) warns about signed overflow. One adder, with a few XOR gates added, can both add and subtract.</p>
+  <div class="analogy"><b>Think of it like this:</b> a 4-digit odometer that reads 9999 rolls over to 0000 after one more kilometre. The car doesn't stop or beep. You only know something happened if you watch for the roll-over. The flags are the CPU's way of watching.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Overflow</dt><dd>The correct result is outside the range the bits can hold. 4-bit unsigned holds 0 … 15, and 4-bit signed holds −8 … +7.</dd></div>
+  <div class="term"><dt>CF (carry flag)</dt><dd>CF = the carry out of the MSB (C4 in a 4-bit adder). It signals <b>unsigned</b> overflow.</dd></div>
+  <div class="term"><dt>OF (overflow flag)</dt><dd>OF = C3 ⊕ C4. It signals <b>signed</b> overflow.</dd></div>
+  <div class="term"><dt>C3 and C4</dt><dd>C3 is the carry <b>into</b> the MSB (bit 3). C4 is the carry <b>out of</b> the MSB.</dd></div>
+  <div class="term"><dt>Flag</dt><dd>A single status bit the CPU sets after an operation. Later instructions can check it. On x86 processors these flags are named OF and CF.</dd></div>
+  <div class="term"><dt>K (mode bit)</dt><dd>The control input of the adder-subtractor: 0 means add, 1 means subtract. The lab code calls it <code>m</code>.</dd></div>
+</dl>
+
+<h2>1. What overflow looks like</h2>
+<p>Add +5 and +4 in 4-bit signed numbers:</p>
+<div class="formula">0101 + 0100 = 1001<small>The true answer is +9, but 4-bit signed only goes up to +7. The pattern 1001 reads as −8 + 1 = <b>−7</b>. Two positives gave a negative!</small></div>
+<p>The adder did its job perfectly. The bits are right; the <b>meaning</b> is wrong. The result has wrapped around the <a href="m1-05-number-systems.html">number wheel</a>. Nothing crashes, which is why overflow is so dangerous.</p>
+
+<h2>2. Signed vs unsigned: same bits, two flags</h2>
+<p>The adder does not know whether <em>you</em> meant signed or unsigned. "The ALU doesn't know if YOU meant signed or unsigned. It computes both flags." Your program then checks the flag that matches your meaning. (The ALU, or arithmetic logic unit, is the CPU's calculator.)</p>
+<div class="scroll"><table class="tt">
+  <tr><th>Bits</th><th>Unsigned</th><th class="out">Signed</th></tr>
+  <tr><td>0000</td><td>0</td><td class="out">0</td></tr>
+  <tr><td>0111</td><td>7</td><td class="out">+7</td></tr>
+  <tr class="hl"><td>1000</td><td>8</td><td class="out">−8</td></tr>
+  <tr><td>1001</td><td>9</td><td class="out">−7</td></tr>
+  <tr><td>1111</td><td>15</td><td class="out">−1</td></tr>
+</table></div>
+
+<figure class="diagram">
+<svg viewBox="0 0 660 215" width="660" role="img" aria-label="Strip of all 16 four-bit patterns with unsigned values above and signed values below; the signed wrap is between 0111 and 1000, the unsigned wrap is from 1111 back to 0000">
+<text x="20" y="18" class="dim">top: unsigned · below: signed</text>
+<text x="34.5" y="40" class="m dim" text-anchor="middle">0</text>
+<rect x="16" y="48" width="37" height="40" rx="5" class="box-g"/>
+<text x="34.5" y="73" class="m" text-anchor="middle" style="font-size:11px">0000</text>
+<text x="34.5" y="108" class="b" text-anchor="middle">0</text>
+<text x="73.5" y="40" class="m dim" text-anchor="middle">1</text>
+<rect x="55" y="48" width="37" height="40" rx="5" class="box-g"/>
+<text x="73.5" y="73" class="m" text-anchor="middle" style="font-size:11px">0001</text>
+<text x="73.5" y="108" class="g" text-anchor="middle">+1</text>
+<text x="112.5" y="40" class="m dim" text-anchor="middle">2</text>
+<rect x="94" y="48" width="37" height="40" rx="5" class="box-g"/>
+<text x="112.5" y="73" class="m" text-anchor="middle" style="font-size:11px">0010</text>
+<text x="112.5" y="108" class="g" text-anchor="middle">+2</text>
+<text x="151.5" y="40" class="m dim" text-anchor="middle">3</text>
+<rect x="133" y="48" width="37" height="40" rx="5" class="box-g"/>
+<text x="151.5" y="73" class="m" text-anchor="middle" style="font-size:11px">0011</text>
+<text x="151.5" y="108" class="g" text-anchor="middle">+3</text>
+<text x="190.5" y="40" class="m dim" text-anchor="middle">4</text>
+<rect x="172" y="48" width="37" height="40" rx="5" class="box-g"/>
+<text x="190.5" y="73" class="m" text-anchor="middle" style="font-size:11px">0100</text>
+<text x="190.5" y="108" class="g" text-anchor="middle">+4</text>
+<text x="229.5" y="40" class="m dim" text-anchor="middle">5</text>
+<rect x="211" y="48" width="37" height="40" rx="5" class="box-g"/>
+<text x="229.5" y="73" class="m" text-anchor="middle" style="font-size:11px">0101</text>
+<text x="229.5" y="108" class="g" text-anchor="middle">+5</text>
+<text x="268.5" y="40" class="m dim" text-anchor="middle">6</text>
+<rect x="250" y="48" width="37" height="40" rx="5" class="box-g"/>
+<text x="268.5" y="73" class="m" text-anchor="middle" style="font-size:11px">0110</text>
+<text x="268.5" y="108" class="g" text-anchor="middle">+6</text>
+<text x="307.5" y="40" class="m dim" text-anchor="middle">7</text>
+<rect x="289" y="48" width="37" height="40" rx="5" class="box-g"/>
+<text x="307.5" y="73" class="m" text-anchor="middle" style="font-size:11px">0111</text>
+<text x="307.5" y="108" class="g" text-anchor="middle">+7</text>
+<text x="346.5" y="40" class="m dim" text-anchor="middle">8</text>
+<rect x="328" y="48" width="37" height="40" rx="5" class="box-r"/>
+<text x="346.5" y="73" class="m" text-anchor="middle" style="font-size:11px">1000</text>
+<text x="346.5" y="108" class="r" text-anchor="middle">−8</text>
+<text x="385.5" y="40" class="m dim" text-anchor="middle">9</text>
+<rect x="367" y="48" width="37" height="40" rx="5" class="box-r"/>
+<text x="385.5" y="73" class="m" text-anchor="middle" style="font-size:11px">1001</text>
+<text x="385.5" y="108" class="r" text-anchor="middle">−7</text>
+<text x="424.5" y="40" class="m dim" text-anchor="middle">10</text>
+<rect x="406" y="48" width="37" height="40" rx="5" class="box-r"/>
+<text x="424.5" y="73" class="m" text-anchor="middle" style="font-size:11px">1010</text>
+<text x="424.5" y="108" class="r" text-anchor="middle">−6</text>
+<text x="463.5" y="40" class="m dim" text-anchor="middle">11</text>
+<rect x="445" y="48" width="37" height="40" rx="5" class="box-r"/>
+<text x="463.5" y="73" class="m" text-anchor="middle" style="font-size:11px">1011</text>
+<text x="463.5" y="108" class="r" text-anchor="middle">−5</text>
+<text x="502.5" y="40" class="m dim" text-anchor="middle">12</text>
+<rect x="484" y="48" width="37" height="40" rx="5" class="box-r"/>
+<text x="502.5" y="73" class="m" text-anchor="middle" style="font-size:11px">1100</text>
+<text x="502.5" y="108" class="r" text-anchor="middle">−4</text>
+<text x="541.5" y="40" class="m dim" text-anchor="middle">13</text>
+<rect x="523" y="48" width="37" height="40" rx="5" class="box-r"/>
+<text x="541.5" y="73" class="m" text-anchor="middle" style="font-size:11px">1101</text>
+<text x="541.5" y="108" class="r" text-anchor="middle">−3</text>
+<text x="580.5" y="40" class="m dim" text-anchor="middle">14</text>
+<rect x="562" y="48" width="37" height="40" rx="5" class="box-r"/>
+<text x="580.5" y="73" class="m" text-anchor="middle" style="font-size:11px">1110</text>
+<text x="580.5" y="108" class="r" text-anchor="middle">−2</text>
+<text x="619.5" y="40" class="m dim" text-anchor="middle">15</text>
+<rect x="601" y="48" width="37" height="40" rx="5" class="box-r"/>
+<text x="619.5" y="73" class="m" text-anchor="middle" style="font-size:11px">1111</text>
+<text x="619.5" y="108" class="r" text-anchor="middle">−1</text>
+<path class="w-hi" d="M327 22 V116" stroke-dasharray="5 3"/>
+<text x="330" y="18" class="hi">OF line: +7 → −8</text>
+<path class="w-hi" d="M626 116 Q626 170 330 170 Q35 170 35 124"/>
+<polygon points="35,118 30,130 40,130" class="fill-hi"/>
+<text x="330" y="194" class="hi" text-anchor="middle">CF: 1111 + 1 wraps back to 0000 (15 → 0)</text>
+</svg>
+  <figcaption>The two readings overflow at <b>different places</b>. Unsigned overflow happens when you pass the 1111 → 0000 wrap, and the carry out (CF) catches it. Signed overflow happens when you cross the line between 0111 and 1000, and OF catches it.</figcaption>
+</figure>
+
+<div class="vs">
+  <div>
+    <h3>Unsigned (0 … 15)</h3>
+    <div class="formula" style="margin-top:0">CF = C4 (carry out)<small>A carry out of 1 means the answer needed a 5th bit.</small></div>
+    <p style="margin:0;font-size:15px"><code>0001+0001 = 0010</code>, CF = 0<br><code>1111+0001 = 0000</code>, CF = 1<br><code>1000+1000 = 0000</code>, CF = 1</p>
+  </div>
+  <div>
+    <h3>Signed (−8 … +7)</h3>
+    <div class="formula" style="margin-top:0">OF = C3 ⊕ C4<small>Here the carry out on its own "is meaningless".</small></div>
+    <p style="margin:0;font-size:15px">Example: <code>1111+0001</code> (−1 + 1 = 0) has C4 = 1, but the signed answer 0 is correct, so OF = 0.</p>
+  </div>
+</div>
+
+<h2>3. The signed-overflow rule: OF = C3 ⊕ C4</h2>
+<div class="formula">OF = C<sub>in</sub>(MSB) ⊕ C<sub>out</sub>(MSB) = C3 ⊕ C4<small>Signed overflow happens exactly when the carry <b>into</b> the sign bit is different from the carry <b>out of</b> it.</small></div>
+<h3>Why it works: look only at the MSB column</h3>
+<p>Bit 3 adds A3 + B3 + C3. List every case:</p>
+<div class="scroll"><table class="tt">
+  <tr><th>A3</th><th>B3</th><th>C3 in</th><th>Result sign S3</th><th>C4 out</th><th class="out">OF</th><th>What happened</th></tr>
+  <tr><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td class="out zero">0</td><td>(+) + (+) = (+), fine</td></tr>
+  <tr class="hl"><td>0</td><td>0</td><td>1</td><td>1</td><td>0</td><td class="out one">1</td><td>(+) + (+) = (−), <b>overflow</b></td></tr>
+  <tr class="hl"><td>1</td><td>1</td><td>0</td><td>0</td><td>1</td><td class="out one">1</td><td>(−) + (−) = (+), <b>overflow</b></td></tr>
+  <tr><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td><td class="out zero">0</td><td>(−) + (−) = (−), fine</td></tr>
+  <tr><td>0 / 1</td><td>1 / 0</td><td>0</td><td>1</td><td>0</td><td class="out zero">0</td><td>Mixed signs: never overflows</td></tr>
+  <tr><td>0 / 1</td><td>1 / 0</td><td>1</td><td>0</td><td>1</td><td class="out zero">0</td><td>Mixed signs: never overflows</td></tr>
+</table></div>
+<p>OF is 1 in exactly the rows where C3 and C4 differ. That is the definition of XOR.</p>
+
+<h3>The intuitive sign rule (check by eye)</h3>
+<ol class="flow">
+  <li><b>(+) + (+) → (−)</b>Overflow</li>
+  <li><b>(−) + (−) → (+)</b>Overflow</li>
+  <li><b>(+) + (−)</b>Never overflows</li>
+</ol>
+<div class="formula">OF = A3·B3·S3' + A3'·B3'·S3<small>The same rule written with the sign bits: both inputs share a sign, and the result's sign is different. (S3 is the result's MSB.)</small></div>
+<div class="callout tip"><b>Why can't mixed signs overflow?</b><p>Adding a positive to a negative gives an answer <b>between</b> the two inputs. Both inputs already fit, so the answer fits too.</p></div>
+
+<h2>4. The four cases</h2>
+<h3>From the lecture (signed view)</h3>
+<div class="scroll"><table>
+  <tr><th>Sum</th><th>Bits</th><th>Result</th><th>C3</th><th>C4</th><th>OF</th><th>Verdict</th></tr>
+  <tr class="hl"><td>+5 + +4</td><td><code>0101 + 0100</code></td><td><code>1001</code> = −7</td><td>1</td><td>0</td><td>1</td><td><b>Overflow</b> (should be +9)</td></tr>
+  <tr class="hl"><td>−6 + −5</td><td><code>1010 + 1011</code></td><td><code>0101</code> = +5</td><td>0</td><td>1</td><td>1</td><td><b>Overflow</b> (should be −11)</td></tr>
+  <tr><td>+5 + −3</td><td><code>0101 + 1101</code></td><td><code>0010</code> = +2</td><td>1</td><td>1</td><td>0</td><td>OK</td></tr>
+  <tr><td>+3 + +2</td><td><code>0011 + 0010</code></td><td><code>0101</code> = +5</td><td>0</td><td>0</td><td>0</td><td>OK</td></tr>
+</table></div>
+
+<h3>From the lab (both flags)</h3>
+<div class="scroll"><table>
+  <tr><th>#</th><th>Sum</th><th>Result</th><th>C3</th><th>C4</th><th>CF</th><th>OF</th><th>Meaning</th></tr>
+  <tr><td>1</td><td><code>0001 + 0001</code></td><td><code>0010</code></td><td>0</td><td>0</td><td>0</td><td>0</td><td>Quiet case: 1 + 1 = 2 either way</td></tr>
+  <tr><td>2</td><td><code>0111 + 0001</code></td><td><code>1000</code></td><td>1</td><td>0</td><td>0</td><td><b>1</b></td><td>Unsigned 7 + 1 = 8 is fine. Signed +7 + 1 = −8 is wrong.</td></tr>
+  <tr><td>3</td><td><code>1111 + 0001</code></td><td><code>0000</code></td><td>1</td><td>1</td><td><b>1</b></td><td>0</td><td>Unsigned 15 + 1 wraps to 0. Signed −1 + 1 = 0 is fine.</td></tr>
+  <tr class="hl"><td>4</td><td><code>1000 + 1000</code></td><td><code>0000</code></td><td>0</td><td>1</td><td><b>1</b></td><td><b>1</b></td><td>Both wrong: 8 + 8 = 16, and −8 + −8 = −16.</td></tr>
+</table></div>
+
+<h3>Hand trace: case 2 (0111 + 0001)</h3>
+<div class="stepper" data-stepper>
+  <div class="stage"><p><b>Bit 0:</b> 1 + 1 + 0 = 10. Sum bit 0, carry <b>c1 = 1</b>.</p></div>
+  <div class="stage"><p><b>Bit 1:</b> 1 + 0 + 1 = 10. Sum bit 0, carry <b>c2 = 1</b>.</p></div>
+  <div class="stage"><p><b>Bit 2:</b> 1 + 0 + 1 = 10. Sum bit 0, carry <b>c3 = 1</b>. This is the carry <em>into</em> the MSB.</p></div>
+  <div class="stage"><p><b>Bit 3 (MSB):</b> 0 + 0 + 1 = 01. Sum bit 1, carry <b>c4 = 0</b>.</p></div>
+  <div class="stage"><p><b>Flags:</b> CF = c4 = <b>0</b>. OF = c3 ⊕ c4 = 1 ⊕ 0 = <b>1</b>. The result <code>1000</code> is 8 unsigned (correct) but −8 signed (wrong).</p></div>
+</div>
+<p>The other MSB traces from the lab: case 3 has C3 = 1, C4 = 1 (so OF = 0), and case 4 has C3 = 0, C4 = 1 (so OF = 1).</p>
+
+<h2>5. The 4-bit adder-subtractor</h2>
+<p>Subtraction is addition of a negative: A − B = A + (~B) + 1 (see <a href="m1-05-number-systems.html">two's complement</a>). So we need two things: a way to <b>invert B</b> when we want to subtract, and a way to <b>add the extra 1</b>. Both come from one control bit, K.</p>
+<div class="callout tip"><b>The XOR trick</b><p>XOR with 0 leaves a bit unchanged (b ⊕ 0 = b). XOR with 1 flips it (b ⊕ 1 = b'). So an XOR gate is a <b>controllable inverter</b>.</p></div>
+
+<figure class="diagram">
+<svg viewBox="0 0 660 360" width="660" role="img" aria-label="4-bit adder-subtractor: each b bit passes through an XOR gate with control K before entering a full adder; K also feeds the carry-in of FA0; an XOR of carries C3 and C4 gives the overflow flag">
+<path class="w" d="M100 56 H640"/>
+<text x="644" y="60" class="b hi">K</text>
+<text x="62" y="16" class="m">a3</text><text x="112" y="16" class="m">b3</text>
+<path class="w" d="M70 22 V170 M120 22 V88 M100 56 V88 M110 140 V170"/>
+<g transform="translate(135 80) rotate(90)"><path class="box" d="M0 0 Q20 25 0 50 Q45 50 60 25 Q45 0 0 0 Z"/><path class="w" d="M-8 0 Q12 25 -8 50"/></g>
+<text x="99" y="114" class="m">XOR</text>
+<rect x="40" y="170" width="100" height="56" rx="8" class="box"/><text x="76" y="203" class="b">FA3</text>
+<path class="w" d="M90 226 V250"/><text x="84" y="266" class="m">s3</text>
+<text x="212" y="16" class="m">a2</text><text x="262" y="16" class="m">b2</text>
+<path class="w" d="M220 22 V170 M270 22 V88 M250 56 V88 M260 140 V170"/>
+<circle cx="250" cy="56" r="3.5" class="fill-ink"/>
+<g transform="translate(285 80) rotate(90)"><path class="box" d="M0 0 Q20 25 0 50 Q45 50 60 25 Q45 0 0 0 Z"/><path class="w" d="M-8 0 Q12 25 -8 50"/></g>
+<text x="249" y="114" class="m">XOR</text>
+<rect x="190" y="170" width="100" height="56" rx="8" class="box"/><text x="226" y="203" class="b">FA2</text>
+<path class="w" d="M240 226 V250"/><text x="234" y="266" class="m">s2</text>
+<text x="362" y="16" class="m">a1</text><text x="412" y="16" class="m">b1</text>
+<path class="w" d="M370 22 V170 M420 22 V88 M400 56 V88 M410 140 V170"/>
+<circle cx="400" cy="56" r="3.5" class="fill-ink"/>
+<g transform="translate(435 80) rotate(90)"><path class="box" d="M0 0 Q20 25 0 50 Q45 50 60 25 Q45 0 0 0 Z"/><path class="w" d="M-8 0 Q12 25 -8 50"/></g>
+<text x="399" y="114" class="m">XOR</text>
+<rect x="340" y="170" width="100" height="56" rx="8" class="box"/><text x="376" y="203" class="b">FA1</text>
+<path class="w" d="M390 226 V250"/><text x="384" y="266" class="m">s1</text>
+<text x="512" y="16" class="m">a0</text><text x="562" y="16" class="m">b0</text>
+<path class="w" d="M520 22 V170 M570 22 V88 M550 56 V88 M560 140 V170"/>
+<circle cx="550" cy="56" r="3.5" class="fill-ink"/>
+<g transform="translate(585 80) rotate(90)"><path class="box" d="M0 0 Q20 25 0 50 Q45 50 60 25 Q45 0 0 0 Z"/><path class="w" d="M-8 0 Q12 25 -8 50"/></g>
+<text x="549" y="114" class="m">XOR</text>
+<rect x="490" y="170" width="100" height="56" rx="8" class="box"/><text x="526" y="203" class="b">FA0</text>
+<path class="w" d="M540 226 V250"/><text x="534" y="266" class="m">s0</text>
+<circle cx="620" cy="56" r="3.5" class="fill-hi"/>
+<path class="w-hi" d="M620 56 V198 H590 M490 198 H440 M340 198 H290 M190 198 H140 M40 198 H8"/>
+<polygon points="590,198 600,193 600,203" class="fill-hi"/>
+<polygon points="440,198 450,193 450,203" class="fill-hi"/>
+<polygon points="290,198 300,193 300,203" class="fill-hi"/>
+<polygon points="140,198 150,193 150,203" class="fill-hi"/>
+<polygon points="8,198 18,193 18,203" class="fill-hi"/>
+<text x="596" y="191" class="m hi">cin</text><text x="452" y="191" class="m hi">c1</text><text x="302" y="191" class="m hi">c2</text><text x="150" y="191" class="m hi">c3</text><text x="4" y="191" class="m hi">c4</text>
+<circle cx="165" cy="198" r="3.5" class="fill-hi"/><circle cx="20" cy="198" r="3.5" class="fill-hi"/>
+<path class="w-hi" d="M165 198 V305 H206 M20 198 V325 H206"/>
+<path class="box" d="M200 290 Q220 315 200 340 Q245 340 260 315 Q245 290 200 290 Z"/><path class="w" d="M192 290 Q212 315 192 340"/>
+<text x="214" y="319" class="m">XOR</text>
+<path class="w-hi" d="M260 315 H300"/><text x="308" y="319" class="hi">OF = c3 ⊕ c4 (signed overflow)</text>
+<text x="26" y="350" class="m hi">c4 = CF</text>
+</svg>
+  <figcaption>Each b bit goes through an XOR with K before reaching its full adder. K also feeds the first carry-in (copper line on the right). An extra XOR on c3 and c4 produces the signed overflow flag, and c4 itself is the carry flag.</figcaption>
+</figure>
+
+<div class="vs">
+  <div><h3>K = 0: add</h3><p style="margin:0">Each XOR passes b unchanged, and cin = 0.<br>Result = <b>A + B</b>.</p></div>
+  <div><h3>K = 1: subtract</h3><p style="margin:0">Each XOR inverts b, and cin = 1.<br>Result = A + ~B + 1 = <b>A − B</b>.</p></div>
+</div>
+
+<h3>The lab Verilog, line by line</h3>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · adder_subtractor.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> adder_subtractor(</td><td class="n">A chip named <code>adder_subtractor</code>.</td></tr>
+    <tr><td class="c">    <span class="kw">input</span>  [<span class="num">3</span>:<span class="num">0</span>] a,</td><td class="n">A 4-bit input A. Pins are wires by default, so the word <code>wire</code> can be left out.</td></tr>
+    <tr><td class="c">    <span class="kw">input</span>  [<span class="num">3</span>:<span class="num">0</span>] b,</td><td class="n">A 4-bit input B.</td></tr>
+    <tr><td class="c">    <span class="kw">input</span>        m,</td><td class="n">The mode bit (K in the diagram): 0 = add, 1 = subtract.</td></tr>
+    <tr><td class="c">    <span class="kw">output</span> [<span class="num">3</span>:<span class="num">0</span>] s,</td><td class="n">The 4-bit result.</td></tr>
+    <tr><td class="c">    <span class="kw">output</span>       cout</td><td class="n">The carry out of the MSB.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">wire</span> [<span class="num">3</span>:<span class="num">0</span>] b_in;</td><td class="n">An internal 4-bit wire for "B after the XOR gates".</td></tr>
+    <tr><td class="c"><span class="kw">assign</span> b_in = b ^ {<span class="num">4</span>{m}};</td><td class="n"><code>{4{m}}</code> repeats m four times, making <code>mmmm</code>. <code>^</code> XORs each bit of b with m. These are the four XOR gates.</td></tr>
+    <tr><td class="c"><span class="kw">assign</span> {cout, s} = a + b_in + m;</td><td class="n">Add a, the modified b, and m (m acts as the carry-in). <code>{cout, s}</code> glues cout in front of s to make a 5-bit result, so the 5th bit of the sum lands in cout.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h3>Worked examples with the adder-subtractor</h3>
+<ol class="steps">
+  <li><b>5 − 3 (K = 1):</b> b = <code>0011</code> becomes b_in = <code>1100</code>, and cin = 1. <code>0101 + 1100 + 1 = 1 0010</code>, so s = <b><code>0010</code> = 2</b> and cout = 1.</li>
+  <li><b>3 − 5 (K = 1):</b> b = <code>0101</code> becomes <code>1010</code>. <code>0011 + 1010 + 1 = 0 1110</code>, so s = <code>1110</code> = <b>−2</b> and cout = 0.</li>
+  <li><b>7 − (−8) (K = 1), a subtraction that overflows:</b> b = <code>1000</code> becomes <code>0111</code>. <code>0111 + 0111 + 1 = 0 1111</code>, so s = <code>1111</code> = −1. The true answer is +15. The carries are c3 = 1 and c4 = 0, so <b>OF = 1</b> ✓.</li>
+</ol>
+<div class="callout tip"><b>Carry-out when subtracting</b><p>With K = 1, cout = 1 means "no borrow was needed" (unsigned A ≥ B), and cout = 0 means A &lt; B. That's why 5 − 3 gave cout = 1 and 3 − 5 gave cout = 0. Don't read cout = 1 as an error here.</p></div>
+
+<h2>6. CLA adder with overflow flags (Lab 1B)</h2>
+<p>This is the <a href="m1-04-adders.html">carry look-ahead adder</a> with two flag outputs added. Here is the full body. G (generate) = a·b means "this bit makes a carry". P (propagate) = a⊕b means "this bit passes a carry along".</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · cla_adder_4bit_ovf.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> cla_adder_4bit_ovf (</td><td class="n">A 4-bit CLA adder with overflow flags.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> [<span class="num">3</span>:<span class="num">0</span>] a, b,</td><td class="n">Two 4-bit inputs.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> cin,</td><td class="n">The carry-in (0 for plain addition).</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> [<span class="num">3</span>:<span class="num">0</span>] sum,</td><td class="n">The 4-bit result.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> cout, cf, of</td><td class="n">Three 1-bit outputs: carry out, carry flag and overflow flag.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> [<span class="num">3</span>:<span class="num">0</span>] g = a &amp; b;</td><td class="n">Generate for all 4 bits (bitwise AND).</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> [<span class="num">3</span>:<span class="num">0</span>] p = a ^ b;</td><td class="n">Propagate for all 4 bits (bitwise XOR).</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> c1, c2, c3, c4;</td><td class="n">The internal carries. c3 goes into bit 3, and c4 comes out of bit 3.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> c1 = g[<span class="num">0</span>] | (p[<span class="num">0</span>] &amp; cin);</td><td class="n">c1 = G0 + P0·c0</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> c2 = g[<span class="num">1</span>] | (p[<span class="num">1</span>] &amp; g[<span class="num">0</span>])</td><td class="n">c2 written out in full, so it does not wait for c1.</td></tr>
+    <tr><td class="c">            | (p[<span class="num">1</span>] &amp; p[<span class="num">0</span>] &amp; cin);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> c3 = g[<span class="num">2</span>] | (p[<span class="num">2</span>] &amp; g[<span class="num">1</span>])</td><td class="n">c3: a carry is made at bit 2, or made lower down and passed up.</td></tr>
+    <tr><td class="c">            | (p[<span class="num">2</span>] &amp; p[<span class="num">1</span>] &amp; g[<span class="num">0</span>])</td><td class="n"></td></tr>
+    <tr><td class="c">            | (p[<span class="num">2</span>] &amp; p[<span class="num">1</span>] &amp; p[<span class="num">0</span>] &amp; cin);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> c4 = g[<span class="num">3</span>] | (p[<span class="num">3</span>] &amp; g[<span class="num">2</span>])</td><td class="n">c4: the carry out of the MSB.</td></tr>
+    <tr><td class="c">            | (p[<span class="num">3</span>] &amp; p[<span class="num">2</span>] &amp; g[<span class="num">1</span>])</td><td class="n"></td></tr>
+    <tr><td class="c">            | (p[<span class="num">3</span>] &amp; p[<span class="num">2</span>] &amp; p[<span class="num">1</span>] &amp; g[<span class="num">0</span>])</td><td class="n"></td></tr>
+    <tr><td class="c">            | (p[<span class="num">3</span>] &amp; p[<span class="num">2</span>] &amp; p[<span class="num">1</span>] &amp; p[<span class="num">0</span>] &amp; cin);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> sum  = p ^ {c3, c2, c1, cin};</td><td class="n">Each sum bit = P(i) XOR the carry into that bit. <code>{ }</code> joins the carries into a 4-bit bus.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> cf = c4;        <span class="com">// unsigned overflow</span></td><td class="n">Carry flag = the carry out.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> of = c3 ^ c4;   <span class="com">// signed overflow</span></td><td class="n">Overflow flag = carry into the MSB XOR carry out of it.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> cout = c4;</td><td class="n">The plain carry-out pin (the same signal as cf).</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h3>A testbench for the four lab cases</h3>
+<p>This testbench is not printed in the handout. It is written here to run the four lab cases and print both flags.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · cla_ovf_tb.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">`timescale</span> <span class="num">1ns</span>/<span class="num">1ps</span></td><td class="n">One time unit = 1 nanosecond, measured to a precision of 1 picosecond. So <code>#10</code> means 10 ns.</td></tr>
+    <tr><td class="c"><span class="kw">module</span> cla_ovf_tb;</td><td class="n">The testbench. It has no pins.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span>  [<span class="num">3</span>:<span class="num">0</span>] a, b;</td><td class="n">The inputs we drive (<code>reg</code>, because we set them in <code>initial</code>).</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span>        cin;</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> [<span class="num">3</span>:<span class="num">0</span>] sum;</td><td class="n">Wires to watch the outputs.</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span>       cout, cf, of;</td><td class="n"></td></tr>
+    <tr><td class="c">  cla_adder_4bit_ovf dut (.a(a), .b(b), .cin(cin),</td><td class="n">Place the adder, named <code>dut</code> ("device under test"), and connect each pin.</td></tr>
+    <tr><td class="c">    .sum(sum), .cout(cout), .cf(cf), .of(of));</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">initial begin</span></td><td class="n">Runs once, top to bottom, starting at time 0.</td></tr>
+    <tr><td class="c">    <span class="kw">$dumpfile</span>(<span class="str">"cla_ovf.vcd"</span>);</td><td class="n">The waveform file for GTKWave.</td></tr>
+    <tr><td class="c">    <span class="kw">$dumpvars</span>(<span class="num">0</span>, cla_ovf_tb);</td><td class="n">Record every signal.</td></tr>
+    <tr><td class="c">    <span class="kw">$monitor</span>(<span class="str">"t=%0t a=%b b=%b sum=%b cf=%b of=%b"</span>,</td><td class="n"><code>$monitor</code> prints a line whenever a listed signal changes. <code>%b</code> prints in binary, and <code>%0t</code> prints the time.</td></tr>
+    <tr><td class="c">              <span class="kw">$time</span>, a, b, sum, cf, of);</td><td class="n">The values that fill the % slots, in order.</td></tr>
+    <tr><td class="c">    cin = <span class="num">0</span>;</td><td class="n">Plain addition.</td></tr>
+    <tr><td class="c">    a = <span class="num">4'b0001</span>; b = <span class="num">4'b0001</span>; #<span class="num">10</span>;</td><td class="n">Case 1: the quiet case. Wait 10 ns.</td></tr>
+    <tr><td class="c">    a = <span class="num">4'b0111</span>; b = <span class="num">4'b0001</span>; #<span class="num">10</span>;</td><td class="n">Case 2: expect OF = 1.</td></tr>
+    <tr><td class="c">    a = <span class="num">4'b1111</span>; b = <span class="num">4'b0001</span>; #<span class="num">10</span>;</td><td class="n">Case 3: expect CF = 1.</td></tr>
+    <tr><td class="c">    a = <span class="num">4'b1000</span>; b = <span class="num">4'b1000</span>; #<span class="num">10</span>;</td><td class="n">Case 4: expect both flags = 1.</td></tr>
+    <tr><td class="c">    <span class="kw">$finish</span>;</td><td class="n">End the simulation.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<pre class="plain code" style="border-radius:var(--radius)"><span class="com"># compile, run, view</span>
+iverilog -o ovf.vvp cla_adder_4bit_ovf.v cla_ovf_tb.v
+vvp ovf.vvp
+<span class="com"># expected console output:</span>
+t=0 a=0001 b=0001 sum=0010 cf=0 of=0
+t=10 a=0111 b=0001 sum=1000 cf=0 of=1
+t=20 a=1111 b=0001 sum=0000 cf=1 of=0
+t=30 a=1000 b=1000 sum=0000 cf=1 of=1
+gtkwave cla_ovf.vcd</pre>
+<p>"One adder performs all. One ground truth. Two flags for what 'overflow' really means."</p>
+
+<h2>7. Real-world overflow failures</h2>
+<div class="scroll"><table>
+  <tr><th>Event</th><th>What overflowed</th><th>Result</th></tr>
+  <tr><td><b>Ariane 5 rocket (1996)</b></td><td>A 64-bit floating-point value was converted into a 16-bit signed integer, and it was too big to fit.</td><td>The rocket self-destructed about 37 s after launch, a loss of about $370M.</td></tr>
+  <tr><td><b>"Gangnam Style" on YouTube (2014)</b></td><td>The view counter was a 32-bit signed integer, with a maximum of about 2.1 billion.</td><td>The video approached the limit, and YouTube moved the counter to 64 bits.</td></tr>
+  <tr><td><b>Boeing 787 (2015)</b></td><td>An internal counter overflowed after 248 days of continuous power.</td><td>The fix: reboot the system before it reaches 248 days.</td></tr>
+  <tr><td><b>Pac-Man level 256</b></td><td>The level counter was 8 bits (0 … 255).</td><td>Level 256 draws a garbled half-screen, the famous "kill screen".</td></tr>
+</table></div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>Mixing up the flags.</b> The carry out (CF) flags <b>unsigned</b> overflow. A carry mismatch at the sign bit (OF = C3 ⊕ C4) flags <b>signed</b> overflow.</li>
+  <li><b>"Carry out = 1, so the signed answer is wrong."</b> Not true: −1 + 1 = 0 has C4 = 1 but is correct. For signed numbers, the carry out alone means nothing.</li>
+  <li><b>Using C4 ⊕ S3 or A3 ⊕ B3.</b> The rule uses the carry <em>into</em> the MSB (C3) and the carry <em>out</em> (C4).</li>
+  <li><b>Saying a positive plus a negative can overflow.</b> It never can.</li>
+  <li><b>Forgetting that K also feeds cin.</b> Inverting B alone gives A + ~B = A − B − 1, which is off by one.</li>
+  <li><b>Expecting an error message.</b> Overflow is silent. Only the flags change.</li>
+  <li><b>In <code>{cout, s} = …</code>, swapping the order.</b> The left item gets the top (5th) bit.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>4-bit: 0110 + 0011. Give the result, CF and OF.</summary><div class="a"><p>6 + 3 = 9. Result <code>1001</code>. Carries: c1 = 0, c2 = 1, c3 = 1, c4 = 0.</p><p><b>CF = 0</b> (9 fits in unsigned). <b>OF = 1 ⊕ 0 = 1</b> (signed: +6 + +3 gave −7).</p></div></details>
+  <details class="q"><summary>4-bit: 1010 + 1011 (−6 + −5). Give the result, CF and OF.</summary><div class="a"><p><code>1010 + 1011 = 1 0101</code>, so the result is <code>0101</code> = +5. Carries: c3 = 0, c4 = 1.</p><p><b>CF = 1</b>, <b>OF = 1</b>. Two negatives gave a positive; the true answer −11 is below −8.</p></div></details>
+  <details class="q"><summary>4-bit: 1100 + 0111 (−4 + 7). Is there overflow?</summary><div class="a"><p><code>1100 + 0111 = 1 0011</code>, so the result is <code>0011</code> = +3 ✓. Carries: c3 = 1, c4 = 1, so <b>OF = 0</b>. CF = 1, but that only matters for unsigned (12 + 7 = 19 &gt; 15). The signs differ, so signed overflow is impossible anyway.</p></div></details>
+  <details class="q"><summary>Using the adder-subtractor, compute 6 − 2. Show b_in, cin and the result.</summary><div class="a"><p>K = 1, so b_in = <code>0010</code> ⊕ <code>1111</code> = <code>1101</code> and cin = 1.</p><p><code>0110 + 1101 + 1 = 1 0100</code>, so s = <b><code>0100</code> = 4</b> and cout = 1 (no borrow).</p></div></details>
+  <details class="q"><summary>Compute −8 − 1 on the adder-subtractor. What does OF show?</summary><div class="a"><p>a = <code>1000</code>, b = <code>0001</code> becomes b_in = <code>1110</code>, and cin = 1. <code>1000 + 1110 + 1 = 1 0111</code>, so s = <code>0111</code> = +7.</p><p>Bit trace: bit 0: 0 + 0 + 1 = 1 (c1 = 0). Bit 1: 0 + 1 + 0 = 1 (c2 = 0). Bit 2: 0 + 1 + 0 = 1 (<b>c3 = 0</b>). Bit 3: 1 + 1 + 0 = 10 (<b>c4 = 1</b>).</p><p>So <b>OF = 0 ⊕ 1 = 1</b>. The true answer −9 is below −8, so this is overflow ✓.</p></div></details>
+  <details class="q"><summary>Why does XOR work as a "controllable inverter"?</summary><div class="a"><p>b ⊕ 0 = b (it passes through) and b ⊕ 1 = b' (it flips). The control input K chooses which one happens.</p></div></details>
+  <details class="q"><summary>An 8-bit signed counter holds 127 and adds 1. What does it hold, and which flag is set?</summary><div class="a"><p><code>01111111 + 1 = 10000000</code> = <b>−128</b>. The carry into the MSB is 1 and the carry out is 0, so <b>OF = 1</b> and CF = 0.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=WN8i5cwjkSE" target="_blank" rel="noopener"><i class="play"></i><span><b>Binary Addition &amp; Overflow - Computerphile</b><small>Computerphile</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=brM0tpBAx8U" target="_blank" rel="noopener"><i class="play"></i><span><b>Addition and Subtraction using 2's Complement Arithmetic</b><small>ALL ABOUT ELECTRONICS</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=igfRNfPC6Wo" target="_blank" rel="noopener"><i class="play"></i><span><b>Carry Out vs. Overflow (Binary Addition Explained)</b><small>Balbir Singh</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

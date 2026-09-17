@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Boolean Logic Gates</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+<style>
+  /* show code symbols exactly as typed (no font ligatures) */
+  code, pre, .ann td.c { font-variant-ligatures: none; font-feature-settings: "calt" 0, "liga" 0; }
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 1 / Boolean algebra &amp; gates</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 1 · Digital Foundations <span class="tag class">From class notes · Lecture 0001 &amp; Lab 0001</span></div>
+  <h1>Boolean algebra &amp; logic gates</h1>
+  <p class="idea">A computer only knows two values: 1 and 0. <b>Logic gates</b> are tiny circuits that combine these values. <b>Boolean algebra</b> is the maths for writing and simplifying those combinations, so we can build smaller, faster circuits.</p>
+  <div class="analogy"><b>Think of it like this:</b> a lamp wired through two switches. If the switches are in a row (series), the lamp lights only when switch A <em>and</em> switch B are on. If they sit side by side (parallel), it lights when A <em>or</em> B is on. That is AND and OR.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Boolean variable</dt><dd>A name (A, B, …) that can only be 0 or 1.</dd></div>
+  <div class="term"><dt>Logic level</dt><dd>1 = TRUE = HIGH = ON (about 3.3 V or 5 V). 0 = FALSE = LOW (about 0 V).</dd></div>
+  <div class="term"><dt>Logic gate</dt><dd>A small circuit with one or more inputs and one output, following a fixed rule.</dd></div>
+  <div class="term"><dt>Truth table</dt><dd>A table listing the output for every possible input. With n inputs there are 2<sup>n</sup> rows.</dd></div>
+  <div class="term"><dt>Complement (A')</dt><dd>The opposite of A. Also written <span style="text-decoration:overline">A</span>, ¬A or <code>~A</code>.</dd></div>
+  <div class="term"><dt>Bubble</dt><dd>The small circle on a gate symbol. It means "invert (NOT) here".</dd></div>
+  <div class="term"><dt>ISA</dt><dd>Instruction Set Architecture: the list of commands a CPU understands (e.g. ADD). The contract between software and hardware.</dd></div>
+  <div class="term"><dt>Universal gate</dt><dd>A gate type that can build every other gate on its own. NAND and NOR are universal.</dd></div>
+</dl>
+
+<h2>1. Where gates fit: architecture, organisation and abstraction</h2>
+<div class="vs">
+  <div><h3>Architecture = the "what"</h3><p>What the programmer can see and use. Example: "this CPU has an ADD instruction".</p></div>
+  <div><h3>Organisation = the "how"</h3><p>How the hardware delivers it, hidden from the programmer: pipelines, caches, clock speed.</p></div>
+</div>
+<p>Two CPUs can share the same architecture (run the same programs) but have different organisations (one is faster). Computers are built in <b>layers</b>. Each layer hides the details of the layer below it. This is called <b>abstraction</b>.</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 620 330" width="620" role="img" aria-label="Abstraction stack from AI/ML at the top to transistors at the bottom, with one line of code shown at four levels">
+    <rect x="20" y="14" width="250" height="36" rx="6" class="box"/><text x="145" y="37" text-anchor="middle">AI / ML</text>
+    <rect x="20" y="56" width="250" height="36" rx="6" class="box"/><text x="145" y="79" text-anchor="middle">Applications &amp; languages</text>
+    <rect x="20" y="98" width="250" height="36" rx="6" class="box"/><text x="145" y="121" text-anchor="middle">Operating system (OS)</text>
+    <rect x="20" y="140" width="250" height="36" rx="6" class="box-hi"/><text x="145" y="163" text-anchor="middle" class="b">ISA (instruction set)</text>
+    <rect x="20" y="182" width="250" height="36" rx="6" class="box-b"/><text x="145" y="205" text-anchor="middle">Datapath &amp; control</text>
+    <rect x="20" y="224" width="250" height="36" rx="6" class="box-g"/><text x="145" y="247" text-anchor="middle" class="b">Logic gates  ← this page</text>
+    <rect x="20" y="266" width="250" height="36" rx="6" class="box-b"/><text x="145" y="289" text-anchor="middle">Transistors</text>
+    <path class="grid" stroke-dasharray="3 3" d="M270 74 H296 M270 158 H296 M270 200 H296 M270 242 H296"/>
+    <text x="302" y="78" class="m">Python: A[i] = B[i] + C[i]</text>
+    <text x="302" y="162" class="m">Machine code: lw · lw · add · sw</text>
+    <text x="302" y="204" class="m">Datapath: regfile → ALU → regfile</text>
+    <text x="302" y="246" class="m">Gates: XOR, AND, carry logic</text>
+    <text x="302" y="122" class="dim">↑ software</text>
+    <text x="302" y="290" class="dim">↓ hardware</text>
+    <text x="20" y="322" class="dim">The ISA is the line between software (above) and hardware (below).</text>
+  </svg>
+  <figcaption>One line of Python becomes machine instructions, then data moving through the datapath, then gates switching.</figcaption>
+</figure>
+
+<h2>2. Boolean notation</h2>
+<p>George Boole published this algebra in 1847. It looks like school algebra, but the symbols mean different things:</p>
+<div class="scroll"><table>
+  <tr><th>Write</th><th>Say</th><th>Means</th><th>Verilog</th></tr>
+  <tr><td><code>A'</code></td><td>"A bar", "not A"</td><td>NOT: flip the value</td><td><code>~a</code></td></tr>
+  <tr><td><code>A·B</code> or <code>AB</code></td><td>"A and B"</td><td>AND: 1 only if both are 1</td><td><code>a &amp; b</code></td></tr>
+  <tr><td><code>A + B</code></td><td>"A or B"</td><td>OR: 1 if at least one is 1</td><td><code>a | b</code></td></tr>
+  <tr><td><code>A ⊕ B</code></td><td>"A xor B"</td><td>XOR: 1 if they are different</td><td><code>a ^ b</code></td></tr>
+</table></div>
+<div class="callout trap"><b>+ is not addition</b><p>In Boolean algebra <code>1 + 1 = 1</code> (OR), not 2. There are only two values.</p></div>
+
+<h2>3. The seven gates</h2>
+<figure class="diagram">
+  <svg viewBox="0 0 640 235" width="640" role="img" aria-label="Symbols for NOT, AND, OR, XOR, NAND, NOR and XNOR gates with their equations">
+    <!-- NOT -->
+    <g transform="translate(0,0)">
+      <text x="20" y="16" class="b">NOT</text>
+      <text x="8" y="54" class="m">A</text>
+      <path class="w" d="M20 50 H50"/>
+      <path class="box" d="M50 30 L90 50 L50 70 Z"/>
+      <circle cx="95" cy="50" r="5" class="box"/>
+      <path class="w-hi" d="M100 50 H130"/><text x="134" y="54" class="m hi">Y</text>
+      <text x="20" y="96" class="m">Y = A'</text>
+    </g>
+    <!-- AND -->
+    <g transform="translate(160,0)">
+      <text x="20" y="16" class="b">AND</text>
+      <text x="8" y="44" class="m">A</text><text x="8" y="64" class="m">B</text>
+      <path class="w" d="M20 40 H50 M20 60 H50"/>
+      <path class="box" d="M50 30 H75 A20 20 0 0 1 75 70 H50 Z"/>
+      <path class="w-hi" d="M95 50 H130"/><text x="134" y="54" class="m hi">Y</text>
+      <text x="20" y="96" class="m">Y = A·B</text>
+    </g>
+    <!-- OR -->
+    <g transform="translate(320,0)">
+      <text x="20" y="16" class="b">OR</text>
+      <text x="8" y="44" class="m">A</text><text x="8" y="64" class="m">B</text>
+      <path class="w" d="M20 40 H57 M20 60 H57"/>
+      <path class="box" d="M50 30 Q70 50 50 70 Q90 70 105 50 Q90 30 50 30 Z"/>
+      <path class="w-hi" d="M105 50 H130"/><text x="134" y="54" class="m hi">Y</text>
+      <text x="20" y="96" class="m">Y = A + B</text>
+    </g>
+    <!-- XOR -->
+    <g transform="translate(480,0)">
+      <text x="20" y="16" class="b">XOR</text>
+      <text x="8" y="44" class="m">A</text><text x="8" y="64" class="m">B</text>
+      <path class="w" d="M20 40 H49 M20 60 H49"/>
+      <path class="w" d="M42 30 Q62 50 42 70"/>
+      <path class="box" d="M50 30 Q70 50 50 70 Q90 70 105 50 Q90 30 50 30 Z"/>
+      <path class="w-hi" d="M105 50 H130"/><text x="134" y="54" class="m hi">Y</text>
+      <text x="20" y="96" class="m">Y = A ⊕ B</text>
+    </g>
+    <!-- NAND -->
+    <g transform="translate(0,120)">
+      <text x="20" y="16" class="b">NAND</text>
+      <text x="8" y="44" class="m">A</text><text x="8" y="64" class="m">B</text>
+      <path class="w" d="M20 40 H50 M20 60 H50"/>
+      <path class="box" d="M50 30 H75 A20 20 0 0 1 75 70 H50 Z"/>
+      <circle cx="100" cy="50" r="5" class="box"/>
+      <path class="w-hi" d="M105 50 H130"/><text x="134" y="54" class="m hi">Y</text>
+      <text x="20" y="96" class="m">Y = (A·B)'</text>
+    </g>
+    <!-- NOR -->
+    <g transform="translate(160,120)">
+      <text x="20" y="16" class="b">NOR</text>
+      <text x="8" y="44" class="m">A</text><text x="8" y="64" class="m">B</text>
+      <path class="w" d="M20 40 H57 M20 60 H57"/>
+      <path class="box" d="M50 30 Q70 50 50 70 Q90 70 105 50 Q90 30 50 30 Z"/>
+      <circle cx="110" cy="50" r="5" class="box"/>
+      <path class="w-hi" d="M115 50 H135"/><text x="138" y="54" class="m hi">Y</text>
+      <text x="20" y="96" class="m">Y = (A + B)'</text>
+    </g>
+    <!-- XNOR -->
+    <g transform="translate(320,120)">
+      <text x="20" y="16" class="b">XNOR</text>
+      <text x="8" y="44" class="m">A</text><text x="8" y="64" class="m">B</text>
+      <path class="w" d="M20 40 H49 M20 60 H49"/>
+      <path class="w" d="M42 30 Q62 50 42 70"/>
+      <path class="box" d="M50 30 Q70 50 50 70 Q90 70 105 50 Q90 30 50 30 Z"/>
+      <circle cx="110" cy="50" r="5" class="box"/>
+      <path class="w-hi" d="M115 50 H135"/><text x="138" y="54" class="m hi">Y</text>
+      <text x="20" y="96" class="m">Y = (A ⊕ B)'</text>
+    </g>
+    <g transform="translate(490,120)">
+      <text x="0" y="36" class="dim">Shapes to know:</text>
+      <text x="0" y="56" class="dim">flat back = AND family</text>
+      <text x="0" y="74" class="dim">curved back = OR family</text>
+      <text x="0" y="92" class="dim">extra curve = XOR</text>
+      <text x="0" y="110" class="dim">bubble = NOT</text>
+    </g>
+  </svg>
+  <figcaption>Every gate with a bubble on its output is the "NOT-" version of the gate without it.</figcaption>
+</figure>
+
+<div class="scroll"><table>
+  <tr><th>Gate</th><th>Equation</th><th>Output is 1 when…</th></tr>
+  <tr><td>NOT</td><td><code>Y = A'</code></td><td>the input is 0</td></tr>
+  <tr><td>AND</td><td><code>Y = A·B</code></td><td><b>all</b> inputs are 1</td></tr>
+  <tr><td>OR</td><td><code>Y = A + B</code></td><td><b>any</b> input is 1</td></tr>
+  <tr><td>NAND</td><td><code>Y = (AB)'</code></td><td><b>not all</b> inputs are 1</td></tr>
+  <tr><td>NOR</td><td><code>Y = (A + B)'</code></td><td><b>no</b> input is 1</td></tr>
+  <tr><td>XOR</td><td><code>Y = A'B + AB'</code></td><td>the inputs are <b>different</b> (an odd number of 1s)</td></tr>
+  <tr><td>XNOR</td><td><code>Y = A'B' + AB</code></td><td>the inputs are the <b>same</b></td></tr>
+</table></div>
+
+<h3>Truth tables</h3>
+<p>Two inputs give 2<sup>2</sup> = 4 rows. NOT has one input, so it has only 2 rows.</p>
+<div class="scroll"><table class="tt">
+  <tr><th>A</th><th>B</th><th class="out">AND</th><th>OR</th><th>NAND</th><th>NOR</th><th>XOR</th><th>XNOR</th></tr>
+  <tr><td>0</td><td>0</td><td class="out zero">0</td><td class="zero">0</td><td class="one">1</td><td class="one">1</td><td class="zero">0</td><td class="one">1</td></tr>
+  <tr><td>0</td><td>1</td><td class="out zero">0</td><td class="one">1</td><td class="one">1</td><td class="zero">0</td><td class="one">1</td><td class="zero">0</td></tr>
+  <tr><td>1</td><td>0</td><td class="out zero">0</td><td class="one">1</td><td class="one">1</td><td class="zero">0</td><td class="one">1</td><td class="zero">0</td></tr>
+  <tr class="hl"><td>1</td><td>1</td><td class="out one">1</td><td class="one">1</td><td class="zero">0</td><td class="zero">0</td><td class="zero">0</td><td class="one">1</td></tr>
+</table></div>
+<div class="scroll"><table class="tt">
+  <tr><th>A</th><th class="out">NOT A</th></tr>
+  <tr><td>0</td><td class="out one">1</td></tr>
+  <tr><td>1</td><td class="out zero">0</td></tr>
+</table></div>
+<div class="callout tip"><b>The 1,1 row tells them apart</b><p>OR(1,1) = 1 but XOR(1,1) = 0. AND(1,1) = 1 but NAND(1,1) = 0. When unsure which gate you have, check the highlighted row.</p></div>
+
+<h3>Universal gates</h3>
+<p>NAND alone can build every other gate. So can NOR alone. For example, tie both NAND inputs together: <code>NOT A = A NAND A</code>, because (A·A)' = A'. Full constructions are on <a href="m1-02-logic-minimization.html">Logic minimization</a>.</p>
+
+<h2>4. Boolean laws</h2>
+<p>These rules let you shrink an expression without changing its truth table. Each law has two forms: swap + with · and 0 with 1 to get the other one (this pairing is called <b>duality</b>).</p>
+<div class="scroll"><table>
+  <tr><th>Law</th><th>OR form</th><th>AND form</th><th>In words</th></tr>
+  <tr><td>Identity</td><td><code>A + 0 = A</code></td><td><code>A · 1 = A</code></td><td>0 does nothing to OR, 1 does nothing to AND</td></tr>
+  <tr><td>Null</td><td><code>A + 1 = 1</code></td><td><code>A · 0 = 0</code></td><td>A 1 forces OR high, a 0 forces AND low</td></tr>
+  <tr><td>Idempotent</td><td><code>A + A = A</code></td><td><code>A · A = A</code></td><td>Repeating a variable changes nothing</td></tr>
+  <tr><td>Complement</td><td><code>A + A' = 1</code></td><td><code>A · A' = 0</code></td><td>One of A, A' is always 1; they are never both 1</td></tr>
+  <tr><td>Involution</td><td colspan="2"><code>(A')' = A</code></td><td>Flip twice, back to the start</td></tr>
+  <tr><td>Commutative</td><td><code>A + B = B + A</code></td><td><code>AB = BA</code></td><td>Order doesn't matter</td></tr>
+  <tr><td>Associative</td><td><code>(A+B)+C = A+(B+C)</code></td><td><code>(AB)C = A(BC)</code></td><td>Grouping doesn't matter</td></tr>
+  <tr><td>Absorption</td><td><code>A + A·B = A</code></td><td><code>A·(A + B) = A</code></td><td>If A decides it already, B adds nothing</td></tr>
+  <tr><td>Distributive</td><td><code>A + BC = (A+B)(A+C)</code></td><td><code>A(B + C) = AB + AC</code></td><td>The OR form does <b>not</b> work in normal maths. It does here.</td></tr>
+</table></div>
+<div class="callout tip"><b>Why A + A·B = A</b><p>If A = 1, both sides are 1. If A = 0, then A·B = 0, so both sides are 0. B never matters.</p></div>
+
+<h2>5. De Morgan's theorems</h2>
+<div class="formula">(A · B)' = A' + B'<small>"Not both" = "at least one is not". A NAND is an OR with inverted inputs.</small></div>
+<div class="formula">(A + B)' = A' · B'<small>"Neither" = "not A and not B". A NOR is an AND with inverted inputs.</small></div>
+<div class="callout tip"><b>Instructor's rule: "Break the bar, flip the sign"</b><p>Cut the long bar over the group into short bars over each variable, and change · to + (or + to ·). It works for any number of variables: <code>(ABC)' = A' + B' + C'</code>.</p></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 600 225" width="600" role="img" aria-label="De Morgan: a NAND gate equals an OR gate with bubbles on both inputs; a NOR gate equals an AND gate with bubbles on both inputs">
+    <g transform="translate(80,30)">
+      <text x="-44" y="14" class="m">A</text><text x="-44" y="34" class="m">B</text>
+      <path class="w" d="M-30 10 H0 M-30 30 H0"/>
+      <path class="box" d="M0 0 H25 A20 20 0 0 1 25 40 H0 Z"/>
+      <circle cx="50" cy="20" r="5" class="box"/>
+      <path class="w-hi" d="M55 20 H85"/><text x="90" y="24" class="m hi">Y</text>
+    </g>
+    <text x="235" y="58" class="b" style="font-size:24px">=</text>
+    <g transform="translate(370,30)">
+      <text x="-50" y="14" class="m">A</text><text x="-50" y="34" class="m">B</text>
+      <path class="w" d="M-36 10 H-7 M-36 30 H-7"/>
+      <circle cx="-2" cy="10" r="5" class="box"/><circle cx="-2" cy="30" r="5" class="box"/>
+      <path class="box" d="M0 0 Q20 20 0 40 Q40 40 55 20 Q40 0 0 0 Z"/>
+      <path class="w-hi" d="M55 20 H85"/><text x="90" y="24" class="m hi">Y</text>
+    </g>
+    <text x="40" y="100" class="m">NAND: (A·B)'</text>
+    <text x="320" y="100" class="m">OR of inverted inputs: A' + B'</text>
+    <g transform="translate(80,140)">
+      <text x="-44" y="14" class="m">A</text><text x="-44" y="34" class="m">B</text>
+      <path class="w" d="M-30 10 H7 M-30 30 H7"/>
+      <path class="box" d="M0 0 Q20 20 0 40 Q40 40 55 20 Q40 0 0 0 Z"/>
+      <circle cx="60" cy="20" r="5" class="box"/>
+      <path class="w-hi" d="M65 20 H90"/><text x="95" y="24" class="m hi">Y</text>
+    </g>
+    <text x="235" y="168" class="b" style="font-size:24px">=</text>
+    <g transform="translate(370,140)">
+      <text x="-50" y="14" class="m">A</text><text x="-50" y="34" class="m">B</text>
+      <path class="w" d="M-36 10 H-10 M-36 30 H-10"/>
+      <circle cx="-5" cy="10" r="5" class="box"/><circle cx="-5" cy="30" r="5" class="box"/>
+      <path class="box" d="M0 0 H25 A20 20 0 0 1 25 40 H0 Z"/>
+      <path class="w-hi" d="M45 20 H85"/><text x="90" y="24" class="m hi">Y</text>
+    </g>
+    <text x="40" y="210" class="m">NOR: (A+B)'</text>
+    <text x="320" y="210" class="m">AND of inverted inputs: A' · B'</text>
+  </svg>
+  <figcaption>Move the bubble from the output to the inputs and swap the gate shape (AND ↔ OR). This trick is called bubble pushing.</figcaption>
+</figure>
+
+<h3>Proof by truth table</h3>
+<div class="scroll"><table class="tt">
+  <tr><th>A</th><th>B</th><th>A·B</th><th class="out">(A·B)'</th><th>A'</th><th>B'</th><th class="out">A' + B'</th></tr>
+  <tr><td>0</td><td>0</td><td>0</td><td class="out one">1</td><td>1</td><td>1</td><td class="out one">1</td></tr>
+  <tr><td>0</td><td>1</td><td>0</td><td class="out one">1</td><td>1</td><td>0</td><td class="out one">1</td></tr>
+  <tr><td>1</td><td>0</td><td>0</td><td class="out one">1</td><td>0</td><td>1</td><td class="out one">1</td></tr>
+  <tr><td>1</td><td>1</td><td>1</td><td class="out zero">0</td><td>0</td><td>0</td><td class="out zero">0</td></tr>
+</table></div>
+<p style="font-size:15px">The two copper-edged columns match in every row, so the two expressions are equal. A truth table is the final judge: trust it over intuition.</p>
+
+<h2>6. Worked simplification</h2>
+<p>Simplify <code>Y = A·B + A·B'</code>.</p>
+<ol class="steps">
+  <li><b>Factor out A</b> (distributive law): <code>Y = A·(B + B')</code></li>
+  <li><b>Complement law:</b> <code>B + B' = 1</code>, so <code>Y = A·1</code></li>
+  <li><b>Identity law:</b> <code>A·1 = A</code>, so <code>Y = A</code></li>
+  <li><b>Result:</b> two ANDs, one OR and one NOT become <b>a single wire</b>. Whatever B does, Y just copies A.</li>
+</ol>
+
+<h3>Another: A + A'B = A + B</h3>
+<ol class="steps">
+  <li><b>Distributive (OR form):</b> <code>A + A'B = (A + A')(A + B)</code></li>
+  <li><b>Complement:</b> <code>A + A' = 1</code>, so <code>= 1·(A + B)</code></li>
+  <li><b>Identity:</b> <code>= A + B</code></li>
+</ol>
+
+<h2>7. Gates in Verilog</h2>
+<p>New to Verilog? Start with <a href="m1-00-verilog-basics.html">Verilog for absolute beginners</a>. Each gate is one <code>assign</code> line.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · all_gates.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> all_gates (</td><td class="n">One block that contains all seven gates side by side.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> a, b,</td><td class="n">Two input pins shared by every gate.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> y_not, y_and, y_or,</td><td class="n">Seven output pins, one per gate.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> y_nand, y_nor, y_xor, y_xnor</td><td class="n"></td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y_not  = ~a;</td><td class="n"><code>~</code> = NOT. Flips a.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y_and  = a &amp; b;</td><td class="n"><code>&amp;</code> = AND.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y_or   = a | b;</td><td class="n"><code>|</code> = OR.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y_nand = ~(a &amp; b);</td><td class="n">NAND = NOT of AND. The brackets matter: AND first, then flip.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y_nor  = ~(a | b);</td><td class="n">NOR = NOT of OR.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y_xor  = a ^ b;</td><td class="n"><code>^</code> = XOR: 1 when a and b differ.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y_xnor = ~(a ^ b);</td><td class="n">XNOR: 1 when a and b match.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">All seven lines are live at the same time. Their order does not matter.</td></tr>
+  </table>
+</div>
+
+<h3>Same thing with built-in gate primitives</h3>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · nand_from_primitives.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> my_nand (<span class="kw">input</span> a, <span class="kw">input</span> b, <span class="kw">output</span> y);</td><td class="n">A NAND built from an AND gate and a NOT gate.</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> t;</td><td class="n">An internal wire joining the two gates.</td></tr>
+    <tr><td class="c">  <span class="kw">and</span> g1 (t, a, b);</td><td class="n">Verilog has ready-made gates: <code>and</code>, <code>or</code>, <code>not</code>, <code>nand</code>, <code>nor</code>, <code>xor</code>, <code>xnor</code>. <b>The output comes first</b>, then the inputs. So t = a AND b.</td></tr>
+    <tr><td class="c">  <span class="kw">not</span> g2 (y, t);</td><td class="n">y = NOT t. So y = (a·b)'.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<p style="font-size:15px">To test all rows, use the testbench pattern from <a href="m1-00-verilog-basics.html">Verilog basics</a>: set <code>a</code>, <code>b</code> to 00, 01, 10, 11 with <code>#10</code> between, and compare each output with the truth table above.</p>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Reading <code>+</code> as addition. <code>A + 1 = 1</code>, not 2.</li>
+  <li>Mixing up OR and XOR. Check the 1,1 row: OR gives 1, XOR gives 0.</li>
+  <li>Treating NAND as AND. The bubble flips every output.</li>
+  <li>Applying De Morgan halfway: <code>(AB)'</code> is <b>not</b> <code>A'B'</code>. Flip the sign too: <code>A' + B'</code>.</li>
+  <li>Forgetting the OR form of the distributive law: <code>A + BC = (A+B)(A+C)</code>.</li>
+  <li>Confusing architecture (what the programmer sees) with organisation (how it is built).</li>
+  <li>Trusting a "feels right" simplification. Check it with a truth table.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>What is XOR(1, 1)? What is OR(1, 1)?</summary><div class="a"><p>XOR(1,1) = <b>0</b> (inputs are the same). OR(1,1) = <b>1</b>.</p></div></details>
+  <details class="q"><summary>Where does the ISA sit in the abstraction stack?</summary><div class="a"><p>Between the <b>operating system</b> (above) and the <b>datapath &amp; control</b> (below). It is the boundary between software and hardware.</p></div></details>
+  <details class="q"><summary>Simplify A·(A + B).</summary><div class="a"><p>Expand: <code>A·A + A·B = A + AB</code> (idempotent). Then absorption: <code>A + AB = A</code>. Answer: <b>A</b>.</p></div></details>
+  <details class="q"><summary>Apply De Morgan to (ABC)'.</summary><div class="a"><p>Break the bar, flip the sign: <b><code>A' + B' + C'</code></b>.</p></div></details>
+  <details class="q"><summary>Show that XY + X'Z + YZ = XY + X'Z.</summary><div class="a">
+    <p><code>YZ = YZ·(X + X') = XYZ + X'YZ</code></p>
+    <p>So the whole thing is <code>XY + XYZ + X'Z + X'YZ</code>. By absorption, <code>XY + XYZ = XY</code> and <code>X'Z + X'YZ = X'Z</code>.</p>
+    <p>Result: <b><code>XY + X'Z</code></b>. The YZ term (called the <b>consensus</b> term) was redundant.</p></div></details>
+  <details class="q"><summary>Simplify (A + B)(A' + C).</summary><div class="a">
+    <p>Multiply out: <code>AA' + AC + A'B + BC</code>. <code>AA' = 0</code>, so <code>AC + A'B + BC</code>.</p>
+    <p>BC is the consensus of AC and A'B, so it drops out: <b><code>AC + A'B</code></b>.</p></div></details>
+  <details class="q"><summary>Simplify ((A'+B)' + (AC)')'.</summary><div class="a">
+    <p>De Morgan on the outer bar: <code>(A'+B)'' · (AC)'' = (A' + B)·AC</code>.</p>
+    <p>Expand: <code>A'AC + ABC = 0 + ABC</code>. Answer: <b>ABC</b>.</p></div></details>
+  <details class="q"><summary>Show that ((A+B)'·C)' + (AB)' = 1.</summary><div class="a">
+    <p>De Morgan on each part: <code>((A+B)'·C)' = (A+B) + C'</code> and <code>(AB)' = A' + B'</code>.</p>
+    <p>Together: <code>A + B + C' + A' + B'</code>. It contains <code>A + A' = 1</code>, and anything OR 1 is 1. Answer: <b>1</b>.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=UvI-AMAtrvE" target="_blank" rel="noopener"><i class="play"></i><span><b>AND OR NOT - Logic Gates Explained - Computerphile</b><small>Computerphile</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=gI-qXk7XojA" target="_blank" rel="noopener"><i class="play"></i><span><b>Boolean Logic &amp; Logic Gates: Crash Course Computer Science #3</b><small>CrashCourse</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=sTu3LwpF6XI" target="_blank" rel="noopener"><i class="play"></i><span><b>Making logic gates from transistors</b><small>Ben Eater</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=W4KICOSIQGs" target="_blank" rel="noopener"><i class="play"></i><span><b>De Morgan's Laws / Theorems | Boolean Algebra &amp; Logic Gates</b><small>Simple Snippets</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

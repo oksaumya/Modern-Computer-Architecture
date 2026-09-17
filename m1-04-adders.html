@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Adders</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 1 / Adders</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 1 · Digital Foundations <span class="tag class">From class notes · Lab 03 &amp; Lab 1B</span></div>
+  <h1>Adders: half, full, ripple-carry &amp; look-ahead</h1>
+  <p class="idea">An adder is a small circuit that adds binary numbers. Every CPU is full of them. They add numbers, subtract (by adding a negative number), and move the program counter forward (<code>PC ← PC + 4</code>).</p>
+  <div class="analogy"><b>Think of it like this:</b> adding by hand, column by column. You add one column, write the digit, and <em>carry</em> the extra 1 to the next column. A half adder does one column with no carry coming in. A full adder does one column that also has a carry coming in. Chain full adders together and you can add numbers of any size.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Sum (S)</dt><dd>The digit you write down for this column.</dd></div>
+  <div class="term"><dt>Carry out (Cout)</dt><dd>The extra 1 sent to the next column when the column total is 2 or more.</dd></div>
+  <div class="term"><dt>Carry in (Cin)</dt><dd>The carry arriving from the column on the right.</dd></div>
+  <div class="term"><dt>LSB / MSB</dt><dd>Least significant bit is the rightmost bit, <code>a[0]</code>. Most significant bit is the leftmost bit.</dd></div>
+  <div class="term"><dt>Gate delay</dt><dd>The tiny time a gate takes to update its output. More gates in a row means a longer wait.</dd></div>
+  <div class="term"><dt>Ripple</dt><dd>A carry travelling bit by bit from right to left, one full adder after another.</dd></div>
+</dl>
+
+<p>Binary addition has only four facts to remember:</p>
+<div class="scroll"><table class="tt">
+  <tr><th>0 + 0</th><th>0 + 1</th><th>1 + 1</th><th>1 + 1 + 1</th></tr>
+  <tr><td>0</td><td>1</td><td class="one">10 <small>(write 0, carry 1)</small></td><td class="one">11 <small>(write 1, carry 1)</small></td></tr>
+</table></div>
+
+<h2>1. Half adder: adds two bits</h2>
+<p>It has two inputs (A, B) and two outputs (Sum, Carry). Look at the truth table. <strong>Sum is 1 when the inputs are different</strong>, which is exactly what XOR does. <strong>Carry is 1 only when both inputs are 1</strong>, which is exactly what AND does.</p>
+
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt">
+      <tr><th>A</th><th>B</th><th class="out">Sum</th><th>Carry</th></tr>
+      <tr><td>0</td><td>0</td><td class="out zero">0</td><td class="zero">0</td></tr>
+      <tr><td>0</td><td>1</td><td class="out one">1</td><td class="zero">0</td></tr>
+      <tr><td>1</td><td>0</td><td class="out one">1</td><td class="zero">0</td></tr>
+      <tr class="hl"><td>1</td><td>1</td><td class="out zero">0</td><td class="one">1</td></tr>
+    </table></div>
+  </div>
+  <div>
+    <div class="formula" style="margin-top:0">Sum = A ⊕ B<small>⊕ means XOR</small></div>
+    <div class="formula">Carry = A · B<small>· means AND</small></div>
+  </div>
+</div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 470 160" width="470" role="img" aria-label="Half adder: A and B feed an XOR gate giving Sum and an AND gate giving Carry">
+    <text x="14" y="34" class="b">A</text>
+    <text x="14" y="54" class="b">B</text>
+    <path class="w" d="M30 30 H205 M30 50 H205"/>
+    <path class="w" d="M100 30 V105 H200 M130 50 V135 H200"/>
+    <circle cx="100" cy="30" r="3.5" class="fill-ink"/>
+    <circle cx="130" cy="50" r="3.5" class="fill-ink"/>
+    <!-- XOR gate -->
+    <path class="box" d="M200 15 Q220 40 200 65 Q245 65 260 40 Q245 15 200 15 Z"/>
+    <path class="w" d="M192 15 Q212 40 192 65"/>
+    <text x="214" y="44" class="m">XOR</text>
+    <!-- AND gate -->
+    <path class="box" d="M200 95 H230 A25 25 0 0 1 230 145 H200 Z"/>
+    <text x="206" y="124" class="m">AND</text>
+    <path class="w-hi" d="M260 40 H340"/>
+    <path class="w-hi" d="M255 120 H340"/>
+    <text x="348" y="44" class="hi">Sum = A ⊕ B</text>
+    <text x="348" y="124" class="hi">Carry = A·B</text>
+  </svg>
+  <figcaption>Half adder: one XOR gate and one AND gate. A dot marks where a wire splits into two.</figcaption>
+</figure>
+
+<h3>The Verilog, line by line</h3>
+<p>New to Verilog? Read <a href="m1-00-verilog-basics.html">Verilog for absolute beginners</a> first. The short version: Verilog <em>describes wires and gates</em>. It is not a list of steps run one after another.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · half_adder.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="com">// 1-bit half adder</span></td><td class="n">A comment. Verilog ignores anything after <code>//</code>.</td></tr>
+    <tr><td class="c"><span class="kw">module</span> half_adder (</td><td class="n">Start a new circuit block called <code>half_adder</code>. Think of it as a chip with pins.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> a,</td><td class="n">Pin <code>a</code> is an input. A <code>wire</code> is a real wire: it just carries a signal.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> b,</td><td class="n">Pin <code>b</code> is the second input.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> sum,</td><td class="n">Pin <code>sum</code> is an output.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> cout</td><td class="n">Pin <code>cout</code> (carry out) is an output. The last pin has no comma.</td></tr>
+    <tr><td class="c">);</td><td class="n">End of the pin list.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> sum  = a ^ b;</td><td class="n"><code>assign</code> permanently connects a gate. <code>^</code> is XOR. Whenever a or b changes, sum updates instantly.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> cout = a &amp; b;</td><td class="n"><code>&amp;</code> is AND. cout is 1 only when both inputs are 1.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">End of the circuit block.</td></tr>
+  </table>
+</div>
+
+<div class="callout tip"><b>Why "half"?</b><p>It has no <strong>carry-in</strong> input, so it can't accept the carry from the column on its right. That means it can only add the rightmost column.</p></div>
+
+<h2>2. Full adder: adds three bits</h2>
+<p>Adding <code>11 + 01</code> shows the problem. Column 1 has to add A[1], B[1] <em>and</em> the carry from column 0. That's three inputs, so we need a full adder.</p>
+
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt">
+      <tr><th>A</th><th>B</th><th>Cin</th><th class="out">Sum</th><th>Cout</th></tr>
+      <tr><td>0</td><td>0</td><td>0</td><td class="out zero">0</td><td class="zero">0</td></tr>
+      <tr><td>0</td><td>0</td><td>1</td><td class="out one">1</td><td class="zero">0</td></tr>
+      <tr><td>0</td><td>1</td><td>0</td><td class="out one">1</td><td class="zero">0</td></tr>
+      <tr><td>0</td><td>1</td><td>1</td><td class="out zero">0</td><td class="one">1</td></tr>
+      <tr><td>1</td><td>0</td><td>0</td><td class="out one">1</td><td class="zero">0</td></tr>
+      <tr><td>1</td><td>0</td><td>1</td><td class="out zero">0</td><td class="one">1</td></tr>
+      <tr><td>1</td><td>1</td><td>0</td><td class="out zero">0</td><td class="one">1</td></tr>
+      <tr class="hl"><td>1</td><td>1</td><td>1</td><td class="out one">1</td><td class="one">1</td></tr>
+    </table></div>
+  </div>
+  <div>
+    <div class="formula" style="margin-top:0">Sum = A ⊕ B ⊕ Cin<small>1 when an odd number of inputs are 1 ("parity")</small></div>
+    <div class="formula">Cout = A·B + Cin·(A ⊕ B)<small>1 when two or more inputs are 1 ("majority"). + means OR.</small></div>
+    <p style="font-size:15px">Quick read of the table: count the 1s in the row. <b>0 ones</b> gives 00, <b>1 one</b> gives 01, <b>2 ones</b> gives 10, <b>3 ones</b> gives 11 (written as Cout Sum).</p>
+  </div>
+</div>
+
+<h3>Build it from two half adders + one OR gate</h3>
+<figure class="diagram">
+  <svg viewBox="0 0 620 200" width="620" role="img" aria-label="Full adder built from two half adders and an OR gate">
+    <text x="14" y="54" class="b">A</text>
+    <text x="14" y="94" class="b">B</text>
+    <text x="8" y="154" class="b">Cin</text>
+    <path class="w" d="M34 50 H110 M34 90 H110"/>
+    <path class="w" d="M40 150 H280 V130 H300"/>
+    <rect x="110" y="30" width="110" height="80" rx="8" class="box-b"/>
+    <text x="126" y="66" class="b">Half adder 1</text>
+    <text x="126" y="86" class="m dim">A + B</text>
+    <text x="198" y="54" class="m">S</text>
+    <text x="198" y="94" class="m">C</text>
+    <path class="w" d="M220 50 H260 V90 H300"/>
+    <text x="228" y="44" class="m dim">s1</text>
+    <rect x="300" y="70" width="110" height="80" rx="8" class="box-b"/>
+    <text x="316" y="106" class="b">Half adder 2</text>
+    <text x="316" y="126" class="m dim">s1 + Cin</text>
+    <text x="388" y="94" class="m">S</text>
+    <text x="388" y="134" class="m">C</text>
+    <path class="w-hi" d="M410 90 H540"/>
+    <text x="548" y="94" class="hi">Sum</text>
+    <path class="w" d="M410 130 H430 V132 H456"/>
+    <text x="414" y="124" class="m dim">c2</text>
+    <path class="w" d="M220 90 H240 V185 H430 V158 H456"/>
+    <text x="244" y="180" class="m dim">c1</text>
+    <path class="box" d="M450 120 Q470 145 450 170 Q495 170 510 145 Q495 120 450 120 Z"/>
+    <text x="462" y="149" class="m">OR</text>
+    <path class="w-hi" d="M510 145 H540"/>
+    <text x="548" y="149" class="hi">Cout</text>
+  </svg>
+  <figcaption>HA1 adds A + B. HA2 adds that result to Cin. The OR gate combines the two possible carries.</figcaption>
+</figure>
+
+<div class="callout tip"><b>Why is a plain OR safe here?</b><p>c1 and c2 can never both be 1. If A = B = 1, then c1 = 1, but s1 = 0, so c2 = s1·Cin = 0. Only one carry can happen at a time, so OR gives the right answer. XOR would work too.</p></div>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · full_adder.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> full_adder (</td><td class="n">A new block called <code>full_adder</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> a, b, cin,</td><td class="n">Three inputs, declared on one line.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> sum, cout</td><td class="n">Two outputs.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> s1, c1, c2;</td><td class="n">Three <em>internal</em> wires that connect parts inside the block. They are not pins.</td></tr>
+    <tr><td class="c">  half_adder ha1 (.a(a),  .b(b),</td><td class="n">Place a copy (an <b>instance</b>) of half_adder and name it <code>ha1</code>. <code>.a(a)</code> means "plug my wire a into its pin a".</td></tr>
+    <tr><td class="c">                 .sum(s1), .cout(c1));</td><td class="n">Its sum output goes onto wire s1, and its carry onto wire c1.</td></tr>
+    <tr><td class="c">  half_adder ha2 (.a(s1), .b(cin),</td><td class="n">A second half adder, <code>ha2</code>, adds s1 and cin.</td></tr>
+    <tr><td class="c">                 .sum(sum), .cout(c2));</td><td class="n">Its sum is the final answer. Its carry goes on wire c2.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> cout = c1 | c2;</td><td class="n"><code>|</code> is OR. A carry from either half adder becomes the final carry.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h2>3. 4-bit ripple-carry adder</h2>
+<p>Put four full adders in a row. Each carry-out plugs into the next adder's carry-in. Bit 0 (the rightmost adder) gets <code>cin</code>, which is usually 0.</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 650 160" width="650" role="img" aria-label="Four full adders chained; the carry travels from FA0 on the right to FA3 on the left">
+    <g>
+      <rect x="40" y="45" width="100" height="56" rx="8" class="box"/><text x="72" y="78" class="b">FA3</text>
+      <rect x="190" y="45" width="100" height="56" rx="8" class="box"/><text x="222" y="78" class="b">FA2</text>
+      <rect x="340" y="45" width="100" height="56" rx="8" class="box"/><text x="372" y="78" class="b">FA1</text>
+      <rect x="490" y="45" width="100" height="56" rx="8" class="box"/><text x="522" y="78" class="b">FA0</text>
+    </g>
+    <path class="w" d="M70 18 V45 M110 18 V45 M220 18 V45 M260 18 V45 M370 18 V45 M410 18 V45 M520 18 V45 M560 18 V45"/>
+    <text x="56" y="14" class="m">a3</text><text x="98" y="14" class="m">b3</text>
+    <text x="206" y="14" class="m">a2</text><text x="248" y="14" class="m">b2</text>
+    <text x="356" y="14" class="m">a1</text><text x="398" y="14" class="m">b1</text>
+    <text x="506" y="14" class="m">a0</text><text x="548" y="14" class="m">b0</text>
+    <path class="w" d="M90 101 V130 M240 101 V130 M390 101 V130 M540 101 V130"/>
+    <text x="76" y="148" class="m">sum3</text><text x="226" y="148" class="m">sum2</text><text x="376" y="148" class="m">sum1</text><text x="526" y="148" class="m">sum0</text>
+    <path class="w-hi" d="M632 73 H590 M490 73 H440 M340 73 H290 M190 73 H140 M40 73 H8"/>
+    <polygon points="440,73 450,68 450,78" class="fill-hi"/>
+    <polygon points="290,73 300,68 300,78" class="fill-hi"/>
+    <polygon points="140,73 150,68 150,78" class="fill-hi"/>
+    <polygon points="8,73 18,68 18,78" class="fill-hi"/>
+    <text x="600" y="66" class="m hi">cin</text>
+    <text x="455" y="66" class="m hi">c1</text>
+    <text x="305" y="66" class="m hi">c2</text>
+    <text x="155" y="66" class="m hi">c3</text>
+    <text x="4" y="66" class="m hi">cout</text>
+  </svg>
+  <figcaption>The carry (copper) moves right to left, one adder at a time. That movement is the "ripple".</figcaption>
+</figure>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · adder4.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> adder4 (</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> [3:0] a, b,</td><td class="n"><code>[3:0]</code> makes a <b>4-wire bus</b>: a[3], a[2], a[1], a[0]. Always written as [MSB:LSB].</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> cin,</td><td class="n">A single carry-in wire.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> [3:0] sum,</td><td class="n">A 4-bit answer.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> cout</td><td class="n">The carry out of the last adder.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> c1, c2, c3;</td><td class="n">The carries between the adders.</td></tr>
+    <tr><td class="c">  full_adder fa0(.a(a[0]),.b(b[0]),.cin(cin),</td><td class="n">Bit 0 (LSB) takes the outside carry-in.</td></tr>
+    <tr><td class="c">                 .sum(sum[0]),.cout(c1));</td><td class="n">Its carry-out goes to c1.</td></tr>
+    <tr><td class="c">  full_adder fa1(.a(a[1]),.b(b[1]),.cin(c1),</td><td class="n">Bit 1 takes c1 as its carry-in.</td></tr>
+    <tr><td class="c">                 .sum(sum[1]),.cout(c2));</td><td class="n"></td></tr>
+    <tr><td class="c">  full_adder fa2(.a(a[2]),.b(b[2]),.cin(c2),</td><td class="n">Same pattern for bit 2.</td></tr>
+    <tr><td class="c">                 .sum(sum[2]),.cout(c3));</td><td class="n"></td></tr>
+    <tr><td class="c">  full_adder fa3(.a(a[3]),.b(b[3]),.cin(c3),</td><td class="n">Bit 3 (MSB).</td></tr>
+    <tr><td class="c">                 .sum(sum[3]),.cout(cout));</td><td class="n">The last carry leaves the block as <code>cout</code>.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h3>Worked example: 0111 + 0001 (7 + 1)</h3>
+<div class="stepper" data-stepper>
+  <div class="stage"><p><b>Bit 0:</b> 1 + 1 + cin 0 = 2 = <code>10</code>. Write <b>sum0 = 0</b> and carry <b>c1 = 1</b>.</p></div>
+  <div class="stage"><p><b>Bit 1:</b> 1 + 0 + c1 1 = 2 = <code>10</code>. Write <b>sum1 = 0</b> and carry <b>c2 = 1</b>. The carry is rippling.</p></div>
+  <div class="stage"><p><b>Bit 2:</b> 1 + 0 + c2 1 = 2 = <code>10</code>. Write <b>sum2 = 0</b> and carry <b>c3 = 1</b>.</p></div>
+  <div class="stage"><p><b>Bit 3:</b> 0 + 0 + c3 1 = 1 = <code>01</code>. Write <b>sum3 = 1</b> and carry <b>cout = 0</b>.</p></div>
+  <div class="stage"><p><b>Answer:</b> sum = <code>1000</code> (8), cout = 0. The carry travelled through bits 0, 1 and 2 before bit 3 could settle.</p></div>
+</div>
+
+<h3>Lab testbench vectors (what the lab checks)</h3>
+<div class="scroll"><table>
+  <tr><th>a + b</th><th>sum</th><th>cout</th><th>What it tests</th></tr>
+  <tr><td><code>0001 + 0001</code></td><td><code>0010</code></td><td>0</td><td>The simplest carry</td></tr>
+  <tr><td><code>0111 + 0001</code></td><td><code>1000</code></td><td>0</td><td>A carry that ripples through bits 0–2</td></tr>
+  <tr><td><code>1111 + 0001</code></td><td><code>0000</code></td><td>1</td><td>A carry that ripples through all 4 bits and out</td></tr>
+  <tr><td><code>1000 + 1000</code></td><td><code>0000</code></td><td>1</td><td>An immediate carry-out with no ripple</td></tr>
+</table></div>
+
+<pre class="plain code" style="border-radius:var(--radius)"><span class="com"># compile all files together, run, then open the waveform</span>
+iverilog -o fa.vvp half_adder.v full_adder.v adder4.v adder4_tb.v
+vvp fa.vvp
+gtkwave adder4.vcd</pre>
+
+<h3>The problem: ripple is slow</h3>
+<p>Each full adder takes about <strong>2 gate delays</strong> to produce its carry, and every bit has to wait for the bit on its right. So total delay grows in step with the number of bits:</p>
+<div class="formula">Ripple delay ≈ 2 × n gate delays<small>4-bit gives 8 delays · 16-bit gives 32 · 32-bit gives 64 · 64-bit gives 128</small></div>
+
+<h2>4. Carry look-ahead adder (CLA)</h2>
+<p>The fix: <strong>don't wait for the carry. Predict it.</strong> For every bit, ask two quick questions. Both can be answered right away, because they only use that bit's own A and B.</p>
+
+<dl class="terms">
+  <div class="term"><dt>G = A · B &nbsp;(Generate)</dt><dd>"This bit <b>makes</b> a carry on its own." Both inputs are 1, so a carry comes out no matter what came in.</dd></div>
+  <div class="term"><dt>P = A ⊕ B &nbsp;(Propagate)</dt><dd>"This bit <b>passes along</b> any carry it receives." Exactly one input is 1, so a carry coming in goes straight out.</dd></div>
+</dl>
+<div class="formula">c(i+1) = G(i) + P(i) · c(i)<small>A carry comes out if this bit generates one, OR if it propagates the incoming one.</small></div>
+
+<p>Now substitute each equation into the next. <b>Every carry becomes a formula in the G's, P's and the first carry-in (c0) only.</b> No carry has to wait for another:</p>
+<div class="formula" style="text-align:left">c1 = G0 + P0·c0<br>c2 = G1 + P1·G0 + P1·P0·c0<br>c3 = G2 + P2·G1 + P2·P1·G0 + P2·P1·P0·c0<br>c4 = G3 + P3·G2 + P3·P2·G1 + P3·P2·P1·G0 + P3·P2·P1·P0·c0<br>sum(i) = P(i) ⊕ c(i)</div>
+
+<h3>Ripple vs look-ahead: when does each carry arrive?</h3>
+<figure class="diagram">
+  <svg viewBox="0 0 560 310" width="560" role="img" aria-label="Timing chart: ripple carries arrive at 2, 4, 6 and 8 gate delays; CLA carries all arrive at about 3 gate delays">
+    <g class="grid">
+      <path d="M80 20 V290 M130 20 V290 M180 20 V290 M230 20 V290 M280 20 V290 M330 20 V290 M380 20 V290 M430 20 V290 M480 20 V290 M530 20 V290"/>
+    </g>
+    <text x="10" y="16" class="b">Ripple-carry</text>
+    <text x="40" y="42" class="m">c1</text><path class="w-hi" d="M80 40 H180 V26 H530"/>
+    <text x="40" y="70" class="m">c2</text><path class="w-hi" d="M80 68 H280 V54 H530"/>
+    <text x="40" y="98" class="m">c3</text><path class="w-hi" d="M80 96 H380 V82 H530"/>
+    <text x="30" y="126" class="m">cout</text><path class="w-hi" d="M80 124 H480 V110 H530"/>
+    <text x="10" y="160" class="b">Look-ahead</text>
+    <text x="40" y="186" class="m">c1</text><path class="w-g" d="M80 184 H230 V170 H530"/>
+    <text x="40" y="214" class="m">c2</text><path class="w-g" d="M80 212 H230 V198 H530"/>
+    <text x="40" y="242" class="m">c3</text><path class="w-g" d="M80 240 H230 V226 H530"/>
+    <text x="30" y="270" class="m">cout</text><path class="w-g" d="M80 268 H230 V254 H530"/>
+    <g>
+      <text x="76" y="305" class="m dim">0</text><text x="126" y="305" class="m dim">1</text><text x="176" y="305" class="m dim">2</text>
+      <text x="226" y="305" class="m dim">3</text><text x="276" y="305" class="m dim">4</text><text x="326" y="305" class="m dim">5</text>
+      <text x="376" y="305" class="m dim">6</text><text x="426" y="305" class="m dim">7</text><text x="476" y="305" class="m dim">8</text>
+      <text x="520" y="305" class="m dim">9</text>
+    </g>
+  </svg>
+  <figcaption>Time in gate delays for the 1111 + 0001 case. Ripple carries rise one after another in a staircase. That is what you'll see in GTKWave. CLA carries all rise together, after about 3 delays (1 for G/P, 2 for the AND-OR carry logic). The CLA numbers are approximate.</figcaption>
+</figure>
+
+<div class="scroll"><table>
+  <tr><th></th><th>Ripple-carry</th><th>Carry look-ahead</th></tr>
+  <tr><td>Speed</td><td>Slow: delay grows with the number of bits</td><td>Fast: all carries are computed at once</td></tr>
+  <tr><td>Hardware</td><td>Small and simple</td><td>More gates, and very wide gates for large n</td></tr>
+  <tr><td>Used in</td><td>Tiny or low-speed designs</td><td>Real CPUs (usually as grouped or hybrid designs such as Kogge-Stone or Brent-Kung)</td></tr>
+</table></div>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · cla4.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> cla4 (</td><td class="n">A 4-bit carry look-ahead adder.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> [3:0] a, b,</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> cin,</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> [3:0] sum,</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> cout</td><td class="n"></td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> [3:0] g = a &amp; b;</td><td class="n">Generate for all 4 bits at once. Bitwise AND works on each pair of bits.</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> [3:0] p = a ^ b;</td><td class="n">Propagate for all 4 bits (bitwise XOR).</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> c1, c2, c3, c4;</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> c1 = g[0] | (p[0] &amp; cin);</td><td class="n">c1 = G0 + P0·c0</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> c2 = g[1] | (p[1] &amp; g[0])</td><td class="n">c2 is written out in full, so it does not wait for c1.</td></tr>
+    <tr><td class="c">            | (p[1] &amp; p[0] &amp; cin);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> c3 = g[2] | (p[2] &amp; g[1])</td><td class="n">The same idea, one level deeper.</td></tr>
+    <tr><td class="c">            | (p[2] &amp; p[1] &amp; g[0])</td><td class="n"></td></tr>
+    <tr><td class="c">            | (p[2] &amp; p[1] &amp; p[0] &amp; cin);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> c4 = g[3] | (p[3] &amp; g[2])</td><td class="n">The final carry out.</td></tr>
+    <tr><td class="c">            | (p[3] &amp; p[2] &amp; g[1])</td><td class="n"></td></tr>
+    <tr><td class="c">            | (p[3] &amp; p[2] &amp; p[1] &amp; g[0])</td><td class="n"></td></tr>
+    <tr><td class="c">            | (p[3] &amp; p[2] &amp; p[1] &amp; p[0] &amp; cin);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> sum  = p ^ {c3, c2, c1, cin};</td><td class="n"><code>{ }</code> joins wires into a bus. Each sum bit = P(i) XOR the carry into that bit.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> cout = c4;</td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<p style="font-size:15px">Lab 1B adds overflow flags to this adder (<code>cf = c4</code>, <code>of = c3 ^ c4</code>). See <a href="m1-06-overflow.html">Adder-subtractor &amp; overflow</a>.</p>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>cout is always 0?</b> You probably wrote <code>c1 &amp; c2</code> instead of <code>c1 | c2</code>.</li>
+  <li><b>Sum bits in reverse order?</b> <code>a[0]</code> is the LSB (rightmost bit).</li>
+  <li><b>Last sum bit shows X (unknown)?</b> fa3's <code>cin</code> is not wired up.</li>
+  <li><b>Everything happens at time 0 in the waveform?</b> Your testbench has no <code>#10</code> delays between test cases.</li>
+  <li><b>iverilog says "unknown module"?</b> Pass <em>all</em> the .v files on the command line.</li>
+  <li>Don't call a ripple adder "fast". Delay grows with every bit you add.</li>
+  <li>You can't chain half adders, because they have no carry-in.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>A = 1, B = 1, Cin = 1. What are Sum and Cout?</summary><div class="a"><p>There are three 1s. 3 = <code>11</code>, so <b>Sum = 1, Cout = 1</b>.</p></div></details>
+  <details class="q"><summary>How many gate delays does a 16-bit ripple adder take (about 2 per stage)?</summary><div class="a"><p>2 × 16 = <b>32 gate delays</b>.</p></div></details>
+  <details class="q"><summary>For one bit with A = 1, B = 0, what are G and P? What does that mean?</summary><div class="a"><p>G = 1·0 = <b>0</b> and P = 1⊕0 = <b>1</b>. This bit won't create a carry by itself, but it will <b>pass along</b> any carry that comes in.</p></div></details>
+  <details class="q"><summary>Use CLA equations: a = 1011, b = 0110, cin = 0. Find g, p, the carries, sum and cout.</summary><div class="a">
+    <p>g = a &amp; b = <code>0010</code>, p = a ^ b = <code>1101</code></p>
+    <p>c1 = g0 + p0·c0 = 0 + 1·0 = <b>0</b><br>c2 = g1 + p1·c1 = 1 + 0 = <b>1</b><br>c3 = g2 + p2·c2 = 0 + 1·1 = <b>1</b><br>c4 = g3 + p3·c3 = 0 + 1·1 = <b>1</b></p>
+    <p>sum = p ⊕ {c3,c2,c1,c0} = <code>1101 ⊕ 1100</code> = <b><code>0001</code></b>, cout = <b>1</b>.<br>Check: 11 + 6 = 17 = <code>1 0001</code> ✓</p>
+  </div></details>
+  <details class="q"><summary>Why is it safe to use OR (not XOR) to combine the two carries in a full adder?</summary><div class="a"><p>The two half-adder carries can never be 1 together. If A = B = 1, the first sum s1 is 0, so the second carry (s1·Cin) is 0.</p></div></details>
+  <details class="q"><summary>Why does subtraction need an adder?</summary><div class="a"><p>A − B = A + (~B) + 1. Flip B's bits, set the carry-in to 1, and add. The same adder does both jobs. See <a href="m1-06-overflow.html">the adder-subtractor</a>.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=aLUY-s7LSns" target="_blank" rel="noopener"><i class="play"></i><span><b>Half Adder</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=RK3P9L2ZXk4" target="_blank" rel="noopener"><i class="play"></i><span><b>Full Adder</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=Z_DYRgtAXfw" target="_blank" rel="noopener"><i class="play"></i><span><b>Full Adder using Half Adder</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=SQKdnxysXnw" target="_blank" rel="noopener"><i class="play"></i><span><b>Carry Look Ahead Adder (CLA) Explained</b><small>ALL ABOUT ELECTRONICS</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

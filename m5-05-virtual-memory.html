@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Virtual Memory</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+<style>.ann td.n code{background:color-mix(in srgb,var(--code-ink) 14%,transparent);color:var(--code-ink)}</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 5 / Virtual memory</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 5 · Memory Hierarchy &amp; Cache <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>Virtual memory, page tables &amp; the TLB</h1>
+  <p class="idea">Every program believes it has a huge, private memory that starts at address 0. These <strong>virtual addresses</strong> are translated, page by page, into <strong>physical addresses</strong> in real RAM. A <strong>page table</strong> stores the translations, and a small, fast cache called the <strong>TLB</strong> remembers the recent ones.</p>
+  <div class="analogy"><b>Think of it like this:</b> a big library with a catalogue. You ask for "shelf 3, book 42" (virtual address). The catalogue (page table) says shelf 3 is really kept in room 7 (physical page), so you fetch "room 7, book 42". You keep a sticky note of the last few lookups (TLB) so you rarely open the catalogue. If the catalogue says "in the warehouse" (on disk), a librarian must fetch it first: that is a page fault.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Virtual address (VA)</dt><dd>The address a program uses. Each program has its own virtual address space.</dd></div>
+  <div class="term"><dt>Physical address (PA)</dt><dd>The real location in RAM.</dd></div>
+  <div class="term"><dt>Page / frame</dt><dd>A fixed-size chunk (often 4 KB) of virtual memory is a <b>page</b>. The same-size chunk of RAM it lives in is a <b>frame</b> (physical page).</dd></div>
+  <div class="term"><dt>VPN / PPN</dt><dd>Virtual page number and physical page number: the "which page" part of each address.</dd></div>
+  <div class="term"><dt>Page table</dt><dd>A per-program table in RAM: entry number VPN holds that page's PPN and status bits. One entry is a <b>PTE</b>.</dd></div>
+  <div class="term"><dt>Page-table register</dt><dd>A CPU register holding the address of the current program's page table.</dd></div>
+  <div class="term"><dt>Page fault</dt><dd>The page is not in RAM (valid bit = 0). The OS must load it from disk.</dd></div>
+  <div class="term"><dt>TLB</dt><dd>Translation Lookaside Buffer: a small, fast cache of recent VPN → PPN translations.</dd></div>
+  <div class="term"><dt>MMU</dt><dd>Memory Management Unit: the CPU hardware that does the translation.</dd></div>
+</dl>
+
+<h2>1. Why virtual memory?</h2>
+<div class="scroll"><table>
+  <tr><th>Benefit</th><th>What it means</th></tr>
+  <tr><td><b>Isolation (protection)</b></td><td>Each program has its own page table, so it cannot even name another program's memory. A bug or attack in one cannot overwrite another.</td></tr>
+  <tr><td><b>Illusion of a large memory</b></td><td>Pages not in use can wait on disk. A program can be bigger than the RAM.</td></tr>
+  <tr><td><b>Relocation</b></td><td>A program can be loaded into any free frames. Its pages need not be next to each other, and it always sees the same virtual addresses.</td></tr>
+</table></div>
+<p style="font-size:15px">This is also a safety net for the "programs are data" idea of von Neumann machines: page protection bits can mark code pages read-only and data pages non-executable. See <a href="m3-01-von-neumann-harvard.html">von Neumann vs Harvard</a>.</p>
+
+<h2>2. Splitting the address</h2>
+<div class="formula">VA = VPN | page offset &nbsp;&nbsp;→&nbsp;&nbsp; PA = PPN | page offset<small>Only the page number is translated. The offset is copied unchanged. offset bits = log₂(page size): 4 KB = 2¹² bytes → 12 bits.</small></div>
+<p>A <b>32-bit</b> VA with 4 KB pages: offset = 12 bits, VPN = 32 − 12 = <b>20 bits</b>.</p>
+
+<h3>Worked translation</h3>
+<ol class="steps">
+  <li>16-bit VA, 4 KB pages → 12-bit offset, 4-bit VPN.</li>
+  <li>VA = <code>0x3A7F</code> = <code>0011 1010 0111 1111</code>. Each hex digit is 4 bits, so the offset is the last 3 hex digits.</li>
+  <li>VPN = <code>0x3</code>, offset = <code>0xA7F</code>.</li>
+  <li>The page table says VPN 3 → PPN <code>0x7</code>.</li>
+  <li>PA = PPN followed by the offset = <b><code>0x7A7F</code></b>.</li>
+</ol>
+<figure class="diagram">
+  <svg viewBox="0 0 660 250" width="660" role="img" aria-label="Virtual address 0x3A7F split into VPN 0x3 and offset 0xA7F, then physical address 0x7A7F built from PPN 0x7 and the same offset">
+<text x="42" y="22" class="b">Virtual address 0x3A7F</text>
+<rect x="42" y="30" width="36" height="30" class="box-hi"/>
+<text x="60" y="50" class="m" text-anchor="middle">0</text>
+<rect x="78" y="30" width="36" height="30" class="box-hi"/>
+<text x="96" y="50" class="m" text-anchor="middle">0</text>
+<rect x="114" y="30" width="36" height="30" class="box-hi"/>
+<text x="132" y="50" class="m" text-anchor="middle">1</text>
+<rect x="150" y="30" width="36" height="30" class="box-hi"/>
+<text x="168" y="50" class="m" text-anchor="middle">1</text>
+<rect x="186" y="30" width="36" height="30" class="box-g"/>
+<text x="204" y="50" class="m" text-anchor="middle">1</text>
+<rect x="222" y="30" width="36" height="30" class="box-g"/>
+<text x="240" y="50" class="m" text-anchor="middle">0</text>
+<rect x="258" y="30" width="36" height="30" class="box-g"/>
+<text x="276" y="50" class="m" text-anchor="middle">1</text>
+<rect x="294" y="30" width="36" height="30" class="box-g"/>
+<text x="312" y="50" class="m" text-anchor="middle">0</text>
+<rect x="330" y="30" width="36" height="30" class="box-g"/>
+<text x="348" y="50" class="m" text-anchor="middle">0</text>
+<rect x="366" y="30" width="36" height="30" class="box-g"/>
+<text x="384" y="50" class="m" text-anchor="middle">1</text>
+<rect x="402" y="30" width="36" height="30" class="box-g"/>
+<text x="420" y="50" class="m" text-anchor="middle">1</text>
+<rect x="438" y="30" width="36" height="30" class="box-g"/>
+<text x="456" y="50" class="m" text-anchor="middle">1</text>
+<rect x="474" y="30" width="36" height="30" class="box-g"/>
+<text x="492" y="50" class="m" text-anchor="middle">1</text>
+<rect x="510" y="30" width="36" height="30" class="box-g"/>
+<text x="528" y="50" class="m" text-anchor="middle">1</text>
+<rect x="546" y="30" width="36" height="30" class="box-g"/>
+<text x="564" y="50" class="m" text-anchor="middle">1</text>
+<rect x="582" y="30" width="36" height="30" class="box-g"/>
+<text x="600" y="50" class="m" text-anchor="middle">1</text>
+<text x="114" y="84" class="m hi" text-anchor="middle">VPN = 0x3</text>
+<text x="402" y="84" class="m g" text-anchor="middle">offset = 0xA7F (12 bits)</text>
+<rect x="34" y="100" width="160" height="34" rx="6" class="box-b"/>
+<text x="114" y="122" class="m" text-anchor="middle">page table[3] = 0x7</text>
+<path class="w-hi" d="M114 90 V100 M114 134 V160"/>
+<path class="w-g" d="M402 90 V160"/>
+<text x="410" y="130" class="m dim">copied unchanged</text>
+<rect x="42" y="180" width="36" height="30" class="box-b"/>
+<text x="60" y="200" class="m" text-anchor="middle">0</text>
+<rect x="78" y="180" width="36" height="30" class="box-b"/>
+<text x="96" y="200" class="m" text-anchor="middle">1</text>
+<rect x="114" y="180" width="36" height="30" class="box-b"/>
+<text x="132" y="200" class="m" text-anchor="middle">1</text>
+<rect x="150" y="180" width="36" height="30" class="box-b"/>
+<text x="168" y="200" class="m" text-anchor="middle">1</text>
+<rect x="186" y="180" width="36" height="30" class="box-g"/>
+<text x="204" y="200" class="m" text-anchor="middle">1</text>
+<rect x="222" y="180" width="36" height="30" class="box-g"/>
+<text x="240" y="200" class="m" text-anchor="middle">0</text>
+<rect x="258" y="180" width="36" height="30" class="box-g"/>
+<text x="276" y="200" class="m" text-anchor="middle">1</text>
+<rect x="294" y="180" width="36" height="30" class="box-g"/>
+<text x="312" y="200" class="m" text-anchor="middle">0</text>
+<rect x="330" y="180" width="36" height="30" class="box-g"/>
+<text x="348" y="200" class="m" text-anchor="middle">0</text>
+<rect x="366" y="180" width="36" height="30" class="box-g"/>
+<text x="384" y="200" class="m" text-anchor="middle">1</text>
+<rect x="402" y="180" width="36" height="30" class="box-g"/>
+<text x="420" y="200" class="m" text-anchor="middle">1</text>
+<rect x="438" y="180" width="36" height="30" class="box-g"/>
+<text x="456" y="200" class="m" text-anchor="middle">1</text>
+<rect x="474" y="180" width="36" height="30" class="box-g"/>
+<text x="492" y="200" class="m" text-anchor="middle">1</text>
+<rect x="510" y="180" width="36" height="30" class="box-g"/>
+<text x="528" y="200" class="m" text-anchor="middle">1</text>
+<rect x="546" y="180" width="36" height="30" class="box-g"/>
+<text x="564" y="200" class="m" text-anchor="middle">1</text>
+<rect x="582" y="180" width="36" height="30" class="box-g"/>
+<text x="600" y="200" class="m" text-anchor="middle">1</text>
+<text x="114" y="230" class="m b" text-anchor="middle">PPN = 0x7</text>
+<text x="402" y="230" class="m" text-anchor="middle">Physical address = 0x7A7F</text>
+</svg>
+  <figcaption>The top 4 bits (VPN) are swapped for the PPN using the page table. The low 12 bits pass straight through.</figcaption>
+</figure>
+
+<h2>3. The page table</h2>
+<figure class="diagram">
+  <svg viewBox="0 0 660 215" width="660" role="img" aria-label="The page-table register points to the page table; VPN 3 indexes a valid entry holding PPN 0x7; VPN 5 has valid bit 0, which causes a page fault">
+    <rect x="10" y="26" width="140" height="28" rx="6" class="box-b"/><text x="80" y="45" class="m" text-anchor="middle">page-table reg.</text>
+    <path class="w" d="M150 40 H192"/><polygon points="200,40 190,35 190,45" class="fill-ink"/>
+    <rect x="20" y="95" width="90" height="30" rx="6" class="box-hi"/><text x="65" y="115" class="m" text-anchor="middle">VPN = 3</text>
+    <path class="w-hi" d="M110 110 H192"/><polygon points="200,110 190,105 190,115" class="fill-hi"/>
+
+    <text x="212" y="34" class="m dim" text-anchor="middle">#</text>
+    <text x="239" y="34" class="m" text-anchor="middle">V</text>
+    <text x="304" y="34" class="m" text-anchor="middle">PPN</text>
+    <text x="384" y="34" class="m" text-anchor="middle">prot</text>
+    <text x="429" y="34" class="m" text-anchor="middle">D</text>
+    <text x="459" y="34" class="m" text-anchor="middle">Ref</text>
+    <rect x="200" y="40" width="274" height="160" class="box"/>
+    <rect x="200" y="100" width="274" height="20" class="box-hi"/>
+    <rect x="200" y="140" width="274" height="20" class="box-r"/>
+    <path class="grid" d="M200 60 H474 M200 80 H474 M200 100 H474 M200 120 H474 M200 140 H474 M200 160 H474 M200 180 H474 M224 40 V200 M254 40 V200 M354 40 V200 M414 40 V200 M444 40 V200"/>
+    <text x="212" y="54" class="m dim" text-anchor="middle">0</text><text x="212" y="74" class="m dim" text-anchor="middle">1</text>
+    <text x="212" y="94" class="m dim" text-anchor="middle">2</text><text x="212" y="114" class="m hi" text-anchor="middle">3</text>
+    <text x="212" y="134" class="m dim" text-anchor="middle">4</text><text x="212" y="154" class="m r" text-anchor="middle">5</text>
+    <text x="212" y="174" class="m dim" text-anchor="middle">6</text><text x="212" y="194" class="m dim" text-anchor="middle">7</text>
+    <text x="239" y="114" class="m" text-anchor="middle">1</text><text x="304" y="114" class="m" text-anchor="middle">0x7</text><text x="384" y="114" class="m" text-anchor="middle">R W -</text><text x="429" y="114" class="m" text-anchor="middle">0</text><text x="459" y="114" class="m" text-anchor="middle">1</text>
+    <text x="239" y="154" class="m" text-anchor="middle">0</text><text x="304" y="154" class="m dim" text-anchor="middle">on disk</text>
+
+    <path class="w-hi" d="M474 110 H512"/><polygon points="520,110 510,105 510,115" class="fill-hi"/>
+    <text x="526" y="106" class="m hi">PPN = 0x7</text>
+    <text x="526" y="122" class="m dim">+ offset = PA</text>
+    <path class="w" stroke-dasharray="4 3" d="M474 150 H512"/><polygon points="520,150 510,145 510,155" class="fill-ink"/>
+    <text x="526" y="154" class="r">V = 0: page fault</text>
+    <text x="526" y="172" class="dim">OS reads disk</text>
+  </svg>
+  <figcaption>The VPN is the <b>index</b> into the table; no tag is needed because every VPN has its own entry. Columns: V = valid, prot = read/write/execute permission, D = dirty, Ref = recently referenced.</figcaption>
+</figure>
+<dl class="terms">
+  <div class="term"><dt>Valid bit</dt><dd>1 = page is in RAM and PPN is usable. 0 = page is on disk (or not allocated).</dd></div>
+  <div class="term"><dt>Protection bits</dt><dd>Read / write / execute permissions. Breaking them causes a fault (e.g. writing to code).</dd></div>
+  <div class="term"><dt>Dirty bit</dt><dd>Set on a write. A dirty page must be saved to disk before its frame is reused.</dd></div>
+  <div class="term"><dt>Reference (use) bit</dt><dd>Set on any access; cleared now and then by the OS. Used to approximate LRU.</dd></div>
+</dl>
+
+<h2>4. Page faults, and why VM is designed differently</h2>
+<p>On a page fault the CPU stops the program and jumps to the OS. The OS picks a victim frame (saving it to disk if dirty), reads the wanted page from disk, updates the page table, and <b>restarts</b> the instruction.</p>
+<p>A disk read takes about <b>10 ms = 10,000,000 ns</b>, around 100,000× slower than DRAM. Because a miss is so expensive, VM makes choices that caches cannot afford:</p>
+<div class="scroll"><table>
+  <tr><th></th><th>CPU cache</th><th>Virtual memory</th></tr>
+  <tr><td>Unit</td><td>block (tens of bytes)</td><td>page (4 KB or more)</td></tr>
+  <tr><td>A miss is called</td><td>cache miss</td><td>page fault</td></tr>
+  <tr><td>Miss penalty</td><td>~100 ns (DRAM)</td><td>~10 ms (disk), ~100 µs (SSD)</td></tr>
+  <tr><td>Placement</td><td>direct-mapped or set-associative</td><td><b>fully associative</b>: any page in any frame, to cut faults</td></tr>
+  <tr><td>Finding the entry</td><td>index + tag compare</td><td>page table indexed by VPN (no search needed)</td></tr>
+  <tr><td>Replacement</td><td>simple hardware (LRU, FIFO)</td><td>OS software, <b>LRU approximated</b> with reference bits</td></tr>
+  <tr><td>Write policy</td><td>write-through or write-back</td><td>always <b>write-back</b> with a dirty bit (writing to disk on every write is far too slow)</td></tr>
+  <tr><td>Handled by</td><td>hardware only</td><td>hardware (MMU, TLB) + OS</td></tr>
+</table></div>
+
+<h3>How much does a page fault cost?</h3>
+<div class="formula">EAT = (1 − p) × t<sub>mem</sub> + p × t<sub>fault</sub><small>p = page-fault rate per access · EAT = effective access time</small></div>
+<p>With t<sub>mem</sub> = 100 ns, t<sub>fault</sub> = 10 ms = 10<sup>7</sup> ns and p = 0.0001 (1 in 10,000): EAT = 100 + 0.0001 × (10<sup>7</sup> − 100) ≈ <b>1,100 ns</b>. That is 11× slower than RAM alone, from just one fault in ten thousand accesses.</p>
+
+<h2>5. How big is a page table?</h2>
+<ol class="steps">
+  <li>32-bit VA, 4 KB pages → VPN = 20 bits → 2<sup>20</sup> = 1,048,576 entries.</li>
+  <li>Each PTE is 4 bytes → 2<sup>20</sup> × 4 = 2<sup>22</sup> bytes = <b>4 MB</b>.</li>
+  <li>That is <b>per program</b>. With 100 programs running, 400 MB of RAM would go to page tables.</li>
+  <li>For 64-bit machines (48-bit VA, 8-byte PTEs) a flat table would need 2<sup>36</sup> × 8 = <b>512 GB</b>. Impossible.</li>
+</ol>
+
+<h3>Fix: multi-level page tables</h3>
+<p>Split the VPN into pieces. The first piece indexes a small <b>outer table</b>; that entry points to an <b>inner table</b>; the second piece indexes it. Inner tables exist only for address ranges the program actually uses.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 660 245" width="660" role="img" aria-label="Two-level page table: the first 10 bits index the outer table, which points to an inner table; the next 10 bits index the inner table, which gives the frame; the 12-bit offset selects the byte in the frame">
+    <rect x="20" y="16" width="100" height="28" class="box-hi"/><text x="70" y="35" class="m" text-anchor="middle">P1 (10)</text>
+    <rect x="120" y="16" width="100" height="28" class="box-b"/><text x="170" y="35" class="m" text-anchor="middle">P2 (10)</text>
+    <rect x="220" y="16" width="120" height="28" class="box-g"/><text x="280" y="35" class="m" text-anchor="middle">offset (12)</text>
+
+    <path class="w-hi" d="M70 44 V72"/><polygon points="70,80 65,70 75,70" class="fill-hi"/>
+    <rect x="20" y="80" width="100" height="120" class="box"/>
+    <rect x="20" y="120" width="100" height="20" class="box-hi"/>
+    <path class="grid" d="M20 100 H120 M20 120 H120 M20 140 H120 M20 160 H120 M20 180 H120"/>
+    <text x="70" y="134" class="m" text-anchor="middle">→ inner</text>
+
+    <path class="w-hi" d="M120 130 H162"/><polygon points="170,130 160,125 160,135" class="fill-hi"/>
+
+    <path class="w" d="M200 44 V72"/><polygon points="200,80 195,70 205,70" class="fill-ink"/>
+    <rect x="170" y="80" width="100" height="120" class="box"/>
+    <rect x="170" y="160" width="100" height="20" class="box-b"/>
+    <path class="grid" d="M170 100 H270 M170 120 H270 M170 140 H270 M170 160 H270 M170 180 H270"/>
+    <text x="220" y="174" class="m" text-anchor="middle">PPN</text>
+
+    <path class="w" d="M270 170 H392"/><polygon points="400,170 390,165 390,175" class="fill-ink"/>
+    <path class="w" d="M300 44 V60 H460 V72"/><polygon points="460,80 455,70 465,70" class="fill-ink"/>
+    <rect x="400" y="80" width="120" height="120" class="box-b"/>
+    <rect x="400" y="110" width="120" height="10" class="box-g"/>
+    <text x="460" y="150" class="m" text-anchor="middle">4 KB frame</text>
+    <text x="530" y="119" class="m g">wanted byte</text>
+
+    <text x="70" y="218" class="b" text-anchor="middle">outer table</text><text x="70" y="235" class="m dim" text-anchor="middle">always present</text>
+    <text x="220" y="218" class="b" text-anchor="middle">inner table</text><text x="220" y="235" class="m dim" text-anchor="middle">only if used</text>
+    <text x="460" y="218" class="b" text-anchor="middle">physical frame</text><text x="460" y="235" class="m dim" text-anchor="middle">in RAM</text>
+  </svg>
+  <figcaption>A 32-bit VA split 10 | 10 | 12. Each table has 2¹⁰ entries × 4 B = 4 KB. A small program using 2 regions needs the outer table plus 2 inner tables = 12 KB instead of 4 MB.</figcaption>
+</figure>
+<p style="font-size:15px">x86-64 uses <b>4 levels</b> for a 48-bit VA: 9 + 9 + 9 + 9 + 12 bits. The price: one translation may need 4 extra memory reads. The TLB makes that rare.</p>
+
+<h2>6. The TLB: a cache for translations</h2>
+<p>Without help, every memory access would need <b>two</b> reads: one for the PTE, one for the data. The TLB is a small (tens to a few thousand entries), usually fully associative cache of recent VPN → PPN pairs, with their valid, dirty, reference and protection bits.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 660 330" width="660" role="img" aria-label="Flowchart: check the TLB; on a hit use the PPN; on a miss walk the page table; if the entry is valid load it into the TLB and use the PPN; otherwise take a page fault, load the page from disk and retry">
+    <rect x="230" y="10" width="200" height="34" rx="8" class="box"/><text x="330" y="32" class="m" text-anchor="middle">virtual address</text>
+    <path class="w" d="M330 44 V52"/><polygon points="330,60 325,50 335,50" class="fill-ink"/>
+    <polygon points="330,60 400,90 330,120 260,90" class="box-hi"/><text x="330" y="95" class="b" text-anchor="middle">TLB hit?</text>
+    <path class="w" d="M400 90 H462"/><polygon points="470,90 460,85 460,95" class="fill-ink"/>
+    <text x="412" y="82" class="m g">yes</text>
+    <rect x="470" y="66" width="180" height="54" rx="8" class="box-g"/>
+    <text x="560" y="88" class="b" text-anchor="middle">use the PPN</text><text x="560" y="108" class="m" text-anchor="middle">PA = PPN | offset</text>
+    <path class="w" d="M330 120 V142"/><polygon points="330,150 325,140 335,140" class="fill-ink"/>
+    <text x="338" y="138" class="m r">no</text>
+    <rect x="215" y="150" width="230" height="34" rx="8" class="box"/><text x="330" y="172" class="m" text-anchor="middle">walk the page table</text>
+    <path class="w" d="M330 184 V197"/><polygon points="330,205 325,195 335,195" class="fill-ink"/>
+    <polygon points="330,205 400,235 330,265 260,235" class="box-hi"/><text x="330" y="240" class="b" text-anchor="middle">PTE valid?</text>
+    <path class="w" d="M400 235 H462"/><polygon points="470,235 460,230 460,240" class="fill-ink"/>
+    <text x="412" y="227" class="m g">yes</text>
+    <rect x="470" y="217" width="180" height="36" rx="8" class="box"/><text x="560" y="240" class="m" text-anchor="middle">copy PTE into TLB</text>
+    <path class="w" d="M560 217 V128"/><polygon points="560,120 555,130 565,130" class="fill-ink"/>
+    <path class="w" d="M330 265 V282"/><polygon points="330,290 325,280 335,280" class="fill-ink"/>
+    <text x="338" y="282" class="m r">no</text>
+    <rect x="150" y="290" width="360" height="34" rx="8" class="box-r"/><text x="330" y="312" class="m" text-anchor="middle">page fault: OS loads page from disk</text>
+    <path class="w" d="M150 307 H40 V27 H222"/><polygon points="230,27 220,22 220,32" class="fill-ink"/>
+    <text x="50" y="170" class="m dim">retry the</text><text x="50" y="186" class="m dim">instruction</text>
+  </svg>
+  <figcaption>A TLB hit needs no page-table read at all. A TLB miss costs a page-table walk. Only an invalid PTE causes a (very slow) page fault.</figcaption>
+</figure>
+
+<div class="code">
+  <div class="code-head"><span><b>python-like pseudocode</b> · translate one address</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">vpn    = va &gt;&gt; <span class="num">12</span></td><td class="n">Drop the 12 offset bits to get the page number (4 KB pages).</td></tr>
+    <tr><td class="c">offset = va &amp; <span class="num">0xFFF</span></td><td class="n">Keep only the low 12 bits. <code>0xFFF</code> is twelve 1-bits.</td></tr>
+    <tr><td class="c"><span class="kw">if</span> vpn <span class="kw">in</span> tlb:</td><td class="n">TLB hit: fast path.</td></tr>
+    <tr><td class="c">    ppn = tlb[vpn]</td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">else</span>:</td><td class="n">TLB miss.</td></tr>
+    <tr><td class="c">    pte = page_table[vpn]</td><td class="n">Read the entry from RAM (the page-table walk).</td></tr>
+    <tr><td class="c">    <span class="kw">if not</span> pte.valid:</td><td class="n">Page not in RAM.</td></tr>
+    <tr><td class="c">        os_handle_page_fault(vpn)</td><td class="n">OS loads it from disk and fixes the table …</td></tr>
+    <tr><td class="c">        <span class="kw">return</span> retry()</td><td class="n">… then the instruction runs again from the start.</td></tr>
+    <tr><td class="c">    ppn = pte.ppn</td><td class="n"></td></tr>
+    <tr><td class="c">    tlb.add(vpn, ppn)</td><td class="n">Remember it (evicting an old TLB entry if full).</td></tr>
+    <tr><td class="c">pa = (ppn &lt;&lt; <span class="num">12</span>) | offset</td><td class="n">Shift the PPN up 12 places and glue the offset back on. <code>|</code> is bitwise OR.</td></tr>
+  </table>
+</div>
+
+<h3>Effective access time with a TLB</h3>
+<div class="formula">EAT = h × (t<sub>TLB</sub> + t<sub>mem</sub>) + (1 − h) × (t<sub>TLB</sub> + 2 × t<sub>mem</sub>)<small>h = TLB hit rate. On a miss, one extra memory read fetches the PTE (single-level table, no page fault).</small></div>
+<ol class="steps">
+  <li>t<sub>TLB</sub> = 20 ns, t<sub>mem</sub> = 100 ns, h = 98%.</li>
+  <li>Hit: 20 + 100 = 120 ns. Miss: 20 + 100 + 100 = 220 ns.</li>
+  <li>EAT = 0.98 × 120 + 0.02 × 220 = 117.6 + 4.4 = <b>122 ns</b>.</li>
+  <li>Without a TLB every access costs 2 × 100 = <b>200 ns</b>. The TLB saves about 39%.</li>
+</ol>
+
+<ol class="flow arrows">
+  <li><b>Split VA</b>VPN | offset</li>
+  <li><b>TLB</b>hit → PPN</li>
+  <li><b>Page table</b>on TLB miss</li>
+  <li><b>Page fault</b>only if PTE invalid</li>
+  <li><b>Build PA</b>PPN | offset</li>
+</ol>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>The <b>offset is never translated</b>. Only the VPN changes.</li>
+  <li>Offset bits come from the <b>page size</b>, not the memory size. 4 KB → 12 bits, 8 KB → 13 bits.</li>
+  <li>A <b>TLB miss is not a page fault</b>. A TLB miss just means a page-table walk; a page fault means the page is on disk.</li>
+  <li>Page-table size = number of entries (2<sup>VPN bits</sup>) × PTE size. Don't use the physical memory size.</li>
+  <li>The page table is <b>per process</b>; the page-table register changes on every process switch.</li>
+  <li>VM uses write-back (dirty bit), never write-through, because disk writes are far too slow.</li>
+  <li>With hex, each digit is 4 bits: a 12-bit offset is exactly the last 3 hex digits.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>32-bit VA 0x12345678, 4 KB pages. Find VPN and offset. If VPN maps to PPN 0xABC, what is the PA?</summary><div class="a"><p>Offset = last 3 hex digits = <b>0x678</b>. VPN = <b>0x12345</b>. PA = PPN then offset = <b>0x00ABC678</b>.</p></div></details>
+  <details class="q"><summary>16-bit VA 0xBEEF, 4 KB pages, and the page table maps VPN 0xB → PPN 0x2. Find the PA.</summary><div class="a"><p>VPN = <b>0xB</b>, offset = <b>0xEEF</b>. PA = <b>0x2EEF</b>.</p></div></details>
+  <details class="q"><summary>32-bit VA, 8 KB pages, 4-byte PTEs. How big is a flat page table?</summary><div class="a"><p>8 KB = 2<sup>13</sup> → 13-bit offset → VPN = 19 bits. Size = 2<sup>19</sup> × 4 = 2,097,152 bytes = <b>2 MB</b>.</p></div></details>
+  <details class="q"><summary>48-bit VA, 4 KB pages, 8-byte PTEs. How big would a flat page table be?</summary><div class="a"><p>VPN = 48 − 12 = 36 bits. 2<sup>36</sup> × 8 = 2<sup>39</sup> bytes = <b>512 GB</b>. That is why multi-level tables are used.</p></div></details>
+  <details class="q"><summary>TLB lookup 10 ns, memory access 80 ns, TLB hit rate 90%. Find the effective access time.</summary><div class="a"><p>Hit: 10 + 80 = 90 ns. Miss: 10 + 80 + 80 = 170 ns. EAT = 0.9 × 90 + 0.1 × 170 = 81 + 17 = <b>98 ns</b>.</p></div></details>
+  <details class="q"><summary>RAM access 100 ns, page-fault service 10 ms. What fault rate p keeps EAT at or below 110 ns?</summary><div class="a"><p>100 + p × (10<sup>7</sup> − 100) ≤ 110 → p ≤ 10 ÷ 9,999,900 ≈ <b>1 × 10<sup>−6</sup></b>: at most about one fault per million accesses.</p></div></details>
+  <details class="q"><summary>Why does virtual memory use fully associative placement and write-back, when caches often don't?</summary><div class="a"><p>A page fault costs milliseconds, about 100,000× a DRAM read. Anything that avoids even a few faults is worth it: letting a page go in <b>any</b> frame removes conflict faults, and the OS can afford smart (software) choices. Writing to disk on every write would be hopelessly slow, so pages are written back only when evicted, and only if dirty.</p></div></details>
+  <details class="q"><summary>A TLB miss happens, and the PTE is valid. Is this a page fault?</summary><div class="a"><p><b>No.</b> The hardware (or OS) reads the PTE from the page table, loads it into the TLB and continues. It costs an extra memory read or two, not a disk read.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=fGP6VHxqkIM" target="_blank" rel="noopener"><i class="play"></i><span><b>Virtual Memory Explained (including Paging)</b><small>BitLemon</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=_J3mTYzSKMQ" target="_blank" rel="noopener"><i class="play"></i><span><b>Virtual Memory, Page Tables And Translation Lookaside Buffers Explained</b><small>Cory Maklin</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=95QpHJX55bM" target="_blank" rel="noopener"><i class="play"></i><span><b>Virtual Memory: 11 TLB Example</b><small>David Black-Schaffer</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

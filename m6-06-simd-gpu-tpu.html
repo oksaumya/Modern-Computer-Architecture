@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SIMD, GPUs &amp; TPUs</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 6 / SIMD, GPU &amp; TPU</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 6 · Parallelism &amp; Modern Architectures <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>SIMD, GPUs &amp; AI hardware</h1>
+  <p class="idea">Much heavy computing, like graphics, matrix maths and AI, repeats the <strong>same operation on huge amounts of data</strong>. SIMD does that inside a CPU core, a few numbers at a time. A GPU does it with thousands of simple cores. A TPU is a chip built only for it. This page is an overview.</p>
+  <div class="analogy"><b>Think of it like this:</b> stamping 1,000 envelopes. One person with one stamp is the plain CPU. One person with a stamp that hits 8 envelopes at once is SIMD. A hall of 1,000 people each stamping their own envelope is a GPU. A machine that only stamps envelopes is a TPU.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Flynn's taxonomy</dt><dd>A 1966 classification of computers by how many instruction streams and data streams they handle.</dd></div>
+  <div class="term"><dt>SIMD</dt><dd>Single Instruction, Multiple Data: one operation applied to several numbers at once.</dd></div>
+  <div class="term"><dt>Vector register</dt><dd>An extra-wide register (128, 256 or 512 bits) holding several numbers side by side.</dd></div>
+  <div class="term"><dt>Lane</dt><dd>One number's slot inside a vector register. A 256-bit register has 8 lanes of 32 bits.</dd></div>
+  <div class="term"><dt>SIMT</dt><dd>Single Instruction, Multiple Threads: NVIDIA's name for the GPU model. Many threads run the same code on different data.</dd></div>
+  <div class="term"><dt>Kernel (GPU)</dt><dd>The small function that every GPU thread runs. (Not the OS kernel.)</dd></div>
+  <div class="term"><dt>Thread / block / grid</dt><dd>CUDA's three-level grouping: threads form blocks, and blocks form a grid.</dd></div>
+  <div class="term"><dt>Warp</dt><dd>A group of GPU threads that the hardware schedules together and runs in lockstep. See section 4.</dd></div>
+  <div class="term"><dt>HBM</dt><dd>High Bandwidth Memory: stacked DRAM chips placed right next to the processor.</dd></div>
+  <div class="term"><dt>BLAS</dt><dd>Basic Linear Algebra Subprograms: a standard, heavily tuned library of vector and matrix maths.</dd></div>
+  <div class="term"><dt>TPU</dt><dd>Tensor Processing Unit: Google's ASIC for neural-network maths.</dd></div>
+  <div class="term"><dt>Chiplet</dt><dd>A small die that is combined with other dies in one package to make a larger chip.</dd></div>
+</dl>
+
+<h2>1. Flynn's taxonomy</h2>
+<figure class="diagram">
+  <svg viewBox="0 0 560 270" width="560" role="img" aria-label="Flynn's taxonomy grid: SISD, SIMD, MISD, MIMD by single or multiple instruction and data streams">
+    <text x="250" y="20" class="b">Data streams</text>
+    <text x="175" y="44" class="m dim">single</text><text x="385" y="44" class="m dim">multiple</text>
+    <text x="10" y="150" class="b">Instr.</text>
+    <text x="60" y="104" class="m dim">single</text><text x="60" y="210" class="m dim">multiple</text>
+    <rect x="120" y="54" width="200" height="96" rx="8" class="box"/>
+    <text x="134" y="80" class="b">SISD</text><text x="134" y="102" class="m">one ordinary core</text><text x="134" y="120" class="m dim">(the MIPS CPU of</text><text x="134" y="136" class="m dim">Modules 3–4)</text>
+    <rect x="330" y="54" width="200" height="96" rx="8" class="box-g"/>
+    <text x="344" y="80" class="b">SIMD</text><text x="344" y="102" class="m">vector extensions,</text><text x="344" y="120" class="m">GPUs (as SIMT)</text>
+    <rect x="120" y="160" width="200" height="96" rx="8" class="box"/>
+    <text x="134" y="186" class="b">MISD</text><text x="134" y="208" class="m">rare; e.g. redundant</text><text x="134" y="226" class="m">fault-tolerant systems</text>
+    <rect x="330" y="160" width="200" height="96" rx="8" class="box-b"/>
+    <text x="344" y="186" class="b">MIMD</text><text x="344" y="208" class="m">multicore chips,</text><text x="344" y="226" class="m">clusters</text>
+  </svg>
+  <figcaption>SI/MI = single or multiple instruction streams; SD/MD = single or multiple data streams. Multicore (earlier pages) is MIMD; this page is about SIMD.</figcaption>
+</figure>
+
+<h2>2. SIMD: one operation, many numbers</h2>
+<figure class="diagram">
+  <svg viewBox="0 0 620 230" width="620" role="img" aria-label="Scalar: four additions take four steps. SIMD: four additions in one step using wide registers">
+    <text x="20" y="20" class="b">Scalar: 4 steps</text>
+    <rect x="20" y="36" width="230" height="30" rx="6" class="box"/><text x="32" y="56" class="m">step 1: c0 = a0 + b0</text>
+    <rect x="20" y="74" width="230" height="30" rx="6" class="box"/><text x="32" y="94" class="m">step 2: c1 = a1 + b1</text>
+    <rect x="20" y="112" width="230" height="30" rx="6" class="box"/><text x="32" y="132" class="m">step 3: c2 = a2 + b2</text>
+    <rect x="20" y="150" width="230" height="30" rx="6" class="box"/><text x="32" y="170" class="m">step 4: c3 = a3 + b3</text>
+    <path class="grid" d="M285 10 V220"/>
+    <text x="310" y="20" class="b">SIMD: 1 step</text>
+    <text x="310" y="58" class="m">A</text>
+    <rect x="330" y="40" width="65" height="28" class="box-b"/><rect x="395" y="40" width="65" height="28" class="box-b"/><rect x="460" y="40" width="65" height="28" class="box-b"/><rect x="525" y="40" width="65" height="28" class="box-b"/>
+    <text x="354" y="59" class="m">a0</text><text x="419" y="59" class="m">a1</text><text x="484" y="59" class="m">a2</text><text x="549" y="59" class="m">a3</text>
+    <text x="310" y="100" class="m">B</text>
+    <rect x="330" y="82" width="65" height="28" class="box-b"/><rect x="395" y="82" width="65" height="28" class="box-b"/><rect x="460" y="82" width="65" height="28" class="box-b"/><rect x="525" y="82" width="65" height="28" class="box-b"/>
+    <text x="354" y="101" class="m">b0</text><text x="419" y="101" class="m">b1</text><text x="484" y="101" class="m">b2</text><text x="549" y="101" class="m">b3</text>
+    <rect x="330" y="120" width="260" height="28" rx="6" class="box-hi"/><text x="400" y="139" class="b">+ on all 4 lanes</text>
+    <text x="310" y="180" class="m">C</text>
+    <rect x="330" y="162" width="65" height="28" class="box-g"/><rect x="395" y="162" width="65" height="28" class="box-g"/><rect x="460" y="162" width="65" height="28" class="box-g"/><rect x="525" y="162" width="65" height="28" class="box-g"/>
+    <text x="354" y="181" class="m">c0</text><text x="419" y="181" class="m">c1</text><text x="484" y="181" class="m">c2</text><text x="549" y="181" class="m">c3</text>
+    <text x="330" y="216" class="m dim">one 128-bit register = 4 × 32-bit lanes</text>
+  </svg>
+  <figcaption>The hardware is basically four adders side by side (like the <a href="m1-04-adders.html">adders</a> in the ALU), with the carry chain cut at each lane boundary.</figcaption>
+</figure>
+
+<div class="scroll"><table>
+  <tr><th>Extension</th><th>Register width</th><th>32-bit lanes</th><th>Where</th></tr>
+  <tr><td>SSE</td><td>128 bits</td><td>4</td><td>x86 (Intel/AMD)</td></tr>
+  <tr><td>AVX / AVX2</td><td>256 bits</td><td>8</td><td>x86</td></tr>
+  <tr><td>AVX-512</td><td>512 bits</td><td>16</td><td>x86 (servers, some desktops)</td></tr>
+  <tr><td>NEON</td><td>128 bits</td><td>4</td><td>ARM (phones, Apple M-series)</td></tr>
+  <tr><td>SVE / SVE2</td><td>scalable (128–2048)</td><td>depends on chip</td><td>ARM servers</td></tr>
+  <tr><td>RISC-V "V"</td><td>scalable</td><td>set at run time</td><td>RISC-V</td></tr>
+</table></div>
+<div class="formula">lanes = register width ÷ element width<small>512 ÷ 32 = 16 floats · 512 ÷ 64 = 8 doubles · 256 ÷ 32 = 8</small></div>
+
+<h3>Python vs NumPy: vectorization</h3>
+<div class="code">
+  <div class="code-head"><span><b>python</b> · add two arrays</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">import</span> numpy <span class="kw">as</span> np</td><td class="n">Load NumPy, a fast array library, under the short name <code>np</code>.</td></tr>
+    <tr><td class="c">a = np.random.rand(<span class="num">1_000_000</span>)</td><td class="n">An array of one million random numbers.</td></tr>
+    <tr><td class="c">b = np.random.rand(<span class="num">1_000_000</span>)</td><td class="n">Another one.</td></tr>
+    <tr><td class="c"><span class="com"># slow: one element at a time</span></td><td class="n"></td></tr>
+    <tr><td class="c">c = [a[i] + b[i] <span class="kw">for</span> i <span class="kw">in</span> range(len(a))]</td><td class="n">The Python interpreter handles each element separately: SISD, with lots of overhead per step.</td></tr>
+    <tr><td class="c"><span class="com"># fast: the whole array at once</span></td><td class="n"></td></tr>
+    <tr><td class="c">c = a + b</td><td class="n">NumPy runs one compiled loop that uses SIMD lanes. Typically many times faster.</td></tr>
+  </table>
+</div>
+
+<h2>3. GPUs: thousands of simple cores</h2>
+<figure class="diagram">
+  <svg viewBox="0 0 620 220" width="620" role="img" aria-label="CPU: a few large cores and big caches. GPU: many tiny cores with little control logic">
+    <text x="20" y="20" class="b">CPU: few smart cores</text>
+    <rect x="20" y="32" width="260" height="170" rx="8" fill="none" class="w"/>
+    <rect x="32" y="44" width="110" height="60" rx="6" class="box-b"/><text x="52" y="79" class="m">big core</text>
+    <rect x="156" y="44" width="110" height="60" rx="6" class="box-b"/><text x="176" y="79" class="m">big core</text>
+    <rect x="32" y="114" width="234" height="36" rx="6" class="box-hi"/><text x="90" y="137" class="m">control + prediction</text>
+    <rect x="32" y="158" width="234" height="36" rx="6" class="box"/><text x="110" y="181" class="m">big cache</text>
+    <text x="340" y="20" class="b">GPU: many simple cores</text>
+    <rect x="340" y="32" width="260" height="170" rx="8" fill="none" class="w"/>
+    <g>
+      <rect x="352" y="44" width="20" height="16" class="box-g"/><rect x="376" y="44" width="20" height="16" class="box-g"/><rect x="400" y="44" width="20" height="16" class="box-g"/><rect x="424" y="44" width="20" height="16" class="box-g"/><rect x="448" y="44" width="20" height="16" class="box-g"/><rect x="472" y="44" width="20" height="16" class="box-g"/><rect x="496" y="44" width="20" height="16" class="box-g"/><rect x="520" y="44" width="20" height="16" class="box-g"/><rect x="544" y="44" width="20" height="16" class="box-g"/><rect x="568" y="44" width="20" height="16" class="box-g"/>
+      <rect x="352" y="66" width="20" height="16" class="box-g"/><rect x="376" y="66" width="20" height="16" class="box-g"/><rect x="400" y="66" width="20" height="16" class="box-g"/><rect x="424" y="66" width="20" height="16" class="box-g"/><rect x="448" y="66" width="20" height="16" class="box-g"/><rect x="472" y="66" width="20" height="16" class="box-g"/><rect x="496" y="66" width="20" height="16" class="box-g"/><rect x="520" y="66" width="20" height="16" class="box-g"/><rect x="544" y="66" width="20" height="16" class="box-g"/><rect x="568" y="66" width="20" height="16" class="box-g"/>
+      <rect x="352" y="88" width="20" height="16" class="box-g"/><rect x="376" y="88" width="20" height="16" class="box-g"/><rect x="400" y="88" width="20" height="16" class="box-g"/><rect x="424" y="88" width="20" height="16" class="box-g"/><rect x="448" y="88" width="20" height="16" class="box-g"/><rect x="472" y="88" width="20" height="16" class="box-g"/><rect x="496" y="88" width="20" height="16" class="box-g"/><rect x="520" y="88" width="20" height="16" class="box-g"/><rect x="544" y="88" width="20" height="16" class="box-g"/><rect x="568" y="88" width="20" height="16" class="box-g"/>
+      <rect x="352" y="110" width="20" height="16" class="box-g"/><rect x="376" y="110" width="20" height="16" class="box-g"/><rect x="400" y="110" width="20" height="16" class="box-g"/><rect x="424" y="110" width="20" height="16" class="box-g"/><rect x="448" y="110" width="20" height="16" class="box-g"/><rect x="472" y="110" width="20" height="16" class="box-g"/><rect x="496" y="110" width="20" height="16" class="box-g"/><rect x="520" y="110" width="20" height="16" class="box-g"/><rect x="544" y="110" width="20" height="16" class="box-g"/><rect x="568" y="110" width="20" height="16" class="box-g"/>
+      <rect x="352" y="132" width="20" height="16" class="box-g"/><rect x="376" y="132" width="20" height="16" class="box-g"/><rect x="400" y="132" width="20" height="16" class="box-g"/><rect x="424" y="132" width="20" height="16" class="box-g"/><rect x="448" y="132" width="20" height="16" class="box-g"/><rect x="472" y="132" width="20" height="16" class="box-g"/><rect x="496" y="132" width="20" height="16" class="box-g"/><rect x="520" y="132" width="20" height="16" class="box-g"/><rect x="544" y="132" width="20" height="16" class="box-g"/><rect x="568" y="132" width="20" height="16" class="box-g"/>
+    </g>
+    <rect x="352" y="158" width="236" height="36" rx="6" class="box-hi"/><text x="400" y="181" class="m">small control per group</text>
+  </svg>
+  <figcaption>A CPU spends its transistors on making a few cores clever (prediction, OoO, big caches). A GPU spends them on sheer numbers of simple cores. Throughput wins on data-parallel work.</figcaption>
+</figure>
+
+<h3>SIMT and the CUDA hierarchy</h3>
+<p>In CUDA (NVIDIA's GPU programming system) you write one <b>kernel</b> function. The GPU runs it on thousands of <b>threads</b> at once, and each thread works out which element is "its own" from its ID numbers.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 620 250" width="620" role="img" aria-label="CUDA hierarchy: a grid contains blocks; each block contains threads; threads are executed in warps of 32">
+    <rect x="10" y="20" width="600" height="150" rx="10" fill="none" class="w"/>
+    <text x="22" y="40" class="b">Grid (one kernel launch)</text>
+    <rect x="30" y="52" width="130" height="104" rx="8" class="box-b"/><text x="42" y="70" class="m">Block 0</text>
+    <rect x="175" y="52" width="130" height="104" rx="8" class="box-b"/><text x="187" y="70" class="m">Block 1</text>
+    <rect x="320" y="52" width="130" height="104" rx="8" class="box-hi"/><text x="332" y="70" class="m">Block 2</text>
+    <rect x="465" y="52" width="130" height="104" rx="8" class="box-b"/><text x="477" y="70" class="m">Block 3</text>
+    <g>
+      <rect x="40" y="80" width="14" height="14" class="box-g"/><rect x="58" y="80" width="14" height="14" class="box-g"/><rect x="76" y="80" width="14" height="14" class="box-g"/><rect x="94" y="80" width="14" height="14" class="box-g"/><rect x="112" y="80" width="14" height="14" class="box-g"/><rect x="130" y="80" width="14" height="14" class="box-g"/>
+      <rect x="40" y="100" width="14" height="14" class="box-g"/><rect x="58" y="100" width="14" height="14" class="box-g"/><rect x="76" y="100" width="14" height="14" class="box-g"/><rect x="94" y="100" width="14" height="14" class="box-g"/><rect x="112" y="100" width="14" height="14" class="box-g"/><rect x="130" y="100" width="14" height="14" class="box-g"/>
+      <rect x="185" y="80" width="14" height="14" class="box-g"/><rect x="203" y="80" width="14" height="14" class="box-g"/><rect x="221" y="80" width="14" height="14" class="box-g"/><rect x="239" y="80" width="14" height="14" class="box-g"/><rect x="257" y="80" width="14" height="14" class="box-g"/><rect x="275" y="80" width="14" height="14" class="box-g"/>
+      <rect x="185" y="100" width="14" height="14" class="box-g"/><rect x="203" y="100" width="14" height="14" class="box-g"/><rect x="221" y="100" width="14" height="14" class="box-g"/><rect x="239" y="100" width="14" height="14" class="box-g"/><rect x="257" y="100" width="14" height="14" class="box-g"/><rect x="275" y="100" width="14" height="14" class="box-g"/>
+      <rect x="330" y="80" width="14" height="14" class="box-g"/><rect x="348" y="80" width="14" height="14" class="box-g"/><rect x="366" y="80" width="14" height="14" class="box-g"/><rect x="384" y="80" width="14" height="14" class="box-g"/><rect x="402" y="80" width="14" height="14" class="box-g"/><rect x="420" y="80" width="14" height="14" class="box-g"/>
+      <rect x="330" y="100" width="14" height="14" class="box-g"/><rect x="348" y="100" width="14" height="14" class="box-g"/><rect x="366" y="100" width="14" height="14" class="box-g"/><rect x="384" y="100" width="14" height="14" class="box-g"/><rect x="402" y="100" width="14" height="14" class="box-g"/><rect x="420" y="100" width="14" height="14" class="box-g"/>
+      <rect x="475" y="80" width="14" height="14" class="box-g"/><rect x="493" y="80" width="14" height="14" class="box-g"/><rect x="511" y="80" width="14" height="14" class="box-g"/><rect x="529" y="80" width="14" height="14" class="box-g"/><rect x="547" y="80" width="14" height="14" class="box-g"/><rect x="565" y="80" width="14" height="14" class="box-g"/>
+      <rect x="475" y="100" width="14" height="14" class="box-g"/><rect x="493" y="100" width="14" height="14" class="box-g"/><rect x="511" y="100" width="14" height="14" class="box-g"/><rect x="529" y="100" width="14" height="14" class="box-g"/><rect x="547" y="100" width="14" height="14" class="box-g"/><rect x="565" y="100" width="14" height="14" class="box-g"/>
+    </g>
+    <text x="40" y="140" class="m dim">threads …</text>
+    <text x="332" y="140" class="m">thread 5 here</text>
+    <path class="w-hi" d="M373 82 V76" />
+    <text x="20" y="200" class="m">global index i = blockIdx × blockDim + threadIdx</text>
+    <text x="20" y="222" class="m hi">block 2, blockDim 16, thread 5 → i = 2 × 16 + 5 = 37</text>
+    <text x="20" y="244" class="m dim">(drawing shows a few threads per block; real blocks often hold 256 or more)</text>
+  </svg>
+  <figcaption>Every thread runs the same kernel (SIMT). The index tells each thread which array element to work on.</figcaption>
+</figure>
+
+<div class="code">
+  <div class="code-head"><span><b>pseudocode</b> · a GPU kernel</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">kernel</span> add_vectors(A, B, C, N):</td><td class="n">This function runs <b>once per GPU thread</b>, all at the same time.</td></tr>
+    <tr><td class="c">    i = blockIdx * blockDim + threadIdx</td><td class="n">Work out "my" element number from my block and thread IDs.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> i &lt; N:</td><td class="n">Extra threads (the total is rounded up) do nothing.</td></tr>
+    <tr><td class="c">        C[i] = A[i] + B[i]</td><td class="n">One element's work. No loop: the loop is "all the threads together".</td></tr>
+    <tr><td class="c"><span class="com"># launch: N = 1000, blockDim = 256</span></td><td class="n">We choose 256 threads per block.</td></tr>
+    <tr><td class="c"><span class="com"># blocks = ceil(1000 / 256) = 4</span></td><td class="n">4 blocks × 256 = 1024 threads. 24 of them fail the <code>if</code> and just stop.</td></tr>
+  </table>
+</div>
+
+<h2>4. Warps (syllabus term)</h2>
+<p>Your syllabus lists "warps". This is a real GPU term. NVIDIA's CUDA documentation uses it:</p>
+<ul>
+  <li>A <b>warp</b> is a group of GPU threads that the hardware <b>schedules together</b>. All threads in a warp run the same instruction at the same moment (in lockstep). This is the SIMT model at the hardware level.</li>
+  <li>On NVIDIA GPUs a warp is <b>32 threads</b> in practice. Technically the size depends on the hardware.</li>
+  <li>Threads in a warp may take different <code>if</code> branches (unlike pure SIMD). But when they <b>diverge</b>, some threads wait while others run their branch, so heavy branching in a kernel slows the GPU down.</li>
+  <li><b>Practical tip:</b> pick a block size that is a multiple of 32 (e.g. 256). Otherwise the last warp has unused slots. In the example above, 1024 threads = 1024 ÷ 32 = <b>32 warps</b>.</li>
+  <li>Other GPU APIs have similar ideas under other names: "SIMD groups" (Apple Metal), "waves" (DirectX), "subgroups" (WebGPU).</li>
+</ul>
+<div class="callout tip"><b>How much to learn</b><p>For the exam, knowing "a warp = a group of (typically 32) GPU threads executed together, SIMT-style" should be enough. If your instructor uses the term differently in class, follow their definition.</p></div>
+
+<h3>HBM: feeding the GPU fast enough</h3>
+<p>Thousands of cores are useless if data arrives slowly. This is the <a href="m5-01-memory-wall-locality.html">memory wall</a> again. <b>High Bandwidth Memory</b> stacks several DRAM chips on top of each other, connects them with vertical wires through the silicon (TSVs), and places the stack right beside the GPU on a <b>silicon interposer</b>: a thin silicon base with very dense wiring.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 600 220" width="600" role="img" aria-label="Side view: GPU die and a stack of HBM DRAM dies sit side by side on a silicon interposer, which sits on the package substrate">
+    <rect x="40" y="170" width="520" height="30" rx="4" class="box"/><text x="230" y="190" class="m">package substrate</text>
+    <rect x="70" y="140" width="460" height="26" rx="4" class="box-b"/><text x="230" y="158" class="m">silicon interposer</text>
+    <rect x="100" y="70" width="200" height="66" rx="6" class="box-g"/><text x="178" y="108" class="b">GPU</text>
+    <rect x="360" y="116" width="140" height="18" class="box-hi"/>
+    <rect x="360" y="96" width="140" height="18" class="box-hi"/>
+    <rect x="360" y="76" width="140" height="18" class="box-hi"/>
+    <rect x="360" y="56" width="140" height="18" class="box-hi"/>
+    <path class="w" d="M390 56 V134 M470 56 V134"/>
+    <text x="360" y="44" class="b">HBM stack (DRAM)</text>
+    <text x="508" y="100" class="m dim">TSVs</text>
+    <path class="w-hi" d="M300 128 H360"/>
+    <text x="304" y="120" class="m hi">short</text>
+    <text x="20" y="20" class="m dim">millimetres apart → very wide, very fast link</text>
+  </svg>
+  <figcaption>Side view (not to scale). Short, dense wiring gives far more bandwidth than normal memory modules on a circuit board. HBM is still DRAM (see <a href="m2-07-sram-dram.html">SRAM vs DRAM</a>).</figcaption>
+</figure>
+
+<h2>5. Lab 6C: CPU vs NumPy vs GPU matrix multiply</h2>
+<div class="code">
+  <div class="code-head"><span><b>python</b> · matmul.py</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">import</span> time, numpy <span class="kw">as</span> np, cupy <span class="kw">as</span> cp</td><td class="n">Timer, NumPy (CPU), and CuPy (NumPy-like arrays that live on an NVIDIA GPU).</td></tr>
+    <tr><td class="c"><span class="kw">def</span> py_matmul(A, B, n):</td><td class="n">Plain-Python matrix multiply, for comparison.</td></tr>
+    <tr><td class="c">    C = [[<span class="num">0.0</span>]*n <span class="kw">for</span> _ <span class="kw">in</span> range(n)]</td><td class="n">An n × n table of zeros for the answer.</td></tr>
+    <tr><td class="c">    <span class="kw">for</span> i <span class="kw">in</span> range(n):</td><td class="n">For every row i of A…</td></tr>
+    <tr><td class="c">        <span class="kw">for</span> j <span class="kw">in</span> range(n):</td><td class="n">…and every column j of B…</td></tr>
+    <tr><td class="c">            s = <span class="num">0.0</span></td><td class="n">…start a running total…</td></tr>
+    <tr><td class="c">            <span class="kw">for</span> k <span class="kw">in</span> range(n):</td><td class="n">…walk along the row and down the column…</td></tr>
+    <tr><td class="c">                s += A[i][k] * B[k][j]</td><td class="n">…adding up the products. Three nested loops = n × n × n steps: <b>O(n³)</b>.</td></tr>
+    <tr><td class="c">            C[i][j] = s</td><td class="n">Store the result for this cell.</td></tr>
+    <tr><td class="c">    <span class="kw">return</span> C</td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">for</span> n <span class="kw">in</span> [<span class="num">64</span>, <span class="num">128</span>, <span class="num">256</span>, <span class="num">512</span>, <span class="num">1024</span>, <span class="num">2048</span>]:</td><td class="n">Try each matrix size.</td></tr>
+    <tr><td class="c">    A = np.random.rand(n, n)</td><td class="n">A random n × n matrix on the CPU.</td></tr>
+    <tr><td class="c">    B = np.random.rand(n, n)</td><td class="n">And a second one.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> n &lt;= <span class="num">512</span>:</td><td class="n">Pure Python is far too slow for big sizes, so skip it there.</td></tr>
+    <tr><td class="c">        t = time.perf_counter()</td><td class="n">Start the stopwatch.</td></tr>
+    <tr><td class="c">        py_matmul(A.tolist(), B.tolist(), n)</td><td class="n">Run the slow version (on plain Python lists).</td></tr>
+    <tr><td class="c">        t_py = time.perf_counter() - t</td><td class="n">Stop the stopwatch: elapsed seconds.</td></tr>
+    <tr><td class="c">    t = time.perf_counter(); C = A @ B</td><td class="n"><code>@</code> is matrix multiply. NumPy hands it to <b>BLAS</b>: multithreaded, SIMD, and cache-blocked (it works on small tiles that fit in the cache).</td></tr>
+    <tr><td class="c">    t_np = time.perf_counter() - t</td><td class="n">NumPy time.</td></tr>
+    <tr><td class="c">    Ag = cp.asarray(A); Bg = cp.asarray(B)</td><td class="n">Copy both matrices to GPU memory (over PCIe).</td></tr>
+    <tr><td class="c">    (Ag @ Bg); cp.cuda.Device().synchronize()</td><td class="n"><b>Warm-up</b>: the first GPU call has one-time setup cost, so don't time it. <code>synchronize()</code> waits for the GPU to really finish.</td></tr>
+    <tr><td class="c">    t = time.perf_counter(); Cg = Ag @ Bg</td><td class="n">Multiply on the GPU (it uses NVIDIA's cuBLAS library).</td></tr>
+    <tr><td class="c">    cp.cuda.Device().synchronize()</td><td class="n">GPU calls return <em>before</em> the work is done, so without this line you would time almost nothing.</td></tr>
+    <tr><td class="c">    t_gpu = time.perf_counter() - t</td><td class="n">GPU time (add the copy time too if you want the full cost).</td></tr>
+  </table>
+</div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 340" width="640" role="img" aria-label="Illustrative log-scale chart of time versus matrix size. Pure Python is slowest and grows fastest. NumPy is fastest at small sizes. The GPU has a fixed overhead, so it is slower than NumPy for small matrices and faster from about 512.">
+    <g class="grid"><path d="M90 30 H600 M90 56.7 H600 M90 83.3 H600 M90 110 H600 M90 136.7 H600 M90 163.3 H600 M90 190 H600 M90 216.7 H600 M90 243.3 H600 M90 270 H600 M90 30 V270"/></g>
+    <text x="44" y="34" class="m dim">10⁴ s</text>
+    <text x="44" y="87" class="m dim">10² s</text>
+    <text x="52" y="140" class="m dim">1 s</text>
+    <text x="40" y="194" class="m dim">10⁻² s</text>
+    <text x="40" y="247" class="m dim">10⁻⁴ s</text>
+    <text x="108" y="290" class="m">64</text><text x="198" y="290" class="m">128</text><text x="288" y="290" class="m">256</text><text x="378" y="290" class="m">512</text><text x="464" y="290" class="m">1024</text><text x="554" y="290" class="m">2048</text>
+    <text x="300" y="310" class="m dim">matrix size n (n × n)</text>
+    <path class="w" d="M120 170.8 L210 146.8 L300 122.5 L390 98.5"/>
+    <circle cx="120" cy="170.8" r="4" class="fill-ink"/><circle cx="210" cy="146.8" r="4" class="fill-ink"/><circle cx="300" cy="122.5" r="4" class="fill-ink"/><circle cx="390" cy="98.5" r="4" class="fill-ink"/>
+    <text x="400" y="94" class="m dim">(bigger: skipped)</text>
+    <path class="w-g" d="M120 255.1 L210 237.5 L300 214.5 L390 190.5 L480 166.5 L570 150.9"/>
+<circle cx="120" cy="255.1" r="4" class="box-g"/><circle cx="210" cy="237.5" r="4" class="box-g"/><circle cx="300" cy="214.5" r="4" class="box-g"/><circle cx="390" cy="190.5" r="4" class="box-g"/><circle cx="480" cy="166.5" r="4" class="box-g"/><circle cx="570" cy="150.9" r="4" class="box-g"/>
+    <path class="w-hi" d="M120 203.9 L210 203.9 L300 203.3 L390 201.2 L480 194.8 L570 180.9"/>
+    <circle cx="120" cy="203.9" r="4" class="fill-hi"/><circle cx="210" cy="203.9" r="4" class="fill-hi"/><circle cx="300" cy="203.3" r="4" class="fill-hi"/><circle cx="390" cy="201.2" r="4" class="fill-hi"/><circle cx="480" cy="194.8" r="4" class="fill-hi"/><circle cx="570" cy="180.9" r="4" class="fill-hi"/>
+    <text x="128" y="194" class="m hi">GPU: fixed overhead</text>
+    <rect x="100" y="36" width="150" height="64" rx="6" class="box"/>
+    <path class="w" d="M110 52 H130"/><text x="136" y="56" class="m">pure Python</text>
+    <path class="w-g" d="M110 70 H130"/><text x="136" y="74" class="m">NumPy (BLAS)</text>
+    <path class="w-hi" d="M110 88 H130"/><text x="136" y="92" class="m">CuPy (GPU)</text>
+    <text x="90" y="332" class="r">Illustrative shape, not measured: measure your own</text>
+  </svg>
+  <figcaption>Illustrative only (made-up but realistic-shaped numbers). Log scale: each grid line is 10× more time. Python is roughly 1000× slower than NumPy. The GPU line starts flat (copy and launch overhead dominate) and beats NumPy once the matrices are big enough.</figcaption>
+</figure>
+
+<h3>What to write in your lab report</h3>
+<ul>
+  <li><b>Pure Python:</b> O(n³) steps, each with heavy interpreter overhead. Doubling n makes it about 2³ = <b>8× slower</b>.</li>
+  <li><b>NumPy:</b> the same O(n³) maths, but done by BLAS in compiled code with SIMD, several threads and cache blocking. Usually hundreds to thousands of times faster than pure Python.</li>
+  <li><b>CuPy:</b> thousands of GPU threads. There is a fixed cost for copying and launching work, so small matrices can be <b>slower</b> on the GPU. Large ones are much faster.</li>
+  <li>Always plot the times on a <b>log scale</b>. The gaps are too big for a normal axis.</li>
+</ul>
+
+<h2>6. TPUs and AI hardware</h2>
+<ul>
+  <li><b>Google TPU</b> (first announced in 2016) is an ASIC built for the tensor maths of neural networks, mostly big matrix multiplies.</li>
+  <li>It uses <b>low precision</b> numbers (8-bit integers, or 16-bit "bfloat16"), which need less silicon and memory than 32-bit floats.</li>
+  <li>It pairs the compute with <b>high-bandwidth memory</b>, and links many chips into "pods" for training large models.</li>
+</ul>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 260" width="640" role="img" aria-label="Left: a systolic array, a grid of simple cells passing data to neighbours each tick. Right: a monolithic die compared with four chiplets in one package">
+    <defs><marker id="arS" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10 Z" class="fill-hi"/></marker></defs>
+    <text x="20" y="20" class="b">Systolic array</text>
+    <g>
+      <rect x="30" y="40" width="40" height="40" rx="4" class="box-b"/><rect x="100" y="40" width="40" height="40" rx="4" class="box-b"/><rect x="170" y="40" width="40" height="40" rx="4" class="box-b"/><rect x="240" y="40" width="40" height="40" rx="4" class="box-b"/>
+      <rect x="30" y="110" width="40" height="40" rx="4" class="box-b"/><rect x="100" y="110" width="40" height="40" rx="4" class="box-b"/><rect x="170" y="110" width="40" height="40" rx="4" class="box-b"/><rect x="240" y="110" width="40" height="40" rx="4" class="box-b"/>
+      <rect x="30" y="180" width="40" height="40" rx="4" class="box-b"/><rect x="100" y="180" width="40" height="40" rx="4" class="box-b"/><rect x="170" y="180" width="40" height="40" rx="4" class="box-b"/><rect x="240" y="180" width="40" height="40" rx="4" class="box-b"/>
+    </g>
+    <path class="w-hi" d="M70 60 H96" marker-end="url(#arS)"/><path class="w-hi" d="M140 60 H166" marker-end="url(#arS)"/><path class="w-hi" d="M210 60 H236" marker-end="url(#arS)"/><path class="w-hi" d="M70 130 H96" marker-end="url(#arS)"/><path class="w-hi" d="M140 130 H166" marker-end="url(#arS)"/><path class="w-hi" d="M210 130 H236" marker-end="url(#arS)"/><path class="w-hi" d="M70 200 H96" marker-end="url(#arS)"/><path class="w-hi" d="M140 200 H166" marker-end="url(#arS)"/><path class="w-hi" d="M210 200 H236" marker-end="url(#arS)"/>
+    <path class="w-hi" d="M50 80 V106" marker-end="url(#arS)"/><path class="w-hi" d="M120 80 V106" marker-end="url(#arS)"/><path class="w-hi" d="M190 80 V106" marker-end="url(#arS)"/><path class="w-hi" d="M260 80 V106" marker-end="url(#arS)"/><path class="w-hi" d="M50 150 V176" marker-end="url(#arS)"/><path class="w-hi" d="M120 150 V176" marker-end="url(#arS)"/><path class="w-hi" d="M190 150 V176" marker-end="url(#arS)"/><path class="w-hi" d="M260 150 V176" marker-end="url(#arS)"/>
+    <text x="20" y="246" class="m dim">each tick: compute, pass on</text>
+    <path class="grid" d="M320 10 V250"/>
+    <text x="340" y="20" class="b">Monolithic vs chiplets</text>
+    <rect x="345" y="50" width="110" height="110" rx="4" class="box-r"/>
+    <text x="360" y="100" class="m">one big die</text><text x="370" y="118" class="m">4 cm²</text>
+    <rect x="485" y="40" width="140" height="130" rx="8" fill="none" class="w" stroke-dasharray="5 4"/>
+    <rect x="495" y="50" width="55" height="52" rx="4" class="box-g"/><text x="506" y="80" class="m">CPU</text>
+    <rect x="560" y="50" width="55" height="52" rx="4" class="box-g"/><text x="571" y="80" class="m">CPU</text>
+    <rect x="495" y="110" width="55" height="52" rx="4" class="box-b"/><text x="508" y="140" class="m">I/O</text>
+    <rect x="560" y="110" width="55" height="52" rx="4" class="box-hi"/><text x="570" y="140" class="m">GPU</text>
+    <text x="345" y="192" class="m">yield ≈ 67%</text>
+    <text x="345" y="210" class="m dim">e^(−0.1×4)</text>
+    <text x="485" y="192" class="m">each die ≈ 90%</text>
+    <text x="485" y="210" class="m dim">e^(−0.1×1), 1 cm²</text>
+    <text x="345" y="244" class="m dim">model: yield = e^(−D×A), D = 0.1/cm²</text>
+  </svg>
+  <figcaption>Left: a systolic array. Data pulses through a regular grid like blood with each heartbeat. Right: splitting one big die into chiplets means one defect ruins a small die, not the whole chip. The yield numbers use a simple textbook model with a made-up defect density.</figcaption>
+</figure>
+
+<div class="vs">
+  <div>
+    <h3>Systolic arrays</h3>
+    <p>An idea from H.T. Kung and Charles Leiserson (late 1970s). A <b>regular grid of simple processors</b>, each wired only to its neighbours. On every clock tick, each cell does a small computation and passes the data along, like a heartbeat ("systole" is the heart's pumping beat).</p>
+    <p>It suits matrix operations. The same thinking (regular, local, dataflow-style hardware) shows up in today's AI accelerators.</p>
+  </div>
+  <div>
+    <h3>Chiplets</h3>
+    <p>Instead of one huge die, build several <b>smaller dies</b> and join them in one package. Examples: AMD EPYC (CPU chiplets + an I/O die) and Intel Foveros (dies stacked in 3D). <b>UCIe</b> is an open standard for connecting chiplets.</p>
+    <ul>
+      <li>Better <b>yield</b> and lower cost (small dies fail less often).</li>
+      <li>Each part can use a <b>different process node</b> (newest node for the CPU, a cheaper node for I/O).</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>SIMD = <b>one</b> instruction on many data values. MIMD = many independent instruction streams (multicore).</li>
+  <li>A 512-bit register holds 16 <b>32-bit</b> values, but only 8 <b>64-bit</b> values.</li>
+  <li>SIMT is not pure SIMD: GPU threads can take different branches, but divergence costs speed.</li>
+  <li>A GPU is not always faster. Small problems lose to transfer and launch overhead.</li>
+  <li>Forgetting to <code>synchronize()</code> when timing GPU code makes it look impossibly fast.</li>
+  <li>NumPy is not "multicore Python". It calls compiled BLAS, which uses SIMD, threads and cache blocking.</li>
+  <li>HBM is <b>DRAM</b>, placed close to the processor. It is not a kind of SRAM cache.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>How many 32-bit floats fit in an AVX (256-bit) register? And how many 64-bit doubles in AVX-512?</summary><div class="a"><p>256 ÷ 32 = <b>8</b>. 512 ÷ 64 = <b>8</b>.</p></div></details>
+  <details class="q"><summary>Classify: (a) a quad-core laptop CPU, (b) an AVX add of two arrays, (c) a classic single-cycle MIPS CPU.</summary><div class="a"><p>(a) <b>MIMD</b>. (b) <b>SIMD</b>. (c) <b>SISD</b>.</p></div></details>
+  <details class="q"><summary>A CUDA launch uses blockDim = 128. Which global index does thread 10 in block 3 get?</summary><div class="a"><p>i = 3 × 128 + 10 = <b>394</b>.</p></div></details>
+  <details class="q"><summary>N = 5000 elements, blockDim = 256. How many blocks? How many threads do nothing?</summary><div class="a"><p>5000 ÷ 256 = 19.53, so <b>20 blocks</b> = 5120 threads. 5120 − 5000 = <b>120 idle threads</b>.</p></div></details>
+  <details class="q"><summary>What is a warp, and why choose a block size that is a multiple of 32?</summary><div class="a"><p>A warp is a group of GPU threads (32 on NVIDIA in practice) scheduled and run together in lockstep. A multiple of 32 fills every warp, so no slots are wasted.</p></div></details>
+  <details class="q"><summary>Pure Python takes 3 s for n = 256. Roughly how long for n = 512?</summary><div class="a"><p>O(n³): doubling n gives 2³ = 8×, so about <b>24 s</b>.</p></div></details>
+  <details class="q"><summary>Why can a 64 × 64 matrix multiply be slower on the GPU than with NumPy?</summary><div class="a"><p>The actual maths is tiny. The fixed costs (copying data over PCIe, launching the kernel, synchronising) take longer than NumPy's whole run.</p></div></details>
+  <details class="q"><summary>Give two advantages of chiplets over one big die.</summary><div class="a"><p>Higher yield (a defect ruins only a small die), and each chiplet can use the best or cheapest process node for its job. Parts can also be reused across products.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=afWqyGdKcsk" target="_blank" rel="noopener"><i class="play"></i><span><b>Vectorization Explained: SIMD &amp; Compiler Optimization for Beginners</b><small>CodeLucky</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=h9Z4oGN89MU" target="_blank" rel="noopener"><i class="play"></i><span><b>How do Graphics Cards Work? Exploring GPU Architecture</b><small>Branch Education</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=GveaLmXPJEY" target="_blank" rel="noopener"><i class="play"></i><span><b>GPU Warps Explained: How SIMT Really Works Under the Hood (Visual Deep Dive) | M2L3</b><small>Parallel Routines</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=eyAjbgkBdjU" target="_blank" rel="noopener"><i class="play"></i><span><b>Tensor Processing Units (TPUs)</b><small>Google Cloud</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

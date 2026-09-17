@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Register File</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 2 / Register file</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 2 · Sequential Logic &amp; Memory <span class="tag class">From class notes · L07 &amp; Lab 2B</span></div>
+  <h1>The register file: two reads, one write</h1>
+  <p class="idea">A register file is a small bank of registers inside the CPU. You pick a register by its <em>number</em> (its address). In one clock cycle it can <strong>read two registers</strong> and <strong>write one</strong>.</p>
+  <div class="analogy"><b>Think of it like this:</b> a row of numbered lockers. Two friends can each <em>look into</em> a locker at any moment, just by reading its number. But you can only <em>put something into</em> a locker when the bell rings (the clock edge), and only if you have the key (write enable).</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Register</dt><dd>A row of flip-flops that stores one binary word (for example 32 bits). See <a href="m2-03-registers-shift.html">Registers</a>.</dd></div>
+  <div class="term"><dt>Address</dt><dd>The number of a register. 32 registers need 5-bit addresses, because 2⁵ = 32.</dd></div>
+  <div class="term"><dt>Port</dt><dd>One "doorway" into the register file: an address input plus a data line. It has 2 read ports and 1 write port.</dd></div>
+  <div class="term"><dt>Write enable (WE / RegWrite)</dt><dd>A 1-bit control signal. 1 means "store the data at the next clock edge". 0 means "change nothing".</dd></div>
+  <div class="term"><dt>Combinational</dt><dd>Output follows the inputs after a tiny gate delay. No clock is needed.</dd></div>
+  <div class="term"><dt>Synchronous</dt><dd>Changes happen only at the clock edge.</dd></div>
+  <div class="term"><dt>One-hot</dt><dd>A group of wires where exactly one wire is 1. A decoder gives a one-hot output.</dd></div>
+</dl>
+
+<h2>1. Why a CPU needs one</h2>
+<p>Modules 1–2 gave us flip-flops, registers and counters. Now look at one instruction:</p>
+<div class="formula">add R1, R2, R3 &nbsp;&nbsp;→&nbsp;&nbsp; R1 ← R2 + R3<small>In the same clock cycle the CPU must READ R2 and R3, and WRITE the answer into R1.</small></div>
+<p>So we need a block that holds many registers, lets us pick any two to read, and lets us pick one to write. That block is the <strong>register file</strong>. It is "a tiny, ultra-fast memory that lives inside the CPU".</p>
+<ul>
+  <li><b>MIPS and RISC-V:</b> 32 registers × 32 bits each = 1,024 flip-flops.</li>
+  <li><b>2 read ports + 1 write port</b> per cycle. That matches an R-type instruction <code>add rd, rs1, rs2</code>: read rs1 and rs2, write rd.</li>
+  <li>Its two outputs feed the ALU (arithmetic logic unit), which you meet in <a href="m4-01-single-cycle-datapath.html">Module 4</a>.</li>
+</ul>
+
+<h2>2. The interface (its pins)</h2>
+<figure class="diagram">
+  <svg viewBox="0 0 620 305" width="620" role="img" aria-label="Register file block: inputs read register 1, read register 2, write register, write data on the left; RegWrite on top; clk at the bottom; outputs read data 1 and read data 2 on the right">
+    <rect x="220" y="50" width="200" height="200" rx="8" class="box-b"/>
+    <text x="272" y="146" class="b">Register file</text>
+    <text x="276" y="166" class="m dim">32 × 32 bits</text>
+    <!-- inputs -->
+    <text x="140" y="84" class="b" text-anchor="end">Read reg 1</text>
+    <text x="140" y="124" class="b" text-anchor="end">Read reg 2</text>
+    <text x="140" y="164" class="b" text-anchor="end">Write reg</text>
+    <text x="140" y="204" class="b" text-anchor="end">Write data</text>
+    <path class="w" d="M148 80 H220 M148 120 H220 M148 160 H220 M148 200 H220"/>
+    <path class="w" d="M175 86 L185 74 M175 126 L185 114 M175 166 L185 154 M175 206 L185 194"/>
+    <text x="188" y="72" class="m hi">5</text>
+    <text x="188" y="112" class="m hi">5</text>
+    <text x="188" y="152" class="m hi">5</text>
+    <text x="188" y="192" class="m hi">32</text>
+    <text x="228" y="84" class="m">RR1</text>
+    <text x="228" y="124" class="m">RR2</text>
+    <text x="228" y="164" class="m">WR</text>
+    <text x="228" y="204" class="m">WD</text>
+    <!-- RegWrite -->
+    <text x="330" y="18" class="b">RegWrite (WE)</text>
+    <path class="w" d="M320 24 V50"/>
+    <!-- clk -->
+    <path class="w" d="M320 250 V278"/>
+    <polygon points="308,250 332,250 320,238" class="box"/>
+    <text x="330" y="276" class="b">clk</text>
+    <!-- outputs -->
+    <text x="412" y="114" class="m" text-anchor="end">RD1</text>
+    <text x="412" y="194" class="m" text-anchor="end">RD2</text>
+    <path class="w-hi" d="M420 110 H490 M420 190 H490"/>
+    <path class="w" d="M450 116 L460 104 M450 196 L460 184"/>
+    <text x="462" y="102" class="m hi">32</text>
+    <text x="462" y="182" class="m hi">32</text>
+    <text x="498" y="114" class="hi">Read data 1</text>
+    <text x="498" y="194" class="hi">Read data 2</text>
+  </svg>
+  <figcaption>A slash with a number shows how many wires a line holds. Addresses are 5 bits because log₂ 32 = 5. The triangle on clk means "acts on the clock edge".</figcaption>
+</figure>
+
+<div class="scroll"><table>
+  <tr><th>Pin</th><th>Direction</th><th>Width</th><th>What it does</th></tr>
+  <tr><td>Read register 1</td><td>in</td><td>5 bits</td><td>Which register read port 1 shows</td></tr>
+  <tr><td>Read register 2</td><td>in</td><td>5 bits</td><td>Which register read port 2 shows</td></tr>
+  <tr><td>Write register</td><td>in</td><td>5 bits</td><td>Which register gets written</td></tr>
+  <tr><td>Write data</td><td>in</td><td>32 bits</td><td>The value to store</td></tr>
+  <tr><td>RegWrite</td><td>in</td><td>1 bit</td><td>Write enable: 1 = write, 0 = don't</td></tr>
+  <tr><td>clk</td><td>in</td><td>1 bit</td><td>The clock; writes happen on its rising edge</td></tr>
+  <tr><td>Read data 1 / 2</td><td>out</td><td>32 bits each</td><td>The contents of the two chosen registers</td></tr>
+</table></div>
+<div class="formula">address bits = log₂(number of registers)<small>32 registers → 5 bits · 8 registers → 3 bits · 4 registers (Lab 2B) → 2 bits</small></div>
+
+<h2>3. The write port: decoder + AND gates</h2>
+<p>A <a href="m1-03-mux-demux-decoder.html">decoder</a> turns the write address into a one-hot signal: exactly one output wire is 1. Each output is ANDed with the global WE. The result is that register's own load enable (WE₀, WE₁, …). The drawing shows the 4-register lab version; MIPS uses a 5:32 decoder and 32 AND gates.</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 320" width="640" role="img" aria-label="Write port: a 2-to-4 decoder driven by WADDR; each decoder output is ANDed with WE to make the load enable of registers R0 to R3; WDATA goes to every register">
+    <text x="8" y="154" class="b">WADDR</text>
+    <text x="8" y="172" class="m dim">(2 bits)</text>
+    <path class="w" d="M62 160 H90"/>
+    <rect x="90" y="56" width="80" height="196" rx="8" class="box-b"/>
+    <text x="104" y="150" class="b">2→4</text>
+    <text x="100" y="168" class="m">decoder</text>
+    <text x="156" y="80" class="m">0</text>
+    <text x="156" y="130" class="m">1</text>
+    <text x="156" y="180" class="m">2</text>
+    <text x="156" y="230" class="m">3</text>
+    <!-- decoder outputs to AND top inputs -->
+    <path class="w" d="M170 76 H250 M170 126 H250 M170 176 H250 M170 226 H250"/>
+    <!-- WE bus -->
+    <text x="222" y="22" class="b">WE (RegWrite)</text>
+    <path class="w-hi" d="M215 28 V242 H250 M215 92 H250 M215 142 H250 M215 192 H250"/>
+    <circle cx="215" cy="92" r="3.5" class="fill-hi"/>
+    <circle cx="215" cy="142" r="3.5" class="fill-hi"/>
+    <circle cx="215" cy="192" r="3.5" class="fill-hi"/>
+    <!-- AND gates -->
+    <path class="box" d="M250 66 H270 A18 18 0 0 1 270 102 H250 Z"/>
+    <path class="box" d="M250 116 H270 A18 18 0 0 1 270 152 H250 Z"/>
+    <path class="box" d="M250 166 H270 A18 18 0 0 1 270 202 H250 Z"/>
+    <path class="box" d="M250 216 H270 A18 18 0 0 1 270 252 H250 Z"/>
+    <!-- AND outputs to register enable -->
+    <path class="w" d="M288 84 H340 V90 H400 M288 134 H340 V140 H400 M288 184 H340 V190 H400 M288 234 H340 V240 H400"/>
+    <text x="294" y="78" class="m">WE0</text>
+    <text x="294" y="128" class="m">WE1</text>
+    <text x="294" y="178" class="m">WE2</text>
+    <text x="294" y="228" class="m">WE3</text>
+    <!-- WDATA bus -->
+    <path class="w-g" d="M370 290 V72 H400 M370 122 H400 M370 172 H400 M370 222 H400"/>
+    <circle cx="370" cy="122" r="3.5" class="fill-ink"/>
+    <circle cx="370" cy="172" r="3.5" class="fill-ink"/>
+    <circle cx="370" cy="222" r="3.5" class="fill-ink"/>
+    <text x="300" y="308" class="g">WDATA (32 bits) → every register</text>
+    <!-- registers -->
+    <rect x="400" y="62" width="120" height="40" rx="6" class="box"/>
+    <rect x="400" y="112" width="120" height="40" rx="6" class="box"/>
+    <rect x="400" y="162" width="120" height="40" rx="6" class="box"/>
+    <rect x="400" y="212" width="120" height="40" rx="6" class="box"/>
+    <text x="405" y="77" class="m dim">D</text><text x="405" y="97" class="m dim">en</text><text x="450" y="88" class="b">R0</text>
+    <text x="405" y="127" class="m dim">D</text><text x="405" y="147" class="m dim">en</text><text x="450" y="138" class="b">R1</text>
+    <text x="405" y="177" class="m dim">D</text><text x="405" y="197" class="m dim">en</text><text x="450" y="188" class="b">R2</text>
+    <text x="405" y="227" class="m dim">D</text><text x="405" y="247" class="m dim">en</text><text x="450" y="238" class="b">R3</text>
+    <path class="w" d="M520 82 H545 M520 132 H545 M520 182 H545 M520 232 H545"/>
+    <text x="550" y="86" class="m">Q0</text>
+    <text x="550" y="136" class="m">Q1</text>
+    <text x="550" y="186" class="m">Q2</text>
+    <text x="550" y="236" class="m">Q3</text>
+    <text x="530" y="280" class="m dim">to read MUXes</text>
+  </svg>
+  <figcaption>All four registers share the clock. WDATA (green) reaches every register, but only the one whose enable is 1 stores it at the clock edge. Where a line crosses another with no dot, the two are not connected.</figcaption>
+</figure>
+
+<div class="callout tip"><b>The one-line summary</b><p>"The decoder picks <strong>WHERE</strong>; WE picks <strong>WHETHER</strong>." Example: WADDR = <code>10</code> and WE = 1 → only WE2 = 1, so R2 stores WDATA. If WE = 0, all four enables are 0 and nothing changes.</p></div>
+
+<h2>4. The read ports: two MUXes</h2>
+<p>Every register's output goes into <strong>two</strong> <a href="m1-03-mux-demux-decoder.html">multiplexers</a> (MUXes). A MUX is a selector switch: its select input (the read address) chooses which input reaches the output. Two MUXes give two independent reads at the same time. MIPS uses two 32:1 MUXes, each 32 bits wide.</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 620 305" width="620" role="img" aria-label="Read ports: registers R0 to R3 each feed both a top 4-to-1 MUX selected by RADDR1 and a bottom 4-to-1 MUX selected by RADDR2">
+    <rect x="30" y="42" width="80" height="36" rx="6" class="box"/><text x="58" y="65" class="b">R0</text>
+    <rect x="30" y="92" width="80" height="36" rx="6" class="box"/><text x="58" y="115" class="b">R1</text>
+    <rect x="30" y="142" width="80" height="36" rx="6" class="box"/><text x="58" y="165" class="b">R2</text>
+    <rect x="30" y="192" width="80" height="36" rx="6" class="box"/><text x="58" y="215" class="b">R3</text>
+    <!-- fan-out wiring -->
+    <path class="w" d="M110 60 H150 M150 50 V180 M150 50 H300 M150 180 H300"/>
+    <path class="w" d="M110 110 H170 M170 80 V210 M170 80 H300 M170 210 H300"/>
+    <path class="w" d="M110 160 H190 M190 110 V240 M190 110 H300 M190 240 H300"/>
+    <path class="w" d="M110 210 H210 M210 140 V270 M210 140 H300 M210 270 H300"/>
+    <circle cx="150" cy="60" r="3.5" class="fill-ink"/>
+    <circle cx="170" cy="110" r="3.5" class="fill-ink"/>
+    <circle cx="190" cy="160" r="3.5" class="fill-ink"/>
+    <circle cx="210" cy="210" r="3.5" class="fill-ink"/>
+    <!-- MUX 1 -->
+    <polygon points="300,30 350,50 350,130 300,150" class="box-hi"/>
+    <text x="304" y="54" class="m">0</text><text x="304" y="84" class="m">1</text><text x="304" y="114" class="m">2</text><text x="304" y="144" class="m">3</text>
+    <text x="320" y="94" class="m">4:1</text>
+    <path class="w" d="M325 12 V40"/>
+    <text x="333" y="18" class="b">RADDR1</text>
+    <path class="w-hi" d="M350 90 H430"/>
+    <text x="438" y="94" class="hi">RDATA1</text>
+    <!-- MUX 2 -->
+    <polygon points="300,160 350,180 350,260 300,280" class="box-hi"/>
+    <text x="304" y="184" class="m">0</text><text x="304" y="214" class="m">1</text><text x="304" y="244" class="m">2</text><text x="304" y="274" class="m">3</text>
+    <text x="320" y="224" class="m">4:1</text>
+    <path class="w" d="M325 270 V292"/>
+    <text x="333" y="298" class="b">RADDR2</text>
+    <path class="w-hi" d="M350 220 H430"/>
+    <text x="438" y="224" class="hi">RDATA2</text>
+    <text x="438" y="150" class="dim">No clock on this side:</text>
+    <text x="438" y="168" class="dim">reads are combinational.</text>
+  </svg>
+  <figcaption>Each register output splits (dots) and goes to both MUXes. RADDR1 = 2 makes RDATA1 show R2, while RADDR2 = 0 can show R0 at the same moment.</figcaption>
+</figure>
+
+<h2>5. Reads are instant, writes wait for the clock</h2>
+<p>The class calls this "the single most important fact about a register file".</p>
+<div class="vs">
+  <div>
+    <h3>READ = combinational</h3>
+    <ul>
+      <li>No clock involved.</li>
+      <li>Change the read address → data appears after a small gate delay.</li>
+      <li>Both read ports work at the same time.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>WRITE = synchronous</h3>
+    <ul>
+      <li>Address, data and WE are set up <em>before</em> the edge.</li>
+      <li>The register changes <strong>only at the rising clock edge</strong>.</li>
+      <li>This prevents races and half-written values.</li>
+      <li>The new value is readable after the edge (in the next cycle).</li>
+    </ul>
+  </div>
+</div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 620 230" width="620" role="img" aria-label="Timing diagram: WE is high and WDATA is CAFEF00D before the clock edge, but RDATA1 still shows the old value DEADBEEF until the rising edge, then changes to CAFEF00D">
+    <path class="grid" stroke-dasharray="4 4" d="M250 18 V200"/>
+    <text x="10" y="44" class="b">clk</text>
+    <path class="w" d="M100 55 H150 V25 H200 V55 H250 V25 H300 V55 H350 V25 H400 V55 H450 V25 H500 V55 H550 V25 H600"/>
+    <text x="10" y="89" class="b">WE</text>
+    <text x="10" y="104" class="m dim">waddr = 1</text>
+    <path class="w" d="M100 100 H210 V70 H310 V100 H600"/>
+    <text x="10" y="134" class="b">WDATA</text>
+    <path class="w" d="M100 118 H205 L215 142 H305 L315 118 H600 M100 142 H205 L215 118 H305 L315 142 H600"/>
+    <text x="226" y="134" class="m hi">CAFEF00D</text>
+    <text x="130" y="134" class="m dim">—</text>
+    <text x="440" y="134" class="m dim">—</text>
+    <text x="10" y="179" class="b">RDATA1</text>
+    <text x="10" y="194" class="m dim">raddr1 = 1</text>
+    <path class="w-g" d="M100 163 H255 L265 187 H600 M100 187 H255 L265 163 H600"/>
+    <text x="108" y="179" class="m">DEADBEEF (old)</text>
+    <text x="300" y="179" class="m g">CAFEF00D (new)</text>
+    <text x="256" y="220" class="dim">↑ rising edge: the write happens here</text>
+  </svg>
+  <figcaption>WE and WDATA are ready before the edge, but R1 does not change yet, so RDATA1 still shows the old value. Right after the edge (dashed line) R1 holds the new value and the read port shows it.</figcaption>
+</figure>
+
+<div class="callout tip"><b>Why this matters</b><p>In one cycle of <code>add R1, R1, R2</code>, the CPU reads the <em>old</em> R1 all cycle long, the adder computes old R1 + R2, and the answer is stored at the end-of-cycle edge. Reading and writing the same register in one cycle is safe.</p></div>
+
+<h2>6. The zero register ($zero / x0)</h2>
+<p>In MIPS, register 0 is called <code>$zero</code>. In RISC-V it is <code>x0</code> (registers are x0–x31). It is <strong>hardwired to 0</strong>:</p>
+<ul>
+  <li>Reading it always gives 0.</li>
+  <li>Writing to it is ignored.</li>
+</ul>
+<p>Why? The constant 0 is used all the time (for example "copy R2 into R1" is just <code>R1 = R2 + 0</code>). The hardware version is shown after the lab code below.</p>
+
+<p>Where the register file sits among storage:</p>
+<ol class="flow arrows">
+  <li><b>Register file</b>Fastest, tiny, inside the CPU</li>
+  <li><b>L1 cache</b>SRAM, very fast</li>
+  <li><b>L2 cache</b>SRAM, bigger</li>
+  <li><b>RAM</b>DRAM, big, slower</li>
+</ol>
+
+<h2>7. Lab 2B: a 4 × 32 register file in Verilog</h2>
+<p>The lab asks for <strong>4 registers, each 32 bits</strong>, with two read ports and one write port. 4 registers need a <strong>2-bit</strong> address (2² = 4). New to Verilog? Start with <a href="m1-00-verilog-basics.html">Verilog for absolute beginners</a>.</p>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · regfile4.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="com">// 4 x 32-bit register file, 2 read + 1 write</span></td><td class="n">A comment. Verilog ignores it.</td></tr>
+    <tr><td class="c"><span class="kw">module</span> regfile4 (</td><td class="n">Start a circuit block called <code>regfile4</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">input</span>         clk,</td><td class="n">The clock. Writes happen on its rising edge.</td></tr>
+    <tr><td class="c">  <span class="kw">input</span>         we,</td><td class="n">Write enable (RegWrite). 1 = write at the next edge.</td></tr>
+    <tr><td class="c">  <span class="kw">input</span>  [1:0]  waddr,</td><td class="n">2-bit write address: which register (0–3) to write.</td></tr>
+    <tr><td class="c">  <span class="kw">input</span>  [1:0]  raddr1,</td><td class="n">2-bit address for read port 1.</td></tr>
+    <tr><td class="c">  <span class="kw">input</span>  [1:0]  raddr2,</td><td class="n">2-bit address for read port 2.</td></tr>
+    <tr><td class="c">  <span class="kw">input</span>  [31:0] wdata,</td><td class="n">The 32-bit value to write.</td></tr>
+    <tr><td class="c">  <span class="kw">output</span> [31:0] rdata1,</td><td class="n">32-bit output of read port 1.</td></tr>
+    <tr><td class="c">  <span class="kw">output</span> [31:0] rdata2</td><td class="n">32-bit output of read port 2. Last pin, so no comma.</td></tr>
+    <tr><td class="c">);</td><td class="n">End of the pin list.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span> [31:0] r [0:3];</td><td class="n">The storage: <b>4 boxes, each 32 bits wide</b>. <code>[31:0]</code> is the width of one box; <code>[0:3]</code> numbers the boxes r[0] to r[3]. <code>reg</code> means "holds its value".</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="com">// WRITE: synchronous</span></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(<span class="kw">posedge</span> clk) <span class="kw">begin</span></td><td class="n">Run this only at each rising clock edge. This builds flip-flops.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (we)</td><td class="n">Only if write enable is 1 ("WHETHER").</td></tr>
+    <tr><td class="c">      r[waddr] &lt;= wdata;</td><td class="n">Store wdata into the box picked by waddr ("WHERE"). The tool builds the decoder + AND gates for you. <code>&lt;=</code> is the clocked (non-blocking) assignment.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">If we = 0, nothing is stored, so every box keeps its value.</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="com">// READ: combinational (no clock!)</span></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> rdata1 = r[raddr1];</td><td class="n">A permanent connection: rdata1 always shows the box raddr1 points to. This is read MUX 1.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> rdata2 = r[raddr2];</td><td class="n">Read MUX 2, completely independent of port 1.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">End of the block.</td></tr>
+  </table>
+</div>
+
+<h3>Optional: keep register 0 at zero (like $zero / x0)</h3>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · changes for a zero register</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">  <span class="kw">always</span> @(<span class="kw">posedge</span> clk)</td><td class="n">Same clocked write block as before.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (we &amp;&amp; waddr != <span class="num">2'd0</span>)</td><td class="n">Write only if WE is 1 <b>and</b> the address is not 0. <code>&amp;&amp;</code> means "and"; <code>!=</code> means "not equal"; <code>2'd0</code> is the number 0 written with 2 bits.</td></tr>
+    <tr><td class="c">      r[waddr] &lt;= wdata;</td><td class="n">So writes to register 0 are ignored.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> rdata1 = (raddr1 == <span class="num">2'd0</span>) ? <span class="num">32'd0</span> : r[raddr1];</td><td class="n"><code>A ? B : C</code> means "if A then B, else C". Reading address 0 always gives 0.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> rdata2 = (raddr2 == <span class="num">2'd0</span>) ? <span class="num">32'd0</span> : r[raddr2];</td><td class="n">Same rule for port 2.</td></tr>
+  </table>
+</div>
+
+<h3>The testbench (what it checks)</h3>
+<p>A <strong>testbench</strong> is a pretend circuit board that feeds inputs to your design and checks the outputs. It is only for simulation. The clock below has rising edges at t = 5, 15, 25, 35 ns. Inputs are changed at times <em>between</em> edges, so there are no races.</p>
+<ol class="steps">
+  <li>Write <code>0xDEADBEEF</code> to r1, then <code>0x12345678</code> to r2.</li>
+  <li>Read r1 and r2 on both ports at the same time.</li>
+  <li>Try a write with <code>we = 0</code> and show it is ignored.</li>
+  <li>Start a write to r1 and show the read port still gives the OLD value until the clock edge.</li>
+</ol>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · regfile4_tb.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">`timescale</span> 1ns/1ps</td><td class="n">One time unit (<code>#1</code>) means 1 nanosecond.</td></tr>
+    <tr><td class="c"><span class="kw">module</span> regfile4_tb;</td><td class="n">The testbench is a module with no pins.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span>  clk, we;</td><td class="n"><code>reg</code> here = signals the testbench drives by hand.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span>  [1:0]  waddr, raddr1, raddr2;</td><td class="n">The three 2-bit addresses.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span>  [31:0] wdata;</td><td class="n">The value to write.</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> [31:0] rdata1, rdata2;</td><td class="n"><code>wire</code> = signals the design drives; we only watch them.</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  regfile4 dut (.clk(clk), .we(we),</td><td class="n">Place one copy of the design, named <code>dut</code> ("device under test"), and plug in each signal.</td></tr>
+    <tr><td class="c">    .waddr(waddr), .raddr1(raddr1), .raddr2(raddr2),</td><td class="n"><code>.pin(signal)</code> connects the design's pin to our signal.</td></tr>
+    <tr><td class="c">    .wdata(wdata), .rdata1(rdata1), .rdata2(rdata2));</td><td class="n"></td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">initial</span> clk = <span class="num">0</span>;</td><td class="n">The clock starts at 0.</td></tr>
+    <tr><td class="c">  <span class="kw">always</span> #<span class="num">5</span> clk = ~clk;</td><td class="n">Every 5 ns, flip the clock. Period = 10 ns; rising edges at 5, 15, 25, 35…</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">initial begin</span></td><td class="n">The test script. Runs once, top to bottom.</td></tr>
+    <tr><td class="c">    <span class="kw">$dumpfile</span>(<span class="str">"regfile.vcd"</span>);</td><td class="n">Save waveforms to this file (open it in GTKWave).</td></tr>
+    <tr><td class="c">    <span class="kw">$dumpvars</span>(<span class="num">0</span>, regfile4_tb);</td><td class="n">Record every signal in the testbench.</td></tr>
+    <tr><td class="c">    we = <span class="num">0</span>; waddr = <span class="num">0</span>; wdata = <span class="num">0</span>;</td><td class="n">Start with everything quiet.</td></tr>
+    <tr><td class="c">    raddr1 = <span class="num">0</span>; raddr2 = <span class="num">0</span>;</td><td class="n"></td></tr>
+    <tr><td class="c">    #<span class="num">2</span>;</td><td class="n">Wait 2 ns. Now t = 2.</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="com">// Test 1: write two registers</span></td><td class="n"></td></tr>
+    <tr><td class="c">    we = <span class="num">1</span>; waddr = <span class="num">2'd1</span>; wdata = <span class="num">32'hDEADBEEF</span>;</td><td class="n">Ask to write DEADBEEF into r1. <code>32'h…</code> = a 32-bit number written in hex.</td></tr>
+    <tr><td class="c">    #<span class="num">10</span>;</td><td class="n">t = 12. The edge at t = 5 stored it.</td></tr>
+    <tr><td class="c">    waddr = <span class="num">2'd2</span>; wdata = <span class="num">32'h12345678</span>;</td><td class="n">Now ask to write 12345678 into r2 (we is still 1).</td></tr>
+    <tr><td class="c">    #<span class="num">10</span>;</td><td class="n">t = 22. The edge at t = 15 stored it.</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="com">// Test 2: two reads at once</span></td><td class="n"></td></tr>
+    <tr><td class="c">    we = <span class="num">0</span>; raddr1 = <span class="num">2'd1</span>; raddr2 = <span class="num">2'd2</span>;</td><td class="n">Stop writing. Port 1 looks at r1, port 2 at r2.</td></tr>
+    <tr><td class="c">    #<span class="num">1</span>;</td><td class="n">Wait 1 ns (t = 23) for the gates to settle. No clock edge is needed.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rdata1 === <span class="num">32'hDEADBEEF</span> &amp;&amp;</td><td class="n"><code>===</code> is an exact compare (it also catches unknown X values). <code>&amp;&amp;</code> means "and".</td></tr>
+    <tr><td class="c">        rdata2 === <span class="num">32'h12345678</span>)</td><td class="n">Both reads must be right.</td></tr>
+    <tr><td class="c">      <span class="kw">$display</span>(<span class="str">"PASS: two reads"</span>);</td><td class="n">Print a message on the screen.</td></tr>
+    <tr><td class="c">    <span class="kw">else</span> <span class="kw">$display</span>(<span class="str">"FAIL: %h %h"</span>,</td><td class="n">Otherwise print what we got. <code>%h</code> = show in hex.</td></tr>
+    <tr><td class="c">                  rdata1, rdata2);</td><td class="n"></td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="com">// Test 3: write with we = 0 is ignored</span></td><td class="n"></td></tr>
+    <tr><td class="c">    waddr = <span class="num">2'd1</span>; wdata = <span class="num">32'hFFFFFFFF</span>;</td><td class="n">Put a new value on the inputs, but <code>we</code> is still 0.</td></tr>
+    <tr><td class="c">    #<span class="num">10</span>;</td><td class="n">t = 33. The edge at t = 25 went by.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rdata1 === <span class="num">32'hDEADBEEF</span>)</td><td class="n">r1 must still be DEADBEEF.</td></tr>
+    <tr><td class="c">      <span class="kw">$display</span>(<span class="str">"PASS: we=0 ignored"</span>);</td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">else</span> <span class="kw">$display</span>(<span class="str">"FAIL: r1 changed"</span>);</td><td class="n"></td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="com">// Test 4: read during a write</span></td><td class="n"></td></tr>
+    <tr><td class="c">    we = <span class="num">1</span>; wdata = <span class="num">32'hCAFEF00D</span>;</td><td class="n">t = 33: set up a real write to r1. Next edge is at t = 35.</td></tr>
+    <tr><td class="c">    #<span class="num">1</span>;</td><td class="n">t = 34: before the edge.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rdata1 === <span class="num">32'hDEADBEEF</span>)</td><td class="n">The write has not happened yet, so we still read the OLD value.</td></tr>
+    <tr><td class="c">      <span class="kw">$display</span>(<span class="str">"PASS: old value before edge"</span>);</td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">else</span> <span class="kw">$display</span>(<span class="str">"FAIL: changed too early"</span>);</td><td class="n"></td></tr>
+    <tr><td class="c">    #<span class="num">2</span>;</td><td class="n">t = 36: just after the edge at 35.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rdata1 === <span class="num">32'hCAFEF00D</span>)</td><td class="n">Now the read port shows the NEW value.</td></tr>
+    <tr><td class="c">      <span class="kw">$display</span>(<span class="str">"PASS: new value after edge"</span>);</td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">else</span> <span class="kw">$display</span>(<span class="str">"FAIL: write missing"</span>);</td><td class="n"></td></tr>
+    <tr><td class="c">    we = <span class="num">0</span>;</td><td class="n">Tidy up: stop writing.</td></tr>
+    <tr><td class="c">    #<span class="num">10</span> <span class="kw">$finish</span>;</td><td class="n">Wait a little more, then end the simulation.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<pre class="plain code" style="border-radius:var(--radius)"><span class="com"># compile, run, then open the waveform</span>
+iverilog -o rf.vvp regfile4.v regfile4_tb.v
+vvp rf.vvp
+gtkwave regfile.vcd</pre>
+<p style="font-size:15px">Expected output: four <code>PASS</code> lines. In GTKWave, r0 and r3 show <b>X</b> (unknown), because nothing was ever written to them. That is normal in simulation.</p>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>Clocking the read port</b> (putting the reads inside <code>always @(posedge clk)</code>). Reads then arrive one cycle late. Reads must be combinational (<code>assign</code>).</li>
+  <li><b>Forgetting write enable.</b> Without <code>if (we)</code>, the register file overwrites a register on every clock edge.</li>
+  <li><b>Bus contention:</b> if reads are built with tri-state drivers on a shared bus, never enable two drivers at once. Two outputs fight and the value is garbage.</li>
+  <li><b>Wrong address width:</b> address bits = log₂(number of registers). 32 → 5, 8 → 3, 4 → 2.</li>
+  <li>Using <code>=</code> instead of <code>&lt;=</code> in the clocked block.</li>
+  <li>Changing testbench inputs exactly on a clock edge (t = 5, 15…) creates a simulation race. Change them between edges.</li>
+  <li>"Writing to $zero changes it" is false: it always reads 0.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>How many address bits does a register file with 32 registers need? With 16?</summary><div class="a"><p>log₂ 32 = <b>5</b> bits. log₂ 16 = <b>4</b> bits.</p></div></details>
+  <details class="q"><summary>Why does a register file have two read ports but only one write port?</summary><div class="a"><p>An R-type instruction such as <code>add rd, rs1, rs2</code> reads two registers (rs1, rs2) and writes one (rd), all in one cycle.</p></div></details>
+  <details class="q"><summary>WADDR = 3, WE = 0. Which register changes at the next clock edge?</summary><div class="a"><p><b>None.</b> The decoder picks R3 (WHERE), but WE = 0 (WHETHER), so every AND gate outputs 0.</p></div></details>
+  <details class="q"><summary>R1 holds 5. In one cycle, WE = 1, WADDR = 1, WDATA = 9 and RADDR1 = 1. What does RDATA1 show before and after the clock edge?</summary><div class="a"><p>Before the edge: <b>5</b> (the old value, because writes wait for the clock). After the edge: <b>9</b>.</p></div></details>
+  <details class="q"><summary>Homework: design an 8 × 16 register file. What sizes are the decoder, MUXes and storage?</summary><div class="a">
+    <p>8 registers → address = log₂ 8 = <b>3 bits</b>.</p>
+    <ul>
+      <li>Write port: a <b>3→8 decoder</b> and 8 AND gates (each with WE).</li>
+      <li>Read ports: <b>two 8:1 MUXes</b>, each 16 bits wide.</li>
+      <li>Storage: 8 × 16 = <b>128 flip-flops</b>. In Verilog: <code>reg [15:0] r [0:7];</code></li>
+    </ul></div></details>
+  <details class="q"><summary>What happens if you read MIPS $zero after writing 42 to it?</summary><div class="a"><p>You read <b>0</b>. Register 0 is hardwired to zero; writes to it are ignored.</p></div></details>
+  <details class="q"><summary>Your testbench shows rdata1 changing one full cycle after you change raddr1. What is wrong?</summary><div class="a"><p>The read was written inside <code>always @(posedge clk)</code>, so it became clocked. Use <code>assign rdata1 = r[raddr1];</code> so reads are combinational.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=4dF4YbOy0oM" target="_blank" rel="noopener"><i class="play"></i><span><b>L3.3 - RISC-V ALU and Register File</b><small>Nitin Chandrachoodan</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=S7jsgT1U5II" target="_blank" rel="noopener"><i class="play"></i><span><b>CSE260 Register Files</b><small>Doug Shook</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=OsE2zWvblKQ" target="_blank" rel="noopener"><i class="play"></i><span><b>Register File in Verilog</b><small>Justn Weathersby</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

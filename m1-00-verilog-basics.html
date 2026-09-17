@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Verilog Basics</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+<style>
+  /* show <=, !=, == exactly as typed (no font ligatures) */
+  code, pre, .ann td.c, .formula, svg text.m { font-variant-ligatures: none; font-feature-settings: "calt" 0, "liga" 0; }
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 1 / Verilog basics</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 1 · Digital Foundations <span class="tag class">From class notes · Lab 0001 &amp; Lab 0011</span></div>
+  <h1>Verilog for absolute beginners</h1>
+  <p class="idea">Verilog is a language for <strong>describing a circuit</strong>: which wires go into which gates, and where the outputs go. It is not a list of steps. Everything you write exists at the same time, like real wires on a board.</p>
+  <div class="analogy"><b>Think of it like this:</b> a recipe says "first do this, then do that". A house wiring plan says "this switch is connected to that lamp". Verilog is the wiring plan. When you flip a switch, the lamp changes straight away. Nobody "runs" the plan line by line.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>HDL</dt><dd>Hardware Description Language. A language that describes circuits. Verilog is one.</dd></div>
+  <div class="term"><dt>Module</dt><dd>One circuit block, like a chip. It has a name, pins, and the wiring inside.</dd></div>
+  <div class="term"><dt>Port</dt><dd>A pin on the module. It is an <code>input</code> or an <code>output</code>.</dd></div>
+  <div class="term"><dt>Signal</dt><dd>A value carried on a wire: 0 (low, off) or 1 (high, on).</dd></div>
+  <div class="term"><dt>wire (a "net")</dt><dd>A real wire. It stores nothing. It always shows whatever is driving it.</dd></div>
+  <div class="term"><dt>reg (a "variable")</dt><dd>A signal that <em>keeps</em> its value until it is given a new one inside an <code>always</code> or <code>initial</code> block.</dd></div>
+  <div class="term"><dt>Vector / bus</dt><dd>A group of wires with one name, e.g. 8 wires called <code>data</code>.</dd></div>
+  <div class="term"><dt>Testbench</dt><dd>A second module that feeds test inputs into your circuit and records what comes out.</dd></div>
+  <div class="term"><dt>DUT</dt><dd>Design Under Test: the circuit the testbench is checking.</dd></div>
+  <div class="term"><dt>Simulation</dt><dd>Pretending the circuit exists, on your laptop, to check it. Nothing is built.</dd></div>
+  <div class="term"><dt>Synthesis</dt><dd>Turning Verilog into a real list of gates (a <b>netlist</b>) that can be made into a chip.</dd></div>
+  <div class="term"><dt>X</dt><dd>"Unknown" value. A signal nobody has set yet shows X (drawn red in GTKWave).</dd></div>
+</dl>
+
+<h2>1. Software thinking vs hardware thinking</h2>
+<p>This is the most important idea on the page. A program does one step, then the next. A circuit does everything at once.</p>
+<div class="vs">
+  <div><h3>Software (a to-do list)</h3>
+    <p><code>for (i=0; i&lt;4; i++) lamp[i]=1;</code></p>
+    <p style="font-size:15px">In plain words: "Set i to 0. Turn on lamp i. Add 1 to i. Repeat while i is less than 4." The four lamps turn on <b>one after another</b>.</p></div>
+  <div><h3>Hardware (a wiring plan)</h3>
+    <p><code>assign lamp = switch;</code></p>
+    <p style="font-size:15px">In plain words: "Connect the 4 switch wires to the 4 lamp wires." All four connections <b>exist together, all the time</b>.</p></div>
+</div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 620 200" width="620" role="img" aria-label="Left: software does four steps one after another. Right: hardware has four switch-to-lamp wires working at the same time">
+    <rect x="10" y="10" width="290" height="180" rx="8" class="box"/>
+    <text x="24" y="34" class="b">Software: one step at a time</text>
+    <rect x="40" y="48" width="160" height="26" rx="5" class="box-b"/><text x="52" y="66" class="m">1. lamp[0] = 1</text>
+    <rect x="40" y="84" width="160" height="26" rx="5" class="box-b"/><text x="52" y="102" class="m">2. lamp[1] = 1</text>
+    <rect x="40" y="120" width="160" height="26" rx="5" class="box-b"/><text x="52" y="138" class="m">3. lamp[2] = 1</text>
+    <rect x="40" y="156" width="160" height="26" rx="5" class="box-b"/><text x="52" y="174" class="m">4. lamp[3] = 1</text>
+    <path class="w" d="M230 56 V172"/>
+    <polygon points="225,166 230,176 235,166" class="fill-ink"/>
+    <text x="240" y="118" class="dim">time</text>
+    <rect x="320" y="10" width="290" height="180" rx="8" class="box-g"/>
+    <text x="334" y="34" class="b">Hardware: all at once</text>
+    <text x="340" y="66" class="m">sw0</text><path class="w-g" d="M372 62 H532"/><circle cx="548" cy="62" r="9" class="box-hi"/><text x="564" y="66" class="m">lamp0</text>
+    <text x="340" y="98" class="m">sw1</text><path class="w-g" d="M372 94 H532"/><circle cx="548" cy="94" r="9" class="box-hi"/><text x="564" y="98" class="m">lamp1</text>
+    <text x="340" y="130" class="m">sw2</text><path class="w-g" d="M372 126 H532"/><circle cx="548" cy="126" r="9" class="box-hi"/><text x="564" y="130" class="m">lamp2</text>
+    <text x="340" y="162" class="m">sw3</text><path class="w-g" d="M372 158 H532"/><circle cx="548" cy="158" r="9" class="box-hi"/><text x="564" y="162" class="m">lamp3</text>
+  </svg>
+  <figcaption>A program is a list you work through. A circuit is a set of connections that are always "on".</figcaption>
+</figure>
+
+<div class="callout tip"><b>The instructor's warning</b><p>"Every bug this mismatch causes in Lab 1 traces back to reading Verilog like a to-do list instead of a wiring diagram." When you read a line of Verilog, picture a wire, not a step.</p></div>
+
+<h2>2. Simulation, synthesis and the tools</h2>
+<dl class="terms">
+  <div class="term"><dt>Simulation</dt><dd>Runs on your normal computer. Gives printed text and waveforms. <b>All of Lab 1 is simulation.</b></dd></div>
+  <div class="term"><dt>Synthesis</dt><dd>Tools like Synopsys Design Compiler or Cadence Genus turn the code into a gate-level netlist for a real chip.</dd></div>
+</dl>
+<p>How a chip is made (you only simulate at the first stage, RTL):</p>
+<ol class="flow arrows">
+  <li><b>RTL (.v)</b>Your Verilog code. RTL = Register Transfer Level.</li>
+  <li><b>Logic synthesis</b>Code becomes gates.</li>
+  <li><b>Netlist</b>A list of gates and the wires between them.</li>
+  <li><b>Place &amp; route</b>Decide where each gate sits on the chip.</li>
+  <li><b>Fabrication</b>The chip is manufactured.</li>
+</ol>
+
+<div class="scroll"><table>
+  <tr><th>HDL</th><th>Year</th><th>Notes</th></tr>
+  <tr><td><b>Verilog</b></td><td>1984</td><td>Looks a bit like the C language. Standard IEEE 1364. <b>This course uses it.</b></td></tr>
+  <tr><td>VHDL</td><td>1987</td><td>Based on the Ada language. Wordy. Popular in defence.</td></tr>
+  <tr><td>SystemVerilog</td><td>2005</td><td>Verilog plus extra features (a "superset"). Standard IEEE 1800.</td></tr>
+</table></div>
+<div class="scroll"><table>
+  <tr><th>Job</th><th>Tools</th></tr>
+  <tr><td>Simulator (runs your code)</td><td><b>Icarus Verilog</b> (<code>iverilog</code>, free, used in lab), VCS, Questa</td></tr>
+  <tr><td>Synthesis</td><td>Design Compiler, Genus</td></tr>
+  <tr><td>Waveform viewer</td><td><b>GTKWave</b> (free, used in lab)</td></tr>
+</table></div>
+
+<h2>3. Your first module: an AND gate</h2>
+<p>A module is a box with pins. You say which pins are inputs and outputs, then describe the wiring inside.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 520 170" width="520" role="img" aria-label="The and_gate module drawn as a box with inputs a and b on the left, an AND gate inside, and output y on the right">
+    <rect x="150" y="20" width="220" height="130" rx="10" class="box-b"/>
+    <text x="162" y="42" class="b">module and_gate</text>
+    <text x="40" y="62" class="m">a (input)</text>
+    <text x="40" y="102" class="m">b (input)</text>
+    <path class="w" d="M40 70 H150 M40 110 H150"/>
+    <path class="w" d="M150 70 H205 V80 H230 M150 110 H205 V100 H230"/>
+    <path class="box" d="M230 70 H260 A20 20 0 0 1 260 110 H230 Z"/>
+    <text x="235" y="94" class="m">AND</text>
+    <path class="w-hi" d="M280 90 H480"/>
+    <text x="392" y="82" class="m hi">y (output)</text>
+    <text x="178" y="138" class="m dim">assign y = a &amp; b;</text>
+    <rect x="145" y="65" width="10" height="10" class="fill-ink"/>
+    <rect x="145" y="105" width="10" height="10" class="fill-ink"/>
+    <rect x="365" y="85" width="10" height="10" class="fill-hi"/>
+  </svg>
+  <figcaption>The squares are the ports (pins). The code inside the box says "y is always a AND b".</figcaption>
+</figure>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · and_gate.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="com">// a 2-input AND gate</span></td><td class="n">A comment: a note for humans. Verilog ignores everything after <code>//</code> on that line. Use <code>/* ... */</code> for notes over several lines.</td></tr>
+    <tr><td class="c"><span class="kw">module</span> and_gate (</td><td class="n">Start a circuit block called <code>and_gate</code>. The pin list starts after <code>(</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">input wire</span> a, <span class="kw">input wire</span> b,</td><td class="n">Two input pins, <code>a</code> and <code>b</code>. Each one is a plain wire. Commas separate pins.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> y</td><td class="n">One output pin, <code>y</code>. The last pin has no comma after it.</td></tr>
+    <tr><td class="c">);</td><td class="n">End of the pin list. Most lines in Verilog end with a semicolon <code>;</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y = a &amp; b;</td><td class="n">Connect y to "a AND b". <code>&amp;</code> means AND. This is a permanent connection: whenever a or b changes, y changes too.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">End of the block. Note: no semicolon here.</td></tr>
+  </table>
+</div>
+
+<div class="callout tip"><b>Three small rules</b>
+<ul>
+  <li><b>Case matters.</b> <code>and_gate</code> and <code>AND_GATE</code> are two different names. Keywords like <code>module</code> are always lowercase.</li>
+  <li><b>Ports are wires by default.</b> <code>input a</code> means the same as <code>input wire a</code>.</li>
+  <li><b>A missing <code>;</code></b> is the most common error. The tool usually complains about the line <em>after</em> the real mistake.</li>
+</ul></div>
+
+<h2>4. wire vs reg</h2>
+<div class="vs">
+  <div><h3><code>wire</code> (net)</h3>
+    <p>A physical wire. It holds nothing by itself. It just shows what is connected to it.</p>
+    <p>Gets its value from <b><code>assign</code></b> or from a module's output pin.</p></div>
+  <div><h3><code>reg</code> (variable)</h3>
+    <p>Keeps its value until something gives it a new one.</p>
+    <p>Gets its value inside <b><code>always</code></b> or <b><code>initial</code></b> blocks.</p>
+    <p style="font-size:15px"><b>reg does NOT always mean a flip-flop</b> (a memory cell). Inside <code>always @(*)</code> a reg is still just plain gates.</p></div>
+</div>
+<div class="formula">wire ↔ assign &nbsp;&nbsp;|&nbsp;&nbsp; reg ↔ always / initial<small>The most-tested rule: anything on the left of <code>=</code> inside an always block must be declared <code>reg</code>.</small></div>
+<p style="font-size:15px"><code>integer k;</code> is another kind of variable. It holds a whole number. Use it only in testbenches, e.g. as a loop counter.</p>
+
+<h2>5. Vectors (buses): many wires, one name</h2>
+<p><code>wire [7:0] data;</code> makes 8 wires named <code>data[7]</code> down to <code>data[0]</code>. Always write the range as <b>[MSB:LSB]</b>: the left number is the most significant (biggest) bit, the right number is the least significant bit.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 520 130" width="520" role="img" aria-label="An 8-bit bus data holding 1011 0010. Bits 7 to 4 are highlighted as data[7:4] = 1011, bits 3 to 0 are data[3:0] = 0010">
+    <text x="4" y="22" class="m dim">bit</text>
+    <text x="60" y="22" class="m dim">7</text><text x="110" y="22" class="m dim">6</text><text x="160" y="22" class="m dim">5</text><text x="210" y="22" class="m dim">4</text>
+    <text x="260" y="22" class="m dim">3</text><text x="310" y="22" class="m dim">2</text><text x="360" y="22" class="m dim">1</text><text x="410" y="22" class="m dim">0</text>
+    <rect x="40" y="30" width="50" height="40" class="box-hi"/><text x="60" y="56" class="b">1</text>
+    <rect x="90" y="30" width="50" height="40" class="box-hi"/><text x="110" y="56" class="b">0</text>
+    <rect x="140" y="30" width="50" height="40" class="box-hi"/><text x="160" y="56" class="b">1</text>
+    <rect x="190" y="30" width="50" height="40" class="box-hi"/><text x="210" y="56" class="b">1</text>
+    <rect x="240" y="30" width="50" height="40" class="box"/><text x="260" y="56" class="b">0</text>
+    <rect x="290" y="30" width="50" height="40" class="box"/><text x="310" y="56" class="b">0</text>
+    <rect x="340" y="30" width="50" height="40" class="box"/><text x="360" y="56" class="b">1</text>
+    <rect x="390" y="30" width="50" height="40" class="box"/><text x="410" y="56" class="b">0</text>
+    <text x="140" y="92" class="m hi" text-anchor="middle">data[7:4] = 1011</text>
+    <text x="340" y="92" class="m" text-anchor="middle">data[3:0] = 0010</text>
+    <text x="65" y="118" class="m dim" text-anchor="middle">MSB = data[7]</text>
+    <text x="415" y="118" class="m dim" text-anchor="middle">LSB = data[0]</text>
+  </svg>
+  <figcaption><code>data[0]</code> picks one wire. <code>data[7:4]</code> picks a range of wires (the top four).</figcaption>
+</figure>
+
+<h3>Writing numbers in Verilog</h3>
+<p><code>4'b1010</code> means: <b>4</b> bits wide, written in <b>b</b>inary, value 1010. Similarly <code>8'hFF</code> is 8 bits in <b>h</b>ex, and <code>8'd10</code> is 8 bits in <b>d</b>ecimal. A plain <code>10</code> is just decimal ten. See <a href="m1-05-number-systems.html">Number systems</a> for binary and hex.</p>
+
+<h2>6. Operators</h2>
+<div class="scroll"><table>
+  <tr><th>Kind</th><th>Symbols</th><th>Example</th><th>Result size</th></tr>
+  <tr><td>Bitwise</td><td><code>&amp;</code> AND, <code>|</code> OR, <code>^</code> XOR, <code>~</code> NOT, <code>^~</code> / <code>~^</code> XNOR</td><td><code>4'b1100 &amp; 4'b1010</code> = <code>4'b1000</code></td><td>Same width as the inputs (works bit by bit)</td></tr>
+  <tr><td>Logical</td><td><code>&amp;&amp;</code> and, <code>||</code> or, <code>!</code> not</td><td><code>4'b1100 &amp;&amp; 4'b1010</code> = <code>1</code></td><td>1 bit (true / false). Any non-zero value counts as true.</td></tr>
+  <tr><td>Relational</td><td><code>&lt; &gt; &lt;= &gt;=</code>, <code>==</code> equal, <code>!=</code> not equal</td><td><code>3 &lt; 5</code> = <code>1</code></td><td>1 bit</td></tr>
+  <tr><td>Arithmetic</td><td><code>+ - * / %</code></td><td><code>4'd6 + 4'd3</code> = <code>4'd9</code></td><td>Depends on the target. <code>/</code> and <code>%</code> make big, slow hardware.</td></tr>
+  <tr><td>Choose (MUX)</td><td><code>sel ? b : a</code></td><td>If sel is 1 give b, else give a</td><td>Width of a / b</td></tr>
+  <tr><td>Join (concatenate)</td><td><code>{a, b}</code></td><td><code>{2'b10, 2'b01}</code> = <code>4'b1001</code></td><td>Sum of the widths</td></tr>
+</table></div>
+<div class="callout trap"><b>&amp; is not &amp;&amp;</b><p>For single-bit signals they give the same answer. For buses they don't: <code>&amp;</code> works on each bit pair; <code>&amp;&amp;</code> gives one true/false bit. For gates, use the single-symbol bitwise operators.</p></div>
+
+<h2>7. <code>assign</code>: a permanent connection</h2>
+<p><code>assign y = expression;</code> is called a <b>continuous assignment</b>. In the lab's words: "No clock, no trigger, no waiting." The output always follows the inputs. The left side must be a <code>wire</code>. The order of several <code>assign</code> lines does not matter, because they all exist at once.</p>
+
+<h2>8. <code>always</code> blocks: describing behaviour</h2>
+<p>Sometimes it is easier to describe <em>what</em> a circuit does than to list its gates. An <code>always</code> block does that. The part after <code>@</code> is the <b>sensitivity list</b>: it says when the block should update.</p>
+
+<div class="vs">
+  <div><h3><code>always @(*)</code></h3>
+    <p><b>Combinational logic</b>: output depends only on the inputs right now (like gates). <code>*</code> means "update whenever any input changes".</p></div>
+  <div><h3><code>always @(posedge clk)</code></h3>
+    <p><b>Sequential logic</b>: output changes only at the <b>rising edge</b> of the clock (the moment <code>clk</code> goes from 0 to 1). This makes memory (flip-flops).</p></div>
+</div>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · always examples</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> and_beh (<span class="kw">input</span> a, <span class="kw">input</span> b,</td><td class="n">Same AND gate, written with an always block.</td></tr>
+    <tr><td class="c">                <span class="kw">output reg</span> y);</td><td class="n">y is <code>reg</code> because it is set inside <code>always</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(*) <span class="kw">begin</span></td><td class="n">Recalculate whenever a or b changes. <code>begin</code> ... <code>end</code> groups lines, like brackets.</td></tr>
+    <tr><td class="c">    y = a &amp; b;</td><td class="n">Give y the value a AND b. Built as a plain AND gate, not memory.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">End of the group.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+    <tr><td class="c"> </td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">module</span> dff (<span class="kw">input</span> clk, <span class="kw">input</span> d,</td><td class="n">A D flip-flop: a 1-bit memory cell.</td></tr>
+    <tr><td class="c">            <span class="kw">output reg</span> q);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(<span class="kw">posedge</span> clk)</td><td class="n">Only wake up when the clock rises from 0 to 1.</td></tr>
+    <tr><td class="c">    q &lt;= d;</td><td class="n">At that moment, copy d into q. Between edges q holds its value.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 560 210" width="560" role="img" aria-label="Timing of a D flip-flop: q copies d only at rising clock edges">
+    <path class="grid" stroke-dasharray="4 4" d="M100 12 V180 M180 12 V180 M260 12 V180 M340 12 V180 M420 12 V180 M500 12 V180"/>
+    <text x="14" y="40" class="m b">clk</text>
+    <path class="w" d="M60 50 H100 V20 H140 V50 H180 V20 H220 V50 H260 V20 H300 V50 H340 V20 H380 V50 H420 V20 H460 V50 H500 V20 H540"/>
+    <polygon points="95,42 100,32 105,42" class="fill-hi"/>
+    <polygon points="175,42 180,32 185,42" class="fill-hi"/>
+    <polygon points="255,42 260,32 265,42" class="fill-hi"/>
+    <polygon points="335,42 340,32 345,42" class="fill-hi"/>
+    <polygon points="415,42 420,32 425,42" class="fill-hi"/>
+    <polygon points="495,42 500,32 505,42" class="fill-hi"/>
+    <text x="14" y="102" class="m b">d</text>
+    <path class="w" d="M60 110 H130 V86 H300 V110 H360 V86 H540"/>
+    <text x="14" y="162" class="m b">q</text>
+    <path class="w-hi" d="M60 170 H180 V146 H340 V170 H420 V146 H540"/>
+    <text x="60" y="200" class="dim">q changes only at the copper ↑ marks (rising edges), copying d at that instant.</text>
+  </svg>
+  <figcaption>d rises between edges, but q waits for the next rising edge. That waiting is what "sequential" means.</figcaption>
+</figure>
+
+<h3><code>=</code> vs <code>&lt;=</code></h3>
+<div class="vs">
+  <div><h3>Blocking <code>=</code></h3>
+    <p>Takes effect <b>immediately</b>. The next line already sees the new value.</p>
+    <p>Use in <code>always @(*)</code> (combinational).</p>
+    <p style="font-size:15px">a=1, b=0. <code>a = b; b = a;</code> → a becomes 0, then b gets the <em>new</em> a (0). Both end as <b>0</b>.</p></div>
+  <div><h3>Non-blocking <code>&lt;=</code></h3>
+    <p>All right-hand sides are read <b>first</b>, then all left sides update <b>together</b> at the end.</p>
+    <p>Use in <code>always @(posedge clk)</code> (sequential).</p>
+    <p style="font-size:15px">a=1, b=0. <code>a &lt;= b; b &lt;= a;</code> → both read old values. a becomes 0, b becomes 1. They <b>swap</b>, like real flip-flops.</p></div>
+</div>
+<div class="callout trap"><b>Don't confuse the two meanings of &lt;=</b><p>As a statement (<code>q &lt;= d;</code>) it means "non-blocking assign". Inside a comparison (<code>if (a &lt;= b)</code>) it means "less than or equal".</p></div>
+
+<h3>Other things you will see</h3>
+<ul>
+  <li><code>initial begin ... end</code>: runs <b>once</b>, starting at time 0. A module can have several; they all start together. Used in testbenches.</li>
+  <li><code>`timescale 1ns/1ps</code>: at the top of a file. "One time unit = 1 nanosecond, measured to 1 picosecond accuracy." So <code>#10</code> = 10 ns.</li>
+  <li><code>`define WIDTH 8</code>: a text shortcut, used as <code>`WIDTH</code>. Prefer <code>parameter WIDTH = 8;</code> inside a module.</li>
+  <li><code>`include "file.v"</code>: paste another file in here.</li>
+</ul>
+
+<h2>9. Testbench anatomy</h2>
+<p>A design module does nothing on its own: nobody is flipping its inputs. A <b>testbench</b> is a separate module that plays the role of the person at the lab bench. It sets inputs, waits, and records the outputs.</p>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · and_tb.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">`timescale</span> 1ns/1ps</td><td class="n">Optional. Makes one time unit = 1 ns.</td></tr>
+    <tr><td class="c"><span class="kw">module</span> and_tb;</td><td class="n">The testbench is a module with <b>no ports</b>. Nothing plugs into it; it is the whole test world.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span>  a, b;</td><td class="n">The inputs we will drive. They are <code>reg</code> because we set them inside <code>initial</code> and they must hold their value.</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> y;</td><td class="n">The output we will watch. It is a <code>wire</code> because the AND gate drives it.</td></tr>
+    <tr><td class="c">  and_gate dut (.a(a), .b(b), .y(y));</td><td class="n">Place one copy (an <b>instance</b>) of <code>and_gate</code>, named <code>dut</code>. <code>.a(a)</code> = "connect its pin a to my signal a".</td></tr>
+    <tr><td class="c">  <span class="kw">initial begin</span></td><td class="n">The test script. Runs once from time 0. <em>Here</em> lines do run in order.</td></tr>
+    <tr><td class="c">    <span class="kw">$dumpfile</span>(<span class="str">"and.vcd"</span>);</td><td class="n">Name the waveform file to create (VCD = Value Change Dump).</td></tr>
+    <tr><td class="c">    <span class="kw">$dumpvars</span>(<span class="num">0</span>, and_tb);</td><td class="n">Record every signal in <code>and_tb</code> and everything inside it (<code>0</code> = all levels). Without this line, the VCD is empty.</td></tr>
+    <tr><td class="c">    <span class="kw">$monitor</span>(<span class="str">"t=%0t a=%b b=%b y=%b"</span>,</td><td class="n">Print a line <b>every time</b> one of the listed signals changes. <code>%b</code> = show as binary, <code>%0t</code> = show a time.</td></tr>
+    <tr><td class="c">             <span class="kw">$time</span>, a, b, y);</td><td class="n"><code>$time</code> is the current simulation time. The values fill the <code>%</code> slots in order.</td></tr>
+    <tr><td class="c">    a=<span class="num">0</span>; b=<span class="num">0</span>; #<span class="num">10</span>;</td><td class="n">Set both inputs to 0, then wait 10 time units (<code>#10</code> = delay).</td></tr>
+    <tr><td class="c">    a=<span class="num">0</span>; b=<span class="num">1</span>; #<span class="num">10</span>;</td><td class="n">Next row of the truth table, wait again.</td></tr>
+    <tr><td class="c">    a=<span class="num">1</span>; b=<span class="num">0</span>; #<span class="num">10</span>;</td><td class="n">Third row.</td></tr>
+    <tr><td class="c">    a=<span class="num">1</span>; b=<span class="num">1</span>; #<span class="num">10</span>;</td><td class="n">Fourth row. y should become 1 now.</td></tr>
+    <tr><td class="c">    <span class="kw">$finish</span>;</td><td class="n">End the simulation (at time 40). <code>$stop</code> would only <em>pause</em> it.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<p>What <code>vvp</code> prints because of <code>$monitor</code>:</p>
+<div class="code"><pre class="plain">t=0 a=0 b=0 y=0
+t=10 a=0 b=1 y=0
+t=20 a=1 b=0 y=0
+t=30 a=1 b=1 y=1</pre></div>
+<p style="font-size:15px">After these lines, vvp prints a short note that <code>$finish</code> was called at time 40. Each printed line matches one row of the AND truth table.</p>
+
+<div class="callout tip"><b>Testing every row with a loop</b><p>With more inputs, use a counter: <code>integer k;</code> then <code>for (k = 0; k &lt; 4; k = k + 1) begin {a, b} = k; #10; end</code>. In plain words: "k goes 0, 1, 2, 3. Each time, split k's two lowest bits into a and b, then wait 10." <code>{a, b} = k</code> puts bit 1 of k into a and bit 0 into b.</p></div>
+
+<h2>10. The lab workflow</h2>
+<ol class="flow arrows">
+  <li><b>1. Design</b>Write <code>and_gate.v</code>.</li>
+  <li><b>2. Testbench</b>Write <code>and_tb.v</code>.</li>
+  <li><b>3. Compile</b><code>iverilog -o and.vvp and_gate.v and_tb.v</code></li>
+  <li><b>4. Run</b><code>vvp and.vvp</code> prints $monitor lines and writes <code>and.vcd</code>.</li>
+  <li><b>5. View</b><code>gtkwave and.vcd</code> opens the waveform.</li>
+</ol>
+<div class="code"><pre class="plain"><span class="com"># compile: -o names the output file. List EVERY .v file you need.</span>
+iverilog -o and.vvp and_gate.v and_tb.v
+<span class="com"># run the compiled simulation</span>
+vvp and.vvp
+<span class="com"># look at the recorded waveform</span>
+gtkwave and.vcd</pre></div>
+
+<h2>11. How to read a GTKWave waveform</h2>
+<p>In GTKWave: click <code>and_tb</code> in the top-left panel (SST), select the signals, click <b>Append</b> (or drag them into the Signals pane), then press <b>Zoom Fit</b>. You will see this:</p>
+<figure class="diagram">
+  <svg viewBox="0 0 600 232" width="600" role="img" aria-label="Waveform of the AND testbench: a is 0,0,1,1; b is 0,1,0,1; y is 0,0,0,1; a never-assigned signal c shows red X">
+    <path class="grid" d="M100 10 V202 M220 10 V202 M340 10 V202 M460 10 V202 M580 10 V202"/>
+    <text x="20" y="36" class="m b">a</text>
+    <path class="w" d="M100 44 H340 V20 H580"/>
+    <text x="20" y="86" class="m b">b</text>
+    <path class="w" d="M100 94 H220 V70 H340 V94 H460 V70 H580"/>
+    <text x="20" y="136" class="m b hi">y</text>
+    <path class="w-hi" d="M100 144 H460 V120 H580"/>
+    <text x="20" y="186" class="m b">c (bug)</text>
+    <rect x="100" y="170" width="480" height="24" class="box-r"/>
+    <text x="340" y="187" class="m r" text-anchor="middle">X  (never assigned)</text>
+    <text x="60" y="24" class="m dim">1</text><text x="60" y="48" class="m dim">0</text>
+    <text x="100" y="222" class="m dim" text-anchor="middle">0</text>
+    <text x="220" y="222" class="m dim" text-anchor="middle">10</text>
+    <text x="340" y="222" class="m dim" text-anchor="middle">20</text>
+    <text x="460" y="222" class="m dim" text-anchor="middle">30</text>
+    <text x="580" y="222" class="m dim" text-anchor="end">40</text>
+  </svg>
+  <figcaption>Time runs left to right (units from <code>#10</code>). A line at the top means 1, at the bottom means 0. Read one column at a time: only in 30–40 are a and b both high, so only there is y high. A red band means X (unknown).</figcaption>
+</figure>
+<ol class="steps">
+  <li><b>Find the time axis</b> along the top or bottom. Each <code>#10</code> in the testbench is one slot.</li>
+  <li><b>Pick a time slot</b> (click to place the cursor). The value panel shows every signal at that moment.</li>
+  <li><b>Read the inputs</b>, then check the output matches your truth table row.</li>
+  <li><b>Look for red (X) or a flat line</b> that never moves. That usually means a missing connection or an input nobody set.</li>
+  <li><b>Buses</b> (like <code>sum[3:0]</code>) appear as a band with the value written inside. Right-click → Data Format to switch between binary, hex and decimal.</li>
+</ol>
+
+<h2>12. The other gates (and a slide correction)</h2>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · gates.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> or_gate (<span class="kw">input</span> a, <span class="kw">input</span> b, <span class="kw">output</span> y);</td><td class="n">Whole module on one line. Ports default to wires.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y = a | b;</td><td class="n"><code>|</code> is OR: y is 1 if at least one input is 1.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">module</span> not_gate (<span class="kw">input</span> a, <span class="kw">output</span> y);</td><td class="n">NOT has one input.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y = ~a;</td><td class="n"><code>~</code> flips the bit: 0 → 1, 1 → 0.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">module</span> xor_gate (<span class="kw">input</span> a, <span class="kw">input</span> b, <span class="kw">output</span> y);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y = a ^ b;</td><td class="n"><code>^</code> is XOR: y is 1 when a and b are <b>different</b>.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">module</span> xnor_gate (<span class="kw">input</span> a, <span class="kw">input</span> b, <span class="kw">output</span> y);</td><td class="n">Take-home task.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y = ~(a ^ b);</td><td class="n">XNOR = NOT XOR: 1 when a and b are the same.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="callout fix"><b>Slide correction</b><p>The slide says XOR is "1 if either input is 1". That describes <b>OR</b>. <b>XOR is 1 when the inputs are different</b>: XOR(1,1) = 0, but OR(1,1) = 1. Always check the 1,1 row.</p></div>
+<p style="font-size:15px">Take-home: build NAND by connecting your <code>and_gate</code> output into a <code>not_gate</code> (two instances and one internal wire), and build NOR from primitives. More on gates in <a href="m1-01-boolean-gates.html">Boolean algebra &amp; logic gates</a>.</p>
+
+<h2>13. Common errors</h2>
+<div class="scroll"><table>
+  <tr><th>What you see</th><th>Why</th><th>Fix</th></tr>
+  <tr><td><code>syntax error</code> near <code>endmodule</code></td><td>A missing semicolon</td><td>Look at the line <em>above</em> the one reported.</td></tr>
+  <tr><td><code>Unknown module type: and_gate</code> / undefined identifier</td><td>Not every .v file was given to iverilog</td><td>List all files: <code>iverilog -o x.vvp design.v tb.v</code></td></tr>
+  <tr><td>VCD file is empty, GTKWave shows nothing</td><td><code>$dumpfile</code> or <code>$dumpvars</code> is missing</td><td>Add both at the start of <code>initial</code>.</td></tr>
+  <tr><td>Output stuck at X (red)</td><td>An input was never set. Unset signals start as X, not 0.</td><td>Give every input a value at time 0.</td></tr>
+  <tr><td>"... is not a valid l-value"</td><td>A <code>wire</code> is set inside <code>always</code></td><td>Declare it <code>reg</code>.</td></tr>
+  <tr><td>"reg ... cannot be driven by continuous assignment"</td><td>A <code>reg</code> is used with <code>assign</code></td><td>Declare it <code>wire</code>.</td></tr>
+  <tr><td>Everything happens at time 0</td><td>No <code>#</code> delays between test values</td><td>Add <code>#10;</code> after each set of inputs.</td></tr>
+  <tr><td>Simulation never ends</td><td>No <code>$finish</code></td><td>Add <code>$finish;</code> at the end of <code>initial</code>.</td></tr>
+</table></div>
+
+<h2>14. Verilog cheat sheet</h2>
+<div class="scroll"><table>
+  <tr><th>I want to…</th><th>Write</th></tr>
+  <tr><td>Start / end a circuit</td><td><code>module name ( ports ); ... endmodule</code></td></tr>
+  <tr><td>Declare pins</td><td><code>input wire a,</code> &nbsp; <code>output wire y</code> &nbsp; <code>output reg y</code></td></tr>
+  <tr><td>Internal wire / 8-bit bus</td><td><code>wire w;</code> &nbsp; <code>wire [7:0] data;</code></td></tr>
+  <tr><td>Pick bits</td><td><code>data[0]</code> &nbsp; <code>data[7:4]</code></td></tr>
+  <tr><td>Write a number</td><td><code>4'b1010</code> &nbsp; <code>8'hFF</code> &nbsp; <code>8'd10</code></td></tr>
+  <tr><td>Gates</td><td><code>a &amp; b</code> AND · <code>a | b</code> OR · <code>~a</code> NOT · <code>a ^ b</code> XOR · <code>~(a &amp; b)</code> NAND</td></tr>
+  <tr><td>Permanent connection</td><td><code>assign y = a &amp; b;</code></td></tr>
+  <tr><td>2:1 choice (MUX)</td><td><code>assign y = sel ? b : a;</code></td></tr>
+  <tr><td>Join / repeat bits</td><td><code>{a, b}</code> &nbsp; <code>{4{m}}</code> (m four times)</td></tr>
+  <tr><td>Combinational behaviour</td><td><code>always @(*) begin y = ...; end</code> (use <code>=</code>)</td></tr>
+  <tr><td>Clocked behaviour</td><td><code>always @(posedge clk) q &lt;= d;</code> (use <code>&lt;=</code>)</td></tr>
+  <tr><td>Use another module</td><td><code>half_adder ha1 (.a(x), .b(y), .sum(s), .cout(c));</code></td></tr>
+  <tr><td>Constant setting</td><td><code>parameter WIDTH = 8;</code></td></tr>
+  <tr><td>Test script</td><td><code>initial begin ... end</code></td></tr>
+  <tr><td>Wait</td><td><code>#10;</code></td></tr>
+  <tr><td>Record waveform</td><td><code>$dumpfile("x.vcd"); $dumpvars(0, tb);</code></td></tr>
+  <tr><td>Print on change / print once</td><td><code>$monitor("%b", y);</code> &nbsp; <code>$display("%b", y);</code></td></tr>
+  <tr><td>Stop / pause</td><td><code>$finish;</code> &nbsp; <code>$stop;</code></td></tr>
+  <tr><td>Compile, run, view</td><td><code>iverilog -o x.vvp *.v</code> → <code>vvp x.vvp</code> → <code>gtkwave x.vcd</code></td></tr>
+</table></div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Reading Verilog as a to-do list. <code>assign</code> lines are wires; their order does not matter.</li>
+  <li>Setting a <code>wire</code> inside <code>always</code>. <b>The left side inside any always block must be <code>reg</code>.</b></li>
+  <li>Thinking <code>reg</code> always means a flip-flop. In <code>always @(*)</code> it is plain gates.</li>
+  <li>Using <code>=</code> in clocked blocks or <code>&lt;=</code> in combinational blocks.</li>
+  <li>Writing a bus backwards: use <code>[7:0]</code> (MSB first), not <code>[0:7]</code>.</li>
+  <li>Using <code>&amp;&amp;</code> when you meant the bitwise gate <code>&amp;</code>.</li>
+  <li><code>$dumpfile</code> alone gives an empty VCD. You also need <code>$dumpvars</code>.</li>
+  <li>Unset signals are <b>X</b>, not 0.</li>
+  <li>XOR is "different", not "either".</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>What does <code>wire [3:0] n;</code> create? Which bit is the MSB?</summary><div class="a"><p>Four wires: <code>n[3]</code>, <code>n[2]</code>, <code>n[1]</code>, <code>n[0]</code>. The left number in the range is the MSB, so <b><code>n[3]</code></b> is the MSB.</p></div></details>
+  <details class="q"><summary>Evaluate <code>4'b1100 &amp; 4'b1010</code> and <code>4'b1100 &amp;&amp; 4'b1010</code>.</summary><div class="a"><p>Bitwise, bit by bit: 1&amp;1=1, 1&amp;0=0, 0&amp;1=0, 0&amp;0=0 → <b><code>4'b1000</code></b>.</p><p>Logical: both values are non-zero, so both count as "true" → <b><code>1</code></b> (one bit).</p></div></details>
+  <details class="q"><summary>Why are <code>a</code> and <code>b</code> declared <code>reg</code> in the testbench, but <code>y</code> is a <code>wire</code>?</summary><div class="a"><p>The testbench sets a and b inside an <code>initial</code> block, and they must hold their values during each <code>#10</code> wait, so they are variables (<code>reg</code>). y is driven by the AND gate's output pin, so it is a <code>wire</code>.</p></div></details>
+  <details class="q"><summary>Write one line of Verilog for an XNOR gate with inputs a, b and output y.</summary><div class="a"><p><code>assign y = ~(a ^ b);</code> (or <code>assign y = a ~^ b;</code>). y is 1 when a and b are equal.</p></div></details>
+  <details class="q"><summary>a = 1 and b = 0. What are a and b after <code>a = b; b = a;</code>? And after <code>a &lt;= b; b &lt;= a;</code> at a clock edge?</summary><div class="a"><p>Blocking: a becomes 0 first, then b takes the new a → <b>a = 0, b = 0</b>.</p><p>Non-blocking: both right sides are read first (b=0, a=1), then updated together → <b>a = 0, b = 1</b> (swapped).</p></div></details>
+  <details class="q"><summary>Your GTKWave shows y as a red band the whole time. Give two likely causes.</summary><div class="a"><p>Red means X (unknown). (1) An input of the gate was never assigned in the testbench. (2) A port is not connected in the instance line, e.g. a typo in <code>.b(b)</code>. Check the instance and give every input a value at time 0.</p></div></details>
+  <details class="q"><summary>At what time does the and_tb simulation end, and when does y first become 1?</summary><div class="a"><p>Four waits of 10 → it ends at <b>t = 40</b>. y becomes 1 at <b>t = 30</b>, when a = 1 and b = 1 are set.</p></div></details>
+  <details class="q"><summary>Put in order: gtkwave, write testbench, vvp, write design, iverilog.</summary><div class="a"><p>Write design → write testbench → <code>iverilog</code> (compile) → <code>vvp</code> (run, makes the .vcd) → <code>gtkwave</code> (view).</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=aido2P7Edc4" target="_blank" rel="noopener"><i class="play"></i><span><b>Verilog HDL Basics</b><small>Altera</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=3Xm6fgKAO94" target="_blank" rel="noopener"><i class="play"></i><span><b>Verilog HDL - Installing and Testing Icarus Verilog + GTKWave</b><small>Derek Johnston</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=sGQoBnFcmwc" target="_blank" rel="noopener"><i class="play"></i><span><b>Writing a Verilog Testbench</b><small>aldecinc</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

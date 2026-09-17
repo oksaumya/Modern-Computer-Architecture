@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>5-Stage Pipeline</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+<style>
+  /* pipeline chart: one row per instruction, one column per clock cycle */
+  table.pipe { width: auto; font-family: var(--mono); font-size: 13px; }
+  table.pipe th, table.pipe td { text-align: center; padding: 5px 8px; min-width: 50px; }
+  table.pipe td:first-child, table.pipe th:first-child { text-align: left; white-space: nowrap; min-width: 0; }
+  .pipe .IF  { background: var(--blue-soft);   color: var(--blue);   font-weight: 700; }
+  .pipe .ID  { background: var(--green-soft);  color: var(--green);  font-weight: 700; }
+  .pipe .EX  { background: var(--copper-soft); color: var(--copper); font-weight: 700; }
+  .pipe .MEM { background: var(--surface-2);   color: var(--ink);    font-weight: 700; }
+  .pipe .WB  { background: color-mix(in srgb, var(--blue) 24%, var(--surface)); color: var(--ink); font-weight: 700; }
+  .pipe .BUB { background: var(--red-soft);    color: var(--red);    font-weight: 700; }
+  .pipe .fw  { box-shadow: inset 0 0 0 2px var(--copper); }
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 4 / 5-stage pipeline</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 4 · CPU Datapath &amp; Pipelining <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>The 5-stage pipeline: IF → ID → EX → MEM → WB</h1>
+  <p class="idea">Pipelining cuts the single-cycle datapath into <b>5 stages</b> with a register between each. Each clock cycle, every instruction moves one stage forward, so <b>up to 5 instructions are in progress at once</b>. Each instruction takes just as long (or a little longer), but many more finish per second.</p>
+  <div class="analogy"><b>Think of it like this:</b> doing laundry. The <b>washer</b>, <b>dryer</b>, <b>folding table</b> and <b>closet</b> are the stages. You don't wait for load A to be put away before starting load B. As soon as A moves to the dryer, B goes into the washer. Each load still takes 2 hours, but 4 loads finish in 3.5 hours instead of 8.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Stage</dt><dd>One step of the work (IF, ID, EX, MEM, WB). Each stage takes exactly one clock cycle.</dd></div>
+  <div class="term"><dt>Pipeline register</dt><dd>A bank of flip-flops between two stages (IF/ID, ID/EX, EX/MEM, MEM/WB). It holds one instruction's data so the next stage can use it in the next cycle.</dd></div>
+  <div class="term"><dt>Throughput</dt><dd>How many instructions finish per second. <b>Pipelining improves this.</b></dd></div>
+  <div class="term"><dt>Latency</dt><dd>How long <em>one</em> instruction takes from start to finish. Pipelining does <b>not</b> improve this.</dd></div>
+  <div class="term"><dt>Stage time (clock period)</dt><dd>The slowest stage's delay plus the pipeline register's own overhead (setup + clock-to-Q delay).</dd></div>
+  <div class="term"><dt>Pipeline chart</dt><dd>A grid: rows are instructions, columns are clock cycles, and each cell shows which stage an instruction is in.</dd></div>
+</dl>
+
+<h2>1. The laundry picture</h2>
+<p>4 loads (A–D), 4 tasks, 30 minutes per task.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 640 250" width="640" role="img" aria-label="Laundry timeline: doing loads one at a time takes 8 hours; overlapping them takes 3.5 hours">
+    <text x="10" y="18" class="b">One load at a time: 16 slots = 8 h</text>
+    <g class="grid"><path d="M60 26 V110 M590 26 V110"/></g>
+    <!-- sequential: 16 slots of 33px starting at x=62 -->
+    <text x="14" y="44" class="m">A</text>
+    <rect x="62" y="30" width="31" height="18" rx="3" class="box-b"/><rect x="95" y="30" width="31" height="18" rx="3" class="box-g"/><rect x="128" y="30" width="31" height="18" rx="3" class="box-hi"/><rect x="161" y="30" width="31" height="18" rx="3" class="box"/>
+    <text x="14" y="64" class="m">B</text>
+    <rect x="194" y="50" width="31" height="18" rx="3" class="box-b"/><rect x="227" y="50" width="31" height="18" rx="3" class="box-g"/><rect x="260" y="50" width="31" height="18" rx="3" class="box-hi"/><rect x="293" y="50" width="31" height="18" rx="3" class="box"/>
+    <text x="14" y="84" class="m">C</text>
+    <rect x="326" y="70" width="31" height="18" rx="3" class="box-b"/><rect x="359" y="70" width="31" height="18" rx="3" class="box-g"/><rect x="392" y="70" width="31" height="18" rx="3" class="box-hi"/><rect x="425" y="70" width="31" height="18" rx="3" class="box"/>
+    <text x="14" y="104" class="m">D</text>
+    <rect x="458" y="90" width="31" height="18" rx="3" class="box-b"/><rect x="491" y="90" width="31" height="18" rx="3" class="box-g"/><rect x="524" y="90" width="31" height="18" rx="3" class="box-hi"/><rect x="557" y="90" width="31" height="18" rx="3" class="box"/>
+    <text x="600" y="104" class="m hi">8 h</text>
+
+    <text x="10" y="138" class="b">Pipelined: 7 slots = 3.5 h</text>
+    <g class="grid"><path d="M60 146 V224 M293 146 V224"/></g>
+    <text x="14" y="164" class="m">A</text>
+    <rect x="62" y="150" width="31" height="18" rx="3" class="box-b"/><rect x="95" y="150" width="31" height="18" rx="3" class="box-g"/><rect x="128" y="150" width="31" height="18" rx="3" class="box-hi"/><rect x="161" y="150" width="31" height="18" rx="3" class="box"/>
+    <text x="14" y="184" class="m">B</text>
+    <rect x="95" y="170" width="31" height="18" rx="3" class="box-b"/><rect x="128" y="170" width="31" height="18" rx="3" class="box-g"/><rect x="161" y="170" width="31" height="18" rx="3" class="box-hi"/><rect x="194" y="170" width="31" height="18" rx="3" class="box"/>
+    <text x="14" y="204" class="m">C</text>
+    <rect x="128" y="190" width="31" height="18" rx="3" class="box-b"/><rect x="161" y="190" width="31" height="18" rx="3" class="box-g"/><rect x="194" y="190" width="31" height="18" rx="3" class="box-hi"/><rect x="227" y="190" width="31" height="18" rx="3" class="box"/>
+    <text x="14" y="224" class="m">D</text>
+    <rect x="161" y="210" width="31" height="18" rx="3" class="box-b"/><rect x="194" y="210" width="31" height="18" rx="3" class="box-g"/><rect x="227" y="210" width="31" height="18" rx="3" class="box-hi"/><rect x="260" y="210" width="31" height="18" rx="3" class="box"/>
+    <text x="300" y="224" class="m hi">3.5 h</text>
+    <!-- legend -->
+    <rect x="380" y="160" width="14" height="14" rx="3" class="box-b"/><text x="400" y="172">Wash</text>
+    <rect x="460" y="160" width="14" height="14" rx="3" class="box-g"/><text x="480" y="172">Dry</text>
+    <rect x="380" y="186" width="14" height="14" rx="3" class="box-hi"/><text x="400" y="198">Fold</text>
+    <rect x="460" y="186" width="14" height="14" rx="3" class="box"/><text x="480" y="198">Put away</text>
+    <text x="62" y="244" class="m dim">each slot = 30 min</text>
+  </svg>
+  <figcaption>Same four loads, same four machines. Overlapping the work makes the total time (4 + 4 − 1) × 30 min = 3.5 h. Each single load still takes 2 h.</figcaption>
+</figure>
+
+<h2>2. The five stages and the pipeline registers</h2>
+<div class="scroll"><table>
+  <tr><th>Stage</th><th>What happens</th><th>Hardware used</th></tr>
+  <tr><td><b>IF</b> · Instruction Fetch</td><td>Read the instruction at PC. Compute PC + 4.</td><td>PC, instruction memory, adder</td></tr>
+  <tr><td><b>ID</b> · Instruction Decode</td><td>Decode the fields, read registers rs and rt, sign-extend the immediate, generate control signals.</td><td>Register file (read), sign-extend, control unit</td></tr>
+  <tr><td><b>EX</b> · Execute</td><td>ALU does the operation or computes an address. Branch target is computed.</td><td>ALU, ALUSrc MUX, branch adder</td></tr>
+  <tr><td><b>MEM</b> · Memory access</td><td><code>lw</code> reads, <code>sw</code> writes data memory. Others just pass through.</td><td>Data memory</td></tr>
+  <tr><td><b>WB</b> · Write Back</td><td>Save the result into the register file.</td><td>MemtoReg MUX, register file (write)</td></tr>
+</table></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 180" width="640" role="img" aria-label="Pipelined datapath: five stage blocks separated by four pipeline registers; write-back loops from WB to the register file in ID">
+    <rect x="10" y="30" width="100" height="70" rx="8" class="box-b"/>
+    <text x="60" y="54" class="b" text-anchor="middle">IF</text>
+    <text x="60" y="72" text-anchor="middle">PC</text>
+    <text x="60" y="88" text-anchor="middle">instr. memory</text>
+    <rect x="136" y="30" width="100" height="70" rx="8" class="box-g"/>
+    <text x="186" y="54" class="b" text-anchor="middle">ID</text>
+    <text x="186" y="72" text-anchor="middle">register file</text>
+    <text x="186" y="88" text-anchor="middle">sign-ext, control</text>
+    <rect x="262" y="30" width="100" height="70" rx="8" class="box-hi"/>
+    <text x="312" y="54" class="b" text-anchor="middle">EX</text>
+    <text x="312" y="72" text-anchor="middle">ALU</text>
+    <text x="312" y="88" text-anchor="middle">branch adder</text>
+    <rect x="388" y="30" width="100" height="70" rx="8" class="box"/>
+    <text x="438" y="54" class="b" text-anchor="middle">MEM</text>
+    <text x="438" y="72" text-anchor="middle">data memory</text>
+    <rect x="514" y="30" width="100" height="70" rx="8" class="box"/>
+    <text x="564" y="54" class="b" text-anchor="middle">WB</text>
+    <text x="564" y="72" class="m" text-anchor="middle">MemtoReg MUX</text>
+    <!-- pipeline registers -->
+    <rect x="116" y="20" width="14" height="90" rx="3" class="fill-ink"/>
+    <rect x="242" y="20" width="14" height="90" rx="3" class="fill-ink"/>
+    <rect x="368" y="20" width="14" height="90" rx="3" class="fill-ink"/>
+    <rect x="494" y="20" width="14" height="90" rx="3" class="fill-ink"/>
+    <text x="123" y="128" class="m" text-anchor="middle">IF/ID</text>
+    <text x="249" y="128" class="m" text-anchor="middle">ID/EX</text>
+    <text x="375" y="128" class="m" text-anchor="middle">EX/MEM</text>
+    <text x="501" y="128" class="m" text-anchor="middle">MEM/WB</text>
+    <text x="320" y="12" class="m dim" text-anchor="middle">all four registers load together on each clock edge</text>
+    <!-- write back loop -->
+    <path class="w-hi" d="M564 100 V150 H186 V100"/>
+    <polygon points="186,100 181,110 191,110" class="fill-hi"/>
+    <text x="375" y="168" class="m hi" text-anchor="middle">WB writes the register file (first half of the cycle)</text>
+  </svg>
+  <figcaption>The four solid bars are the pipeline registers. Everything an instruction needs later (its values, its register numbers, and its control signals) travels with it through these registers.</figcaption>
+</figure>
+
+<div class="callout tip"><b>Control travels with the instruction</b><p>The control unit decodes the opcode in ID, once. The signals are then stored in the pipeline registers in three groups: <b>EX</b> signals (RegDst, ALUSrc, ALUOp) are used in EX, <b>M</b> signals (MemRead, MemWrite, Branch) in MEM, and <b>WB</b> signals (RegWrite, MemtoReg) in WB. That way each stage uses the signals of the instruction it is working on.</p></div>
+
+<h2>3. Reading a pipeline chart</h2>
+<p>Here is a 5-instruction program with no dependencies between instructions.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · five independent instructions</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">lw</span>  $t1, <span class="num">0</span>($s0)</td><td class="n">I1: load memory[$s0 + 0] into $t1. <code>$s0</code> is a saved register holding an array's start address. <code>$t1</code> is a temporary.</td></tr>
+    <tr><td class="c"><span class="kw">lw</span>  $t2, <span class="num">4</span>($s0)</td><td class="n">I2: load the next word (4 bytes later) into $t2.</td></tr>
+    <tr><td class="c"><span class="kw">add</span> $t3, $s1, $s2</td><td class="n">I3: $t3 = $s1 + $s2.</td></tr>
+    <tr><td class="c"><span class="kw">sw</span>  $s3, <span class="num">8</span>($s0)</td><td class="n">I4: store $s3 into memory[$s0 + 8].</td></tr>
+    <tr><td class="c"><span class="kw">sub</span> $t5, $s4, $s5</td><td class="n">I5: $t5 = $s4 − $s5.</td></tr>
+  </table>
+</div>
+
+<!--PIPE:main-->
+<div class="scroll"><table class="pipe">
+  <tr><th>Instruction</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th></tr>
+  <tr><td>I1 <code>lw $t1,0($s0)</code></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>I2 <code>lw $t2,4($s0)</code></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td><td></td></tr>
+  <tr><td>I3 <code>add $t3,$s1,$s2</code></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td></tr>
+  <tr><td>I4 <code>sw $s3,8($s0)</code></td><td></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td></tr>
+  <tr><td>I5 <code>sub $t5,$s4,$s5</code></td><td></td><td></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td></tr>
+</table></div>
+<!--/PIPE-->
+
+<ul>
+  <li><b>Read a row</b> to follow one instruction: it moves one stage right every cycle.</li>
+  <li><b>Read a column</b> to see a snapshot of the whole CPU at that clock cycle.</li>
+  <li><b>Cycle 5 is the first "full" cycle</b>: all 5 stages are busy. I1 is in WB, I2 in MEM, I3 in EX, I4 in ID and I5 in IF.</li>
+  <li>I1 finishes at the end of cycle 5. After that, one instruction finishes every cycle. Total = 5 + (5 − 1) = <b>9 cycles</b>.</li>
+</ul>
+
+<h2>4. How much faster? The timing maths</h2>
+<div class="formula">Time for n instructions on a k-stage pipeline = (k + n − 1) × stage time<small>The first instruction takes k cycles. Each of the other n − 1 instructions finishes 1 cycle later.</small></div>
+<div class="formula">Stage time = slowest stage + pipeline-register overhead<small>All stages share one clock, so the slowest stage sets the pace.</small></div>
+<div class="formula">Ideal speedup ≈ k (the number of stages)<small>Only when stages are perfectly balanced, n is large, and there are no hazards.</small></div>
+
+<h3>Worked example (Patterson &amp; Hennessy): 3 × <code>lw</code></h3>
+<p>Delays: memory 200 ps, ALU 200 ps, register read or write 100 ps. The single-cycle clock is 800 ps (see <a href="m4-01-single-cycle-datapath.html">single-cycle</a>). In the pipeline, the slowest stages take 200 ps, so every stage gets 200 ps (the register stages are padded from 100 to 200 ps).</p>
+
+<!--PIPE:three-->
+<div class="scroll"><table class="pipe">
+  <tr><th>Instruction</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th></tr>
+  <tr><td>lw 1 <small>(done at 1000 ps)</small></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td></tr>
+  <tr><td>lw 2 <small>(done at 1200 ps)</small></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td></tr>
+  <tr><td>lw 3 <small>(done at 1400 ps)</small></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td></tr>
+</table></div>
+<!--/PIPE-->
+
+<div class="stepper" data-stepper>
+  <div class="stage"><p><b>Single-cycle:</b> each instruction takes the full 800 ps. 3 × 800 = <b>2400 ps</b>.</p></div>
+  <div class="stage"><p><b>Pipelined, first instruction:</b> 5 stages × 200 ps = 1000 ps. It finishes at 1000 ps (<em>later</em> than the single-cycle's 800 ps, so latency got worse).</p></div>
+  <div class="stage"><p><b>Pipelined, the rest:</b> the 2nd finishes at 1200 ps and the 3rd at 1400 ps, one stage time (200 ps) apart.</p></div>
+  <div class="stage"><p><b>Check with the formula:</b> (k + n − 1) × T = (5 + 3 − 1) × 200 = 7 × 200 = <b>1400 ps</b>. ✓</p></div>
+  <div class="stage"><p><b>Many instructions:</b> for 1,000,000 instructions the gap between finishes is 800 ps vs 200 ps, so the speedup approaches 800 / 200 = <b>4×</b>. It is not 5× because the stages are unbalanced (some only need 100 ps but get 200 ps).</p></div>
+</div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 660 280" width="660" role="img" aria-label="To-scale timeline: three instructions take 2400 ps single-cycle and 1400 ps pipelined">
+    <!-- scale: x = 50 + 0.25 * ps -->
+    <g class="grid"><path d="M50 26 V222 M150 26 V222 M250 26 V222 M350 26 V222 M450 26 V222 M550 26 V222 M650 26 V222"/></g>
+    <text x="4" y="18" class="b">Single-cycle (800 ps each)</text>
+    <text x="4" y="45" class="m">lw 1</text>
+    <rect x="50" y="30" width="48" height="20" rx="3" class="box-b"/><rect x="100" y="30" width="23" height="20" rx="3" class="box-g"/><rect x="125" y="30" width="48" height="20" rx="3" class="box-hi"/><rect x="175" y="30" width="48" height="20" rx="3" class="box"/><rect x="225" y="30" width="23" height="20" rx="3" class="box-g"/>
+    <text x="4" y="71" class="m">lw 2</text>
+    <rect x="250" y="56" width="48" height="20" rx="3" class="box-b"/><rect x="300" y="56" width="23" height="20" rx="3" class="box-g"/><rect x="325" y="56" width="48" height="20" rx="3" class="box-hi"/><rect x="375" y="56" width="48" height="20" rx="3" class="box"/><rect x="425" y="56" width="23" height="20" rx="3" class="box-g"/>
+    <text x="4" y="97" class="m">lw 3</text>
+    <rect x="450" y="82" width="48" height="20" rx="3" class="box-b"/><rect x="500" y="82" width="23" height="20" rx="3" class="box-g"/><rect x="525" y="82" width="48" height="20" rx="3" class="box-hi"/><rect x="575" y="82" width="48" height="20" rx="3" class="box"/><rect x="625" y="82" width="23" height="20" rx="3" class="box-g"/>
+    <text x="646" y="45" class="m hi" text-anchor="end">all done at 2400 ps</text>
+
+    <text x="4" y="130" class="b">Pipelined (200 ps stages)</text>
+    <text x="4" y="157" class="m">lw 1</text>
+    <rect x="50" y="142" width="48" height="20" rx="3" class="box-b"/><rect x="100" y="142" width="48" height="20" rx="3" class="box-g"/><rect x="150" y="142" width="48" height="20" rx="3" class="box-hi"/><rect x="200" y="142" width="48" height="20" rx="3" class="box"/><rect x="250" y="142" width="48" height="20" rx="3" class="box-g"/>
+    <text x="4" y="183" class="m">lw 2</text>
+    <rect x="100" y="168" width="48" height="20" rx="3" class="box-b"/><rect x="150" y="168" width="48" height="20" rx="3" class="box-g"/><rect x="200" y="168" width="48" height="20" rx="3" class="box-hi"/><rect x="250" y="168" width="48" height="20" rx="3" class="box"/><rect x="300" y="168" width="48" height="20" rx="3" class="box-g"/>
+    <text x="4" y="209" class="m">lw 3</text>
+    <rect x="150" y="194" width="48" height="20" rx="3" class="box-b"/><rect x="200" y="194" width="48" height="20" rx="3" class="box-g"/><rect x="250" y="194" width="48" height="20" rx="3" class="box-hi"/><rect x="300" y="194" width="48" height="20" rx="3" class="box"/><rect x="350" y="194" width="48" height="20" rx="3" class="box-g"/>
+    <path class="w-hi" d="M400 136 V220" stroke-dasharray="5 4"/>
+    <text x="408" y="183" class="m hi">all done at 1400 ps</text>
+    <text x="46" y="240" class="m dim">0</text>
+    <text x="138" y="240" class="m dim">400</text>
+    <text x="238" y="240" class="m dim">800</text>
+    <text x="334" y="240" class="m dim">1200</text>
+    <text x="434" y="240" class="m dim">1600</text>
+    <text x="534" y="240" class="m dim">2000</text>
+    <text x="622" y="240" class="m dim">2400</text>
+    <!-- legend -->
+    <rect x="50" y="256" width="12" height="12" rx="3" class="box-b"/><text x="68" y="267" class="m">instr. memory</text>
+    <rect x="190" y="256" width="12" height="12" rx="3" class="box-g"/><text x="208" y="267" class="m">register file</text>
+    <rect x="330" y="256" width="12" height="12" rx="3" class="box-hi"/><text x="348" y="267" class="m">ALU</text>
+    <rect x="400" y="256" width="12" height="12" rx="3" class="box"/><text x="418" y="267" class="m">data memory</text>
+  </svg>
+  <figcaption>Drawn to scale (time in ps). In the pipeline, the register-file stages are padded to 200 ps, so each instruction is slower on its own, but the three together finish 1000 ps sooner.</figcaption>
+</figure>
+
+<h3>Worked example: unbalanced stages plus register overhead</h3>
+<ol class="steps">
+  <li>Stage delays: IF 150, ID 100, EX 200, MEM 150, WB 100 ps. Pipeline register overhead: 20 ps.</li>
+  <li>Single-cycle clock = 150 + 100 + 200 + 150 + 100 = <b>700 ps</b>.</li>
+  <li>Pipeline stage time = slowest stage + overhead = 200 + 20 = <b>220 ps</b>.</li>
+  <li>100 instructions: single-cycle = 100 × 700 = 70,000 ps. Pipeline = (5 + 100 − 1) × 220 = 104 × 220 = 22,880 ps. Speedup = 70,000 / 22,880 ≈ <b>3.06×</b>.</li>
+  <li>Very long programs: speedup → 700 / 220 ≈ <b>3.18×</b>, well below the ideal 5×.</li>
+</ol>
+
+<div class="vs">
+  <div><h3>What pipelining improves</h3><ul><li><b>Throughput</b>: instructions finished per second.</li><li>Total time for a whole program.</li></ul></div>
+  <div><h3>What it does not improve</h3><ul><li><b>Latency</b> of one instruction (it gets slightly worse, due to register overhead and padding).</li><li>Speedup is capped by the slowest stage and by <a href="m4-03-hazards-forwarding.html">hazards</a>.</li></ul></div>
+</div>
+
+<h2>5. Why MIPS (RISC) is easy to pipeline</h2>
+<ul>
+  <li><b>All instructions are 32 bits.</b> IF always fetches 4 bytes, and PC + 4 is always right. (x86 instructions are 1 to 15 bytes, which is much harder.)</li>
+  <li><b>Few formats, fields in fixed places.</b> rs and rt are always in the same bit positions, so ID can read the registers <em>while</em> it is still decoding.</li>
+  <li><b>Load/store only.</b> Only <code>lw</code>/<code>sw</code> touch memory, so memory access fits neatly in the MEM stage. The ALU is free to compute the address in EX.</li>
+  <li><b>Memory is aligned</b> (words at multiples of 4), so a data transfer needs only one memory access.</li>
+</ul>
+
+<div class="callout tip"><b>Lab 4A preview</b><p>In the lab you will watch instructions move through the stages and deliberately create hazards (an instruction using a result that isn't ready yet). The next page, <a href="m4-03-hazards-forwarding.html">Hazards &amp; forwarding</a>, explains what you'll see.</p></div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>"Pipelining makes each instruction faster."</b> Wrong. It improves throughput, not latency.</li>
+  <li><b>Total cycles = k + n − 1</b>, not k × n. 5 stages and 10 instructions take 14 cycles, not 50.</li>
+  <li><b>Stage time uses the <em>slowest</em> stage</b>, plus register overhead if given.</li>
+  <li>Ideal speedup = number of stages <em>only</em> with balanced stages, no overhead, no hazards, and many instructions.</li>
+  <li>Pipeline registers are named after the <b>two stages they sit between</b> (IF/ID, ID/EX, EX/MEM, MEM/WB). There is no register after WB.</li>
+  <li>Numbering cycles from 1: instruction i (counting from 1) enters IF in cycle i and finishes WB in cycle i + 4.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>A 5-stage pipeline with a 200 ps stage time runs 10 instructions. How long does it take (no hazards)? How long in an 800 ps single-cycle CPU?</summary><div class="a"><p>Pipeline: (5 + 10 − 1) × 200 = 14 × 200 = <b>2800 ps</b>. Single-cycle: 10 × 800 = <b>8000 ps</b>.</p></div></details>
+  <details class="q"><summary>In the 5-instruction chart above, which instruction is in EX during cycle 6?</summary><div class="a"><p>Instruction i is in EX in cycle i + 2. So cycle 6 → <b>I4 (<code>sw</code>)</b>.</p></div></details>
+  <details class="q"><summary>Stage delays are 300, 150, 250, 300, 100 ps and register overhead is 25 ps. Find the pipeline clock period and the speedup for a very long program.</summary><div class="a"><p>Single-cycle = 300 + 150 + 250 + 300 + 100 = 1100 ps. Pipeline = 300 + 25 = <b>325 ps</b>. Speedup ≈ 1100 / 325 ≈ <b>3.38×</b>.</p></div></details>
+  <details class="q"><summary>What is the latency of one instruction in the 325 ps pipeline above?</summary><div class="a"><p>5 × 325 = <b>1625 ps</b>. That is slower than the 1100 ps single-cycle, which shows that pipelining trades latency for throughput.</p></div></details>
+  <details class="q"><summary>Which pipeline register carries the value that <code>sw</code> will write to memory, when it is used?</summary><div class="a"><p>The value is read from the register file in ID and stored in <b>ID/EX</b>. It is then copied into <b>EX/MEM</b> and used by data memory in the MEM stage.</p></div></details>
+  <details class="q"><summary>Why does the pipelined CPU need separate instruction and data memories?</summary><div class="a"><p>In the pipeline, IF (fetching an instruction) and MEM (reading/writing data) happen in the <b>same clock cycle</b> for different instructions. One shared memory would be needed twice at once, which is a <b>structural hazard</b>. Separate memories avoid it.</p></div></details>
+  <details class="q"><summary>Laundry: 3 tasks of 40 minutes each, 5 loads. Sequential vs pipelined time?</summary><div class="a"><p>Sequential: 5 × 3 × 40 = <b>600 min</b> (10 h). Pipelined: (3 + 5 − 1) × 40 = 7 × 40 = <b>280 min</b>.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=j8RKaeANQ-o" target="_blank" rel="noopener"><i class="play"></i><span><b>Instruction Pipelining | Chapter-7 | COA</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=dKXbONPqBNY" target="_blank" rel="noopener"><i class="play"></i><span><b>Lecture 7. Pipelining - Carnegie Mellon - Computer Architecture 2015</b><small>Carnegie Mellon Computer Architecture (Onur Mutlu)</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=9Hj48Q_HCQY" target="_blank" rel="noopener"><i class="play"></i><span><b>Digital Design &amp; Computer Architecture - Lecture 13: Pipelining (Spring 2021)</b><small>Onur Mutlu Lectures</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MIPS Registers &amp; Formats</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 3 / MIPS registers &amp; formats</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>MIPS32: registers and instruction formats (R, I, J)</h1>
+  <p class="idea">MIPS32 has <b>32 registers</b>, and <b>every instruction is exactly 32 bits</b>. Those 32 bits are cut into fields in one of only three layouts: <b>R-type</b> (register maths), <b>I-type</b> (a constant, memory, or a branch) and <b>J-type</b> (jump). Learn the three layouts and you can turn any instruction into hex, and back.</p>
+  <div class="analogy"><b>Think of it like this:</b> a fixed-size postal form with boxes. Box 1 always says <em>what kind of form</em> (the opcode). The rest of the boxes depend on that kind: a "transfer" form has <em>from, to, amount</em> boxes; an "address change" form has one big box. The clerk (the CPU) reads box 1 first, then knows how to read the rest.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Register</dt><dd>A tiny, very fast storage slot inside the CPU. MIPS has 32 of them, each 32 bits wide.</dd></div>
+  <div class="term"><dt>Word</dt><dd>A 32-bit value (4 bytes) in MIPS.</dd></div>
+  <div class="term"><dt>Byte-addressed</dt><dd>Every <b>byte</b> of memory has its own address. So one word covers 4 addresses, and the next word is 4 further on.</dd></div>
+  <div class="term"><dt>Opcode (op)</dt><dd>The top 6 bits. They say which instruction (or which format) this is.</dd></div>
+  <div class="term"><dt>funct</dt><dd>The bottom 6 bits of an R-type. They pick the exact operation (add, sub, and…).</dd></div>
+  <div class="term"><dt>rs, rt, rd</dt><dd>5-bit register numbers (0–31). rs = first source, rt = second source (or target in I-type), rd = destination.</dd></div>
+  <div class="term"><dt>shamt</dt><dd>Shift amount: how many places to shift (for <code>sll</code>/<code>srl</code>). 0 otherwise.</dd></div>
+  <div class="term"><dt>Immediate</dt><dd>A constant number stored inside the instruction itself (16 bits in I-type).</dd></div>
+  <div class="term"><dt>Sign extension</dt><dd>Widening a number by copying its top (sign) bit to the left, so −1 (<code>FFFF</code>) stays −1 (<code>FFFFFFFF</code>).</dd></div>
+  <div class="term"><dt>PC</dt><dd>Program Counter: holds the address of the current instruction. Normally PC ← PC + 4.</dd></div>
+</dl>
+
+<h2>1. The 32 registers</h2>
+<p>Each register has a <b>number</b> (0–31, used inside the machine code) and a <b>name</b> (used when you write code). The name tells you its job, by agreement between programmers (the "calling convention"). You write <code>$t0</code>, but the machine code stores 8.</p>
+<div class="scroll"><table>
+  <tr><th>Name</th><th>Number</th><th>Use</th><th>Plain meaning</th></tr>
+  <tr><td style="white-space:nowrap"><code>$zero</code></td><td>0</td><td>Always 0</td><td>Hardwired to 0. Writes to it are ignored.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$at</code></td><td>1</td><td>Assembler temporary</td><td>Reserved: the assembler uses it when it expands pseudo-instructions. Don't touch.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$v0–$v1</code></td><td>2–3</td><td>Return values</td><td>A function puts its answer here. <code>$v0</code> also picks the syscall number in MARS.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$a0–$a3</code></td><td>4–7</td><td>Arguments</td><td>The first four inputs to a function.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$t0–$t7</code></td><td>8–15</td><td>Temporaries</td><td>Scratch space. A function you call may overwrite them.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$s0–$s7</code></td><td>16–23</td><td>Saved registers</td><td>Long-lived variables. A function must restore them before it returns.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$t8–$t9</code></td><td>24–25</td><td>More temporaries</td><td>Same as $t0–$t7.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$k0–$k1</code></td><td>26–27</td><td>Kernel</td><td>Reserved for the operating system.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$gp</code></td><td>28</td><td>Global pointer</td><td>Points into the global data area.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$sp</code></td><td>29</td><td>Stack pointer</td><td>Address of the top of the stack.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$fp</code></td><td>30</td><td>Frame pointer</td><td>Marks the start of the current function's stack frame.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$ra</code></td><td>31</td><td>Return address</td><td>Where to go back to after a function call.</td></tr>
+</table></div>
+<p><b>Special registers</b> (not among the 32):</p>
+<ul>
+  <li><b>PC</b>: the program counter.</li>
+  <li><b>HI and LO</b>: hold the results of <code>mult</code> and <code>div</code>. <code>mult</code> puts the upper 32 bits of the 64-bit product in HI and the lower 32 in LO. <code>div</code> puts the remainder in HI and the quotient in LO.</li>
+</ul>
+<div class="callout tip"><b>Link to Module 2</b><p>These 32 registers are the <a href="m2-05-register-file.html">register file</a> you built: 32 × 32-bit registers, 2 read ports (for rs and rt) and 1 write port (for rd or rt). Reads are instant (combinational); writes happen on the clock edge. The <code>$zero</code> register is wired to 0.</p></div>
+<div class="callout tip"><b>Memorise the numbers with ranges</b><p>0 zero · 1 at · 2–3 v · 4–7 a · 8–15 t · 16–23 s · 24–25 t · 26–27 k · 28 gp · 29 sp · 30 fp · 31 ra. Fast check: <code>$t0</code> = 8, <code>$s0</code> = 16, <code>$ra</code> = 31.</p></div>
+
+<h2>2. Memory: bytes, words, and "×4"</h2>
+<p>Every instruction is 32 bits, and memory is <b>byte-addressed</b>. So one word takes 4 addresses, and <b>words sit 4 bytes apart</b>. That is why the PC moves by 4, and why array element <code>A[8]</code> is at offset 8 × 4 = 32.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 600 230" width="600" role="img" aria-label="An array in memory: each element is a 4-byte word, so A[i] is at base address plus 4 times i; A[8] is at base plus 32">
+    <text x="320" y="14" class="dim" text-anchor="middle">4 bytes = 1 word</text>
+    <rect x="220" y="20" width="200" height="36" class="box-b"/>
+    <rect x="220" y="56" width="200" height="36" class="box"/>
+    <rect x="220" y="92" width="200" height="36" class="box"/>
+    <rect x="220" y="128" width="200" height="36" class="fill-bg"/>
+    <rect x="220" y="164" width="200" height="36" class="box-hi"/>
+    <path class="grid" d="M270 20 V128 M320 20 V128 M370 20 V128 M270 164 V200 M320 164 V200 M370 164 V200"/>
+    <text x="320" y="43" class="b" text-anchor="middle">A[0]</text>
+    <text x="320" y="79" class="b" text-anchor="middle">A[1]</text>
+    <text x="320" y="115" class="b" text-anchor="middle">A[2]</text>
+    <text x="320" y="151" class="dim" text-anchor="middle">⋮ A[3] … A[7]</text>
+    <text x="320" y="187" class="b" text-anchor="middle">A[8]</text>
+    <text x="208" y="43" class="m hi" text-anchor="end">base: $s3 + 0</text>
+    <text x="208" y="79" class="m" text-anchor="end">$s3 + 4</text>
+    <text x="208" y="115" class="m" text-anchor="end">$s3 + 8</text>
+    <text x="208" y="187" class="m" text-anchor="end">$s3 + 32</text>
+    <path class="w-hi" d="M470 182 H432"/>
+    <polygon points="422,182 434,177 434,187" class="fill-hi"/>
+    <text x="476" y="178" class="m hi">lw $t0,</text>
+    <text x="476" y="194" class="m hi">32($s3)</text>
+    <text x="320" y="222" class="dim" text-anchor="middle">address of A[i] = base + 4 × i</text>
+  </svg>
+  <figcaption>The array's base address (address of A[0]) is in <code>$s3</code>. Each element is one word, so indexes step by 4 bytes.</figcaption>
+</figure>
+<p>In MARS: the program (<code>.text</code>) starts at address <code>0x00400000</code>, data (<code>.data</code>) starts at <code>0x10010000</code>, and <code>$sp</code> starts at <code>0x7FFFEFFC</code>.</p>
+
+<h2>3. The three instruction formats</h2>
+<p>All three formats put the <b>opcode in the top 6 bits</b>, and put <b>rs and rt in the same place</b>. That regularity makes the decoder simple and fast.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 660 255" width="660" role="img" aria-label="Bit layouts: R-type is op 6, rs 5, rt 5, rd 5, shamt 5, funct 6; I-type is op 6, rs 5, rt 5, immediate 16; J-type is op 6, address 26">
+    <text x="79" y="20" class="m dim" text-anchor="middle">31</text>
+    <text x="169" y="20" class="m dim" text-anchor="middle">26</text>
+    <text x="187" y="20" class="m dim" text-anchor="middle">25</text>
+    <text x="259" y="20" class="m dim" text-anchor="middle">21</text>
+    <text x="277" y="20" class="m dim" text-anchor="middle">20</text>
+    <text x="349" y="20" class="m dim" text-anchor="middle">16</text>
+    <text x="367" y="20" class="m dim" text-anchor="middle">15</text>
+    <text x="439" y="20" class="m dim" text-anchor="middle">11</text>
+    <text x="457" y="20" class="m dim" text-anchor="middle">10</text>
+    <text x="529" y="20" class="m dim" text-anchor="middle">6</text>
+    <text x="547" y="20" class="m dim" text-anchor="middle">5</text>
+    <text x="637" y="20" class="m dim" text-anchor="middle">0</text>
+    <text x="10" y="53" class="b">R</text>
+    <rect x="70" y="28" width="108" height="40" class="box-hi"/>
+    <text x="124" y="53" class="m b" text-anchor="middle">op</text>
+    <text x="124" y="83" class="m dim" text-anchor="middle">6 bits</text>
+    <rect x="178" y="28" width="90" height="40" class="box-b"/>
+    <text x="223" y="53" class="m b" text-anchor="middle">rs</text>
+    <text x="223" y="83" class="m dim" text-anchor="middle">5 bits</text>
+    <rect x="268" y="28" width="90" height="40" class="box-g"/>
+    <text x="313" y="53" class="m b" text-anchor="middle">rt</text>
+    <text x="313" y="83" class="m dim" text-anchor="middle">5 bits</text>
+    <rect x="358" y="28" width="90" height="40" class="box-r"/>
+    <text x="403" y="53" class="m b" text-anchor="middle">rd</text>
+    <text x="403" y="83" class="m dim" text-anchor="middle">5 bits</text>
+    <rect x="448" y="28" width="90" height="40" class="box"/>
+    <text x="493" y="53" class="m b" text-anchor="middle">shamt</text>
+    <text x="493" y="83" class="m dim" text-anchor="middle">5 bits</text>
+    <rect x="538" y="28" width="108" height="40" class="box-hi"/>
+    <text x="592" y="53" class="m b" text-anchor="middle">funct</text>
+    <text x="592" y="83" class="m dim" text-anchor="middle">6 bits</text>
+    <text x="10" y="133" class="b">I</text>
+    <rect x="70" y="108" width="108" height="40" class="box-hi"/>
+    <text x="124" y="133" class="m b" text-anchor="middle">op</text>
+    <text x="124" y="163" class="m dim" text-anchor="middle">6 bits</text>
+    <rect x="178" y="108" width="90" height="40" class="box-b"/>
+    <text x="223" y="133" class="m b" text-anchor="middle">rs</text>
+    <text x="223" y="163" class="m dim" text-anchor="middle">5 bits</text>
+    <rect x="268" y="108" width="90" height="40" class="box-g"/>
+    <text x="313" y="133" class="m b" text-anchor="middle">rt</text>
+    <text x="313" y="163" class="m dim" text-anchor="middle">5 bits</text>
+    <rect x="358" y="108" width="288" height="40" class="box"/>
+    <text x="502" y="133" class="m b" text-anchor="middle">immediate</text>
+    <text x="502" y="163" class="m dim" text-anchor="middle">16 bits</text>
+    <text x="10" y="213" class="b">J</text>
+    <rect x="70" y="188" width="108" height="40" class="box-hi"/>
+    <text x="124" y="213" class="m b" text-anchor="middle">op</text>
+    <text x="124" y="243" class="m dim" text-anchor="middle">6 bits</text>
+    <rect x="178" y="188" width="468" height="40" class="box"/>
+    <text x="412" y="213" class="m b" text-anchor="middle">address</text>
+    <text x="412" y="243" class="m dim" text-anchor="middle">26 bits</text>
+  </svg>
+  <figcaption>Bit numbers run from 31 (left) down to 0 (right). The field widths always add up to 32.</figcaption>
+</figure>
+<div class="scroll"><table>
+  <tr><th>Format</th><th>Used for</th><th>Written as</th><th>Examples</th></tr>
+  <tr><td><b>R</b></td><td>Maths/logic on registers, shifts, <code>jr</code></td><td><code>op rd, rs, rt</code></td><td><code>add</code>, <code>sub</code>, <code>and</code>, <code>or</code>, <code>slt</code>, <code>sll</code>, <code>jr</code></td></tr>
+  <tr><td><b>I</b></td><td>Constants, memory, branches</td><td><code>op rt, rs, imm</code> · <code>op rt, imm(rs)</code> · <code>op rs, rt, label</code></td><td><code>addi</code>, <code>lw</code>, <code>sw</code>, <code>beq</code>, <code>bne</code>, <code>slti</code>, <code>lui</code></td></tr>
+  <tr><td><b>J</b></td><td>Far jumps</td><td><code>op label</code></td><td><code>j</code>, <code>jal</code></td></tr>
+</table></div>
+
+<h3>R-type: <code>op(6) rs(5) rt(5) rd(5) shamt(5) funct(6)</code></h3>
+<p><b>op is 0 for every R-type.</b> The <b>funct</b> field chooses the operation. The result goes into <b>rd</b>.</p>
+<div class="scroll"><table>
+  <tr><th>Instruction</th><th>funct (hex)</th><th>funct (dec)</th><th>Meaning</th></tr>
+  <tr><td><code>add rd, rs, rt</code></td><td>0x20</td><td>32</td><td>rd = rs + rt</td></tr>
+  <tr><td><code>sub rd, rs, rt</code></td><td>0x22</td><td>34</td><td>rd = rs − rt</td></tr>
+  <tr><td><code>and rd, rs, rt</code></td><td>0x24</td><td>36</td><td>bitwise AND</td></tr>
+  <tr><td><code>or rd, rs, rt</code></td><td>0x25</td><td>37</td><td>bitwise OR</td></tr>
+  <tr><td><code>slt rd, rs, rt</code></td><td>0x2A</td><td>42</td><td>rd = 1 if rs &lt; rt, else 0</td></tr>
+  <tr><td><code>sll rd, rt, shamt</code></td><td>0x00</td><td>0</td><td>rd = rt shifted left by shamt (rs = 0)</td></tr>
+  <tr><td><code>jr rs</code></td><td>0x08</td><td>8</td><td>PC = rs (rt = rd = shamt = 0)</td></tr>
+</table></div>
+
+<h3>I-type: <code>op(6) rs(5) rt(5) immediate(16)</code></h3>
+<p>The opcode alone picks the instruction. <b>rt is usually the destination</b> (for <code>addi</code>, <code>lw</code>, <code>slti</code>…). For <code>sw</code>, rt is the value to store. For branches, rs and rt are the two things compared.</p>
+<div class="scroll"><table>
+  <tr><th>Instruction</th><th>op (hex)</th><th>op (dec)</th><th>Meaning</th></tr>
+  <tr><td><code>addi rt, rs, imm</code></td><td>0x08</td><td>8</td><td>rt = rs + imm</td></tr>
+  <tr><td><code>lw rt, imm(rs)</code></td><td>0x23</td><td>35</td><td>rt = memory[rs + imm]</td></tr>
+  <tr><td><code>sw rt, imm(rs)</code></td><td>0x2B</td><td>43</td><td>memory[rs + imm] = rt</td></tr>
+  <tr><td><code>beq rs, rt, label</code></td><td>0x04</td><td>4</td><td>if rs == rt, go to label</td></tr>
+  <tr><td><code>bne rs, rt, label</code></td><td>0x05</td><td>5</td><td>if rs != rt, go to label</td></tr>
+  <tr><td><code>andi rt, rs, imm</code></td><td>0x0C</td><td>12</td><td>rt = rs AND imm (<b>zero</b>-extended)</td></tr>
+  <tr><td><code>ori rt, rs, imm</code></td><td>0x0D</td><td>13</td><td>rt = rs OR imm (<b>zero</b>-extended)</td></tr>
+  <tr><td><code>slti rt, rs, imm</code></td><td>0x0A</td><td>10</td><td>rt = 1 if rs &lt; imm, else 0</td></tr>
+  <tr><td><code>lui rt, imm</code></td><td>0x0F</td><td>15</td><td>rt = imm × 65536 (imm goes in the upper 16 bits; rs = 0)</td></tr>
+</table></div>
+<div class="callout tip"><b>Sign-extend or zero-extend?</b><p>The 16-bit immediate must be widened to 32 bits. Most instructions (<code>addi</code>, <code>lw</code>, <code>sw</code>, <code>beq</code>, <code>slti</code>) <b>sign-extend</b> it, so the range is −32768 to +32767. The logic ones (<code>andi</code>, <code>ori</code>) <b>zero-extend</b> it (fill with 0s), range 0 to 65535. It is the same idea as <code>lb</code> (sign-extends a byte) vs <code>lbu</code> (zero-extends it) from class.</p></div>
+<p><b>Constants bigger than 16 bits</b> need two instructions: <code>lui</code> loads the upper 16 bits, then <code>ori</code> fills in the lower 16. Example: <code>lui $t0, 0x1001</code> then <code>ori $t0, $t0, 0x0000</code> makes <code>$t0 = 0x10010000</code>. MARS's <code>la</code> (load address) pseudo-instruction does exactly this.</p>
+
+<h3>J-type: <code>op(6) address(26)</code></h3>
+<p><code>j</code> (op 0x02) and <code>jal</code> (op 0x03) store a 26-bit address. The CPU builds the 32-bit target like this:</p>
+<div class="formula">Target = { PC+4 [31:28] , address , 00 }<small>Take the top 4 bits of PC+4, then the 26-bit field, then two 0 bits (every instruction address is a multiple of 4). { } means "join the bits together".</small></div>
+<figure class="diagram">
+  <svg viewBox="0 0 640 170" width="640" role="img" aria-label="Jump target: 4 bits from PC plus 4, then the 26-bit address field, then 00; example gives 0x00400000">
+    <text x="80" y="22" class="m dim" text-anchor="middle">4 bits</text>
+    <text x="340" y="22" class="m dim" text-anchor="middle">26 bits (from the instruction)</text>
+    <text x="580" y="22" class="m dim" text-anchor="middle">2 bits</text>
+    <rect x="40" y="30" width="80" height="36" class="box-b"/>
+    <rect x="120" y="30" width="440" height="36" class="box-hi"/>
+    <rect x="560" y="30" width="40" height="36" class="box-g"/>
+    <text x="80" y="53" class="b" text-anchor="middle">PC+4 top</text>
+    <text x="340" y="53" class="b" text-anchor="middle">address field</text>
+    <text x="580" y="53" class="b" text-anchor="middle">00</text>
+    <rect x="40" y="80" width="80" height="36" class="box-b"/>
+    <rect x="120" y="80" width="440" height="36" class="box-hi"/>
+    <rect x="560" y="80" width="40" height="36" class="box-g"/>
+    <text x="80" y="103" class="m" text-anchor="middle">0000</text>
+    <text x="340" y="103" class="m" text-anchor="middle">00 0001 0000 0000 0000 0000 0000 (0x0100000)</text>
+    <text x="580" y="103" class="m" text-anchor="middle">00</text>
+    <text x="320" y="146" class="m" text-anchor="middle">= 0000 0000 0100 0000 0000 0000 0000 0000 = 0x00400000</text>
+  </svg>
+  <figcaption>Example: <code>j loop</code> where <code>loop</code> is at 0x00400000. The address field is 0x00400000 ÷ 4 = 0x0100000.</figcaption>
+</figure>
+<p>So <code>j</code> can only reach addresses in the same 256 MB block as PC+4 (same top 4 bits). To jump anywhere, use <code>jr</code> with a full 32-bit register.</p>
+
+<h2>4. Worked encodings</h2>
+<figure class="diagram">
+  <svg viewBox="0 0 660 170" width="660" role="img" aria-label="Filled bit fields for add $t0, $s1, $s2 and lw $t0, 32($s3)">
+    <text x="10" y="37" class="b">add</text>
+    <rect x="70" y="10" width="108" height="44" class="box-hi"/>
+    <text x="124" y="27" class="m dim" text-anchor="middle">op</text>
+    <text x="124" y="44" class="m b" text-anchor="middle">000000</text>
+    <rect x="178" y="10" width="90" height="44" class="box-b"/>
+    <text x="223" y="27" class="m dim" text-anchor="middle">rs</text>
+    <text x="223" y="44" class="m b" text-anchor="middle">10001</text>
+    <rect x="268" y="10" width="90" height="44" class="box-g"/>
+    <text x="313" y="27" class="m dim" text-anchor="middle">rt</text>
+    <text x="313" y="44" class="m b" text-anchor="middle">10010</text>
+    <rect x="358" y="10" width="90" height="44" class="box-r"/>
+    <text x="403" y="27" class="m dim" text-anchor="middle">rd</text>
+    <text x="403" y="44" class="m b" text-anchor="middle">01000</text>
+    <rect x="448" y="10" width="90" height="44" class="box"/>
+    <text x="493" y="27" class="m dim" text-anchor="middle">shamt</text>
+    <text x="493" y="44" class="m b" text-anchor="middle">00000</text>
+    <rect x="538" y="10" width="108" height="44" class="box-hi"/>
+    <text x="592" y="27" class="m dim" text-anchor="middle">funct</text>
+    <text x="592" y="44" class="m b" text-anchor="middle">100000</text>
+    <text x="124" y="72" class="m" text-anchor="middle">0</text>
+    <text x="223" y="72" class="m" text-anchor="middle">17 = $s1</text>
+    <text x="313" y="72" class="m" text-anchor="middle">18 = $s2</text>
+    <text x="403" y="72" class="m" text-anchor="middle">8 = $t0</text>
+    <text x="493" y="72" class="m" text-anchor="middle">0</text>
+    <text x="592" y="72" class="m" text-anchor="middle">32 = 0x20</text>
+    <text x="10" y="123" class="b">lw</text>
+    <rect x="70" y="96" width="108" height="44" class="box-hi"/>
+    <text x="124" y="113" class="m dim" text-anchor="middle">op</text>
+    <text x="124" y="130" class="m b" text-anchor="middle">100011</text>
+    <rect x="178" y="96" width="90" height="44" class="box-b"/>
+    <text x="223" y="113" class="m dim" text-anchor="middle">rs</text>
+    <text x="223" y="130" class="m b" text-anchor="middle">10011</text>
+    <rect x="268" y="96" width="90" height="44" class="box-g"/>
+    <text x="313" y="113" class="m dim" text-anchor="middle">rt</text>
+    <text x="313" y="130" class="m b" text-anchor="middle">01000</text>
+    <rect x="358" y="96" width="288" height="44" class="box"/>
+    <text x="502" y="113" class="m dim" text-anchor="middle">immediate</text>
+    <text x="502" y="130" class="m b" text-anchor="middle">0000000000100000</text>
+    <text x="124" y="158" class="m" text-anchor="middle">35 = 0x23</text>
+    <text x="223" y="158" class="m" text-anchor="middle">19 = $s3</text>
+    <text x="313" y="158" class="m" text-anchor="middle">8 = $t0</text>
+    <text x="502" y="158" class="m" text-anchor="middle">32</text>
+  </svg>
+  <figcaption>Top: <code>add $t0, $s1, $s2</code> = 0x02324020. Bottom: <code>lw $t0, 32($s3)</code> = 0x8E680020.</figcaption>
+</figure>
+<h3>Encoding 1: <code>add $t0, $s1, $s2</code> (R-type)</h3>
+<ol class="steps">
+  <li><b>Map the operands.</b> Written <code>add rd, rs, rt</code>, so rd = <code>$t0</code> = 8, rs = <code>$s1</code> = 17, rt = <code>$s2</code> = 18.</li>
+  <li><b>Fill the fields.</b> op = 0, rs = 17, rt = 18, rd = 8, shamt = 0, funct = 32 (0x20).</li>
+  <li><b>Write each field in binary, at its width.</b> <code>000000 10001 10010 01000 00000 100000</code></li>
+  <li><b>Regroup into 4s.</b> <code>0000 0010 0011 0010 0100 0000 0010 0000</code></li>
+  <li><b>Each group is one hex digit:</b> <b><code>0x02324020</code></b>.</li>
+</ol>
+<h3>Encoding 2: <code>lw $t0, 32($s3)</code> (I-type)</h3>
+<ol class="steps">
+  <li><b>Map.</b> Written <code>lw rt, imm(rs)</code>: rt = <code>$t0</code> = 8 (destination), rs = <code>$s3</code> = 19 (base), imm = 32.</li>
+  <li><b>Fields.</b> op = 35 (0x23), rs = 19, rt = 8, imm = 32.</li>
+  <li><b>Binary.</b> <code>100011 10011 01000 0000000000100000</code></li>
+  <li><b>Groups of 4.</b> <code>1000 1110 0110 1000 0000 0000 0010 0000</code></li>
+  <li><b>Hex:</b> <b><code>0x8E680020</code></b>.</li>
+</ol>
+<h3>Encoding 3: <code>addi $t0, $t0, -1</code> (negative immediate)</h3>
+<ol class="steps">
+  <li><b>Fields.</b> op = 8, rs = 8, rt = 8, imm = −1.</li>
+  <li><b>−1 in 16-bit two's complement</b> is <code>1111 1111 1111 1111</code> = <code>0xFFFF</code>.</li>
+  <li><b>Binary.</b> <code>001000 01000 01000 1111111111111111</code> → <code>0010 0001 0000 1000 1111 1111 1111 1111</code></li>
+  <li><b>Hex:</b> <b><code>0x2108FFFF</code></b>. At run time the CPU sign-extends <code>FFFF</code> to <code>FFFFFFFF</code> (−1).</li>
+</ol>
+<h3>Encoding 4: <code>sll $t1, $s1, 2</code> (shift)</h3>
+<p>Written <code>sll rd, rt, shamt</code>. So rs = 0, rt = <code>$s1</code> = 17, rd = <code>$t1</code> = 9, shamt = 2, funct = 0.<br>
+<code>000000 00000 10001 01001 00010 000000</code> → <b><code>0x00114880</code></b>. Watch out: the shifted register goes in <b>rt</b>, not rs.</p>
+
+<h2>5. Branch offsets (beq / bne)</h2>
+<p>A branch does not store the full target address. It stores <b>how many instructions to jump, counted from PC + 4</b> (the instruction after the branch). The count can be negative (jump backwards).</p>
+<div class="formula">offset = (Target − (PC + 4)) ÷ 4 &nbsp;&nbsp;⇔&nbsp;&nbsp; Target = PC + 4 + offset × 4<small>PC = address of the branch itself. The offset is a signed 16-bit number of instructions.</small></div>
+<div class="scroll"><table>
+  <tr><th>Address</th><th>Code</th><th>Machine code</th><th>Note</th></tr>
+  <tr><td><code>0x00400000</code></td><td><code>loop: beq $t0, $zero, exit</code></td><td><code>0x11000002</code></td><td>(0x0040000C − 0x00400004) ÷ 4 = <b>2</b></td></tr>
+  <tr><td><code>0x00400004</code></td><td><code>addi $t0, $t0, -1</code></td><td><code>0x2108FFFF</code></td><td>skipped 1st</td></tr>
+  <tr><td><code>0x00400008</code></td><td><code>j loop</code></td><td><code>0x08100000</code></td><td>skipped 2nd; address field 0x0100000</td></tr>
+  <tr class="hl"><td><code>0x0040000C</code></td><td><code>exit: …</code></td><td></td><td>branch target</td></tr>
+</table></div>
+<p><b>beq decoded:</b> op 4 = <code>000100</code>, rs = <code>$t0</code> = 8 = <code>01000</code>, rt = <code>$zero</code> = <code>00000</code>, offset = 2 → <code>0001 0001 0000 0000 0000 0000 0000 0010</code> = <code>0x11000002</code>.</p>
+<p><b>Backward example:</b> a <code>bne $s3, $s4, loop</code> at <code>0x0040002C</code> with <code>loop</code> at <code>0x00400000</code>: offset = (0x00400000 − 0x00400030) ÷ 4 = −48 ÷ 4 = <b>−12</b> = <code>0xFFF4</code>. Machine code <code>0x1674FFF4</code>.</p>
+<div class="callout tip"><b>Why count in instructions?</b><p>Targets are always multiples of 4, so storing "÷ 4" gives 4× the reach: ±32768 instructions (about ±128 KB) instead of ±32 KB.</p></div>
+
+<h2>6. Decoding: hex back to an instruction</h2>
+<ol class="flow arrows">
+  <li><b>Hex → binary</b>Write 4 bits per hex digit.</li>
+  <li><b>Read op</b>Top 6 bits. 0 means R-type; 2 or 3 means J-type; anything else is I-type.</li>
+  <li><b>Split fields</b>Use that format's layout.</li>
+  <li><b>Look up</b>funct (R) or op (I/J); register numbers → names.</li>
+  <li><b>Write it</b>In the written order (R: rd, rs, rt).</li>
+</ol>
+<h3>Example: decode <code>0x01098022</code></h3>
+<ol class="steps">
+  <li><code>0000 0001 0000 1001 1000 0000 0010 0010</code></li>
+  <li>op = <code>000000</code> → R-type. Split: <code>000000 | 01000 | 01001 | 10000 | 00000 | 100010</code></li>
+  <li>rs = 8 (<code>$t0</code>), rt = 9 (<code>$t1</code>), rd = 16 (<code>$s0</code>), shamt = 0, funct = 34 = 0x22 → <code>sub</code></li>
+  <li>Answer: <b><code>sub $s0, $t0, $t1</code></b></li>
+</ol>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>Field order ≠ written order.</b> You write <code>add rd, rs, rt</code>, but the bits are ordered <code>rs rt rd</code>.</li>
+  <li>In <code>lw</code>/<code>addi</code>, the destination is <b>rt</b>, not rd (I-type has no rd).</li>
+  <li>In <code>sll</code>, the source register goes in <b>rt</b> and rs = 0. In <code>jr</code>, the register goes in <b>rs</b>.</li>
+  <li>Branch offsets are counted from <b>PC + 4</b>, and in <b>instructions</b>, not bytes.</li>
+  <li>Negative immediates: write the 16-bit two's complement (−1 = <code>FFFF</code>, −8 = <code>FFF8</code>). Don't write 32 bits into a 16-bit field.</li>
+  <li>Using decimal where hex is expected: funct for add is 32 decimal = <code>0x20</code>.</li>
+  <li>A J-type target keeps the top 4 bits of <b>PC + 4</b> and adds two 0s at the bottom.</li>
+  <li>Register numbers: <code>$t0</code> is 8 (not 0), <code>$s0</code> is 16, <code>$sp</code> is 29, <code>$ra</code> is 31.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>Encode <code>sw $t0, 48($s3)</code> in hex.</summary><div class="a"><p>I-type: op = 43 (0x2B), rs = 19 (<code>$s3</code>), rt = 8 (<code>$t0</code>), imm = 48.<br><code>101011 10011 01000 0000000000110000</code> → <code>1010 1110 0110 1000 0000 0000 0011 0000</code> = <b><code>0xAE680030</code></b>.</p></div></details>
+  <details class="q"><summary>Encode <code>addi $sp, $sp, -8</code> in hex.</summary><div class="a"><p>op = 8, rs = rt = 29 (<code>11101</code>), imm = −8 = <code>0xFFF8</code>.<br><code>001000 11101 11101 1111111111111000</code> → <b><code>0x23BDFFF8</code></b>.</p></div></details>
+  <details class="q"><summary>Encode <code>slt $t1, $t0, $s1</code> in hex.</summary><div class="a"><p>R-type: rs = 8, rt = 17, rd = 9, shamt = 0, funct = 42 (0x2A).<br><code>000000 01000 10001 01001 00000 101010</code> → <code>0000 0001 0001 0001 0100 1000 0010 1010</code> = <b><code>0x0111482A</code></b>.</p></div></details>
+  <details class="q"><summary>Decode <code>0x1674FFF4</code>. If it sits at address 0x0040002C, where does it jump?</summary><div class="a"><p><code>000101 10011 10100 1111111111110100</code>: op 5 = <code>bne</code>, rs = 19 (<code>$s3</code>), rt = 20 (<code>$s4</code>), offset = −12.<br><b><code>bne $s3, $s4, …</code></b>. Target = 0x0040002C + 4 + (−12 × 4) = 0x00400030 − 0x30 = <b>0x00400000</b>.</p></div></details>
+  <details class="q"><summary>A <code>jal func</code> has the address field 0x0100012 and sits at 0x0040001C. What is the target, and what goes into <code>$ra</code>?</summary><div class="a"><p>Target = {0000, 0x0100012, 00} = 0x0100012 × 4 = <b>0x00400048</b>. <code>$ra</code> = PC + 4 = <b>0x00400020</b>. (The factorial program on the <a href="m3-05-functions-stack.html">functions page</a> has exactly these numbers in MARS.)</p></div></details>
+  <details class="q"><summary>Why do <code>andi</code>/<code>ori</code> zero-extend but <code>addi</code> sign-extends?</summary><div class="a"><p>Logic operations treat the constant as a bit pattern (a mask), so the upper bits should be 0. <code>addi</code> does arithmetic, so a negative constant must stay negative, which needs sign extension.</p></div></details>
+  <details class="q"><summary>How many bits hold a register number, and why?</summary><div class="a"><p>5 bits, because 2⁵ = 32 registers.</p></div></details>
+  <details class="q"><summary>What 32-bit value does <code>lui $t0, 0x1001</code> put in <code>$t0</code>?</summary><div class="a"><p><code>0x10010000</code>: the immediate goes into the upper 16 bits and the lower 16 bits are 0. (That is the start of MARS's data segment.)</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=BlOLrVo4Nkk" target="_blank" rel="noopener"><i class="play"></i><span><b>MIPS Tutorial 2 Registers</b><small>Amell Peralta</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=ykI9nwSNFfM" target="_blank" rel="noopener"><i class="play"></i><span><b>ISA 1.2 MIPS Instructions</b><small>David Black-Schaffer</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=ukGrEGO_eNA" target="_blank" rel="noopener"><i class="play"></i><span><b>ISA 2.2 MIPS Instruction Encodings</b><small>David Black-Schaffer</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=jsPTGER7gNU" target="_blank" rel="noopener"><i class="play"></i><span><b>COSC130 - Encoding MIPS Instructions</b><small>Stephen Marz</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

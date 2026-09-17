@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Logic Minimization</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+<style>
+  /* K-map group shading (theme-aware via CSS variables) */
+  table.kmap td, table.kmap th { min-width: 52px; }
+  table.kmap td.g1 { background: var(--green-soft); }
+  table.kmap td.g2 { background: var(--blue-soft); }
+  table.kmap td.g3 { background: var(--copper-soft); }
+  table.kmap td.g12 { background: linear-gradient(135deg, var(--green-soft) 50%, var(--blue-soft) 50%); }
+  table.kmap td.g13 { background: linear-gradient(135deg, var(--green-soft) 50%, var(--copper-soft) 50%); }
+  table.kmap td.g23 { background: linear-gradient(135deg, var(--blue-soft) 50%, var(--copper-soft) 50%); }
+  table.kmap td.g123 { background: linear-gradient(135deg, var(--green-soft) 33%, var(--blue-soft) 33% 66%, var(--copper-soft) 66%); }
+  table.kmap td.x { color: var(--ink-2); font-style: italic; }
+  .kg { display: inline-block; padding: 1px 8px; border-radius: 6px; font-family: var(--mono); font-size: 14px; border: 1px solid var(--line); margin: 2px 4px 2px 0; }
+  .kg.g1 { background: var(--green-soft); } .kg.g2 { background: var(--blue-soft); } .kg.g3 { background: var(--copper-soft); }
+  code, pre, .ann td.c { font-variant-ligatures: none; }
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 1 / Logic minimization</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 1 · Digital Foundations <span class="tag class">From class notes · Lecture 0010 &amp; Lab 2 sheet</span></div>
+  <h1>Logic minimization &amp; K-maps</h1>
+  <p class="idea">A truth table tells you <em>what</em> a circuit must do. Minimization finds the <strong>smallest</strong> circuit that does it. A Karnaugh map (K-map) is a picture of the truth table where simplifications jump out as rectangles.</p>
+  <div class="analogy"><b>Think of it like this:</b> "Open on Monday, Tuesday, Wednesday, Thursday, Friday" is five rules. "Open on weekdays" is one rule that means the same thing. A K-map helps you spot the "weekdays": groups of 1s that share a pattern, so one short term replaces many long ones.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Literal</dt><dd>A variable or its complement: A, A', B, …</dd></div>
+  <div class="term"><dt>Product term</dt><dd>Literals ANDed together, e.g. <code>AB'C</code>.</dd></div>
+  <div class="term"><dt>Sum term</dt><dd>Literals ORed together, e.g. <code>(A + B' + C)</code>.</dd></div>
+  <div class="term"><dt>Minterm (m)</dt><dd>A product term that is 1 on exactly <b>one</b> row of the truth table. Uses every variable.</dd></div>
+  <div class="term"><dt>Maxterm (M)</dt><dd>A sum term that is 0 on exactly <b>one</b> row. Uses every variable.</dd></div>
+  <div class="term"><dt>SOP</dt><dd>Sum of Products: products ORed together, e.g. <code>AB + C</code>.</dd></div>
+  <div class="term"><dt>POS</dt><dd>Product of Sums: sums ANDed together, e.g. <code>(A+B)(A'+C)</code>.</dd></div>
+  <div class="term"><dt>Gray code</dt><dd>A counting order where neighbours differ in only one bit: 00, 01, 11, 10.</dd></div>
+  <div class="term"><dt>Prime implicant (PI)</dt><dd>A group of 1s on the K-map that can't be made any bigger.</dd></div>
+  <div class="term"><dt>Essential PI (EPI)</dt><dd>A PI that covers some 1 that no other PI covers. It must be in the answer.</dd></div>
+  <div class="term"><dt>Don't-care (X)</dt><dd>An output we don't care about, usually because that input can never happen.</dd></div>
+  <div class="term"><dt>Universal gate</dt><dd>NAND or NOR: either one alone can build any circuit.</dd></div>
+</dl>
+
+<h2>1. Why minimize?</h2>
+<p>The lecture's headline: <b>"16 → 2"</b>. A 4-variable function can shrink from 16 gates to 2. Fewer gates means less <b>area</b> (chip space), less <b>power</b>, more <b>speed</b> (fewer gates for a signal to pass through) and lower <b>cost</b>. It matters at scale: Apple's M3 has about 98 billion transistors on a 3 nm process.</p>
+<p>Where minimization fits in making a chip (the VLSI design flow; VLSI = Very Large Scale Integration):</p>
+<ol class="flow arrows">
+  <li><b>Spec</b>What must it do?</li>
+  <li><b>Architecture</b>Main blocks</li>
+  <li><b>Logic synthesis</b>Equations → minimal gates</li>
+  <li><b>Circuit</b>Gates → transistors</li>
+  <li><b>Physical design</b>Layout on silicon</li>
+  <li><b>Verification</b>Check it</li>
+  <li><b>Fab</b>Manufacture</li>
+  <li><b>Packaging &amp; test</b>Ship it</li>
+</ol>
+
+<h2>2. SOP and POS: reading an equation off a truth table</h2>
+<div class="vs">
+  <div><h3>SOP (use the 1 rows)</h3>
+    <p>For each row where <b>F = 1</b>, write a minterm: a <b>1 becomes X</b>, a <b>0 becomes X'</b>. AND the letters. Then OR all the minterms.</p>
+    <p style="font-size:15px">Row 5: A=1, B=0, C=1 → <code>m5 = A·B'·C</code></p></div>
+  <div><h3>POS (use the 0 rows)</h3>
+    <p>For each row where <b>F = 0</b>, write a maxterm: a <b>1 becomes X'</b>, a <b>0 becomes X</b>. OR the letters. Then AND all the maxterms.</p>
+    <p style="font-size:15px">Row 2: A=0, B=1, C=0 → <code>M2 = (A + B' + C)</code></p></div>
+</div>
+<div class="callout trap"><b>THE trap: the rules are opposite</b><p>SOP: 0 → complemented. POS: 1 → complemented. Why? A maxterm must be <b>0</b> on its row, and an OR is 0 only when every letter is 0. So on a row where A = 1, you need A' (which is 0).</p></div>
+
+<p>Example: F is 1 on rows 1, 3, 5, 7. The row number is just the binary value of ABC written in decimal (101 = 5).</p>
+<div class="scroll"><table class="tt">
+  <tr><th>Row</th><th>A</th><th>B</th><th>C</th><th class="out">F</th><th>Term to write</th></tr>
+  <tr><td>0</td><td>0</td><td>0</td><td>0</td><td class="out zero">0</td><td>M0 = (A + B + C)</td></tr>
+  <tr class="hl"><td>1</td><td>0</td><td>0</td><td>1</td><td class="out one">1</td><td>m1 = A'B'C</td></tr>
+  <tr><td>2</td><td>0</td><td>1</td><td>0</td><td class="out zero">0</td><td>M2 = (A + B' + C)</td></tr>
+  <tr class="hl"><td>3</td><td>0</td><td>1</td><td>1</td><td class="out one">1</td><td>m3 = A'BC</td></tr>
+  <tr><td>4</td><td>1</td><td>0</td><td>0</td><td class="out zero">0</td><td>M4 = (A' + B + C)</td></tr>
+  <tr class="hl"><td>5</td><td>1</td><td>0</td><td>1</td><td class="out one">1</td><td>m5 = AB'C</td></tr>
+  <tr><td>6</td><td>1</td><td>1</td><td>0</td><td class="out zero">0</td><td>M6 = (A' + B' + C)</td></tr>
+  <tr class="hl"><td>7</td><td>1</td><td>1</td><td>1</td><td class="out one">1</td><td>m7 = ABC</td></tr>
+</table></div>
+<div class="formula">SOP: F = A'B'C + A'BC + AB'C + ABC<small>OR of the minterms (the 1 rows)</small></div>
+<div class="formula">POS: F = (A+B+C)(A+B'+C)(A'+B+C)(A'+B'+C)<small>AND of the maxterms (the 0 rows)</small></div>
+<div class="formula">F = Σm(1,3,5,7) = ΠM(0,2,4,6)<small>Σ ("sigma") = sum of minterms. Π ("pi") = product of maxterms. The two lists together contain every row exactly once.</small></div>
+<p style="font-size:15px">Both are correct, but long. Notice that F = 1 exactly when C = 1. A K-map will show that <b>F = C</b> in seconds (see below).</p>
+
+<h2>3. Karnaugh maps (K-maps)</h2>
+<p>A K-map lays the truth table out as a grid. Rows and columns are labelled in <b>Gray code</b> (00, 01, 11, 10), <b>not</b> binary order. So any two touching cells differ in exactly one variable, and that variable cancels when you group them: <code>AB + AB' = A</code>.</p>
+
+<div class="callout tip"><b>Grouping rules</b>
+<ul>
+  <li>Groups are <b>rectangles</b> of <b>1, 2, 4, 8 or 16</b> cells. Never 3, 5 or 6.</li>
+  <li>No diagonal groups.</li>
+  <li>Make each group <b>as big as possible</b>, and use <b>as few groups as possible</b>.</li>
+  <li>Groups may <b>overlap</b>. Every 1 must be in at least one group.</li>
+  <li>The map <b>wraps around</b>: the left edge touches the right edge, and the top touches the bottom.</li>
+  <li>A group of 2 removes 1 variable, 4 removes 2, 8 removes 3. Keep only the variables that <b>stay the same</b> across the whole group.</li>
+</ul></div>
+
+<h3>2-variable map</h3>
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt kmap">
+      <tr><th>A \ B</th><th>0</th><th>1</th></tr>
+      <tr><th>0</th><td class="zero">0</td><td class="one g1">1</td></tr>
+      <tr><th>1</th><td class="zero">0</td><td class="one g1">1</td></tr>
+    </table></div>
+  </div>
+  <div><p>The whole B = 1 column is 1. In that group A changes (0 and 1) but B stays 1. A drops out.</p>
+  <p><span class="kg g1">F = B</span></p></div>
+</div>
+
+<h3>3-variable map</h3>
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt kmap">
+      <tr><th>A \ BC</th><th>00</th><th>01</th><th>11</th><th>10</th></tr>
+      <tr><th>0</th><td class="zero">0</td><td class="one g1">1</td><td class="one g1">1</td><td class="zero">0</td></tr>
+      <tr><th>1</th><td class="zero">0</td><td class="one g1">1</td><td class="one g1">1</td><td class="zero">0</td></tr>
+    </table></div>
+  </div>
+  <div><p>This is Σm(1,3,5,7) from above. The four 1s form one group of 4. Across it, A changes and B changes, but <b>C = 1</b> everywhere.</p>
+  <p><span class="kg g1">F = C</span> &nbsp;The long four-term SOP becomes no gates at all, just a wire.</p></div>
+</div>
+
+<h3>4-variable map: finding the groups</h3>
+<p>Rows are AB, columns are CD, both in Gray order. The cell at row AB, column CD is minterm number <code>ABCD</code> in binary.</p>
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt kmap">
+      <tr><th>AB \ CD</th><th>00</th><th>01</th><th>11</th><th>10</th></tr>
+      <tr><th>00</th><td class="one g1">1</td><td class="zero">0</td><td class="zero">0</td><td class="one g1">1</td></tr>
+      <tr><th>01</th><td class="one g1">1</td><td class="one g2">1</td><td class="one g2">1</td><td class="one g1">1</td></tr>
+      <tr><th>11</th><td class="zero">0</td><td class="one g2">1</td><td class="one g2">1</td><td class="zero">0</td></tr>
+      <tr><th>10</th><td class="zero">0</td><td class="zero">0</td><td class="zero">0</td><td class="zero">0</td></tr>
+    </table></div>
+    <p style="font-size:14px;margin:8px 0 0"><span class="kg g1">A'D'</span><span class="kg g2">BD</span></p>
+  </div>
+  <div>
+    <p><b>Green (A'D'):</b> rows 00 and 01, and the two <em>outer</em> columns 00 and 10. Those columns touch by wrap-around. A = 0 and D = 0 in all four cells.</p>
+    <p><b>Blue (BD):</b> the middle 2×2 block. B = 1 and D = 1 in all four cells.</p>
+    <p>Every 1 is covered, so <b>F = BD + A'D'</b>.</p>
+  </div>
+</div>
+<div class="callout fix"><b>Slide correction</b><p>The class answer is <code>F = A'B + BD + A'D'</code>. It gives the right output, but it is <b>not minimal</b>. The row-01 group A'B only covers cells that BD and A'D' already cover, so drop it: <b>F = BD + A'D'</b>. Check: row 01 gives D + D' = 1 ✓, row 00 gives D' ✓, row 11 gives D ✓, row 10 gives 0 ✓.</p></div>
+
+<h3>Prime implicants and essential prime implicants</h3>
+<p>In the map above, the groups that can't grow any bigger (the <b>PIs</b>) are <code>A'B</code>, <code>BD</code> and <code>A'D'</code>.</p>
+<ol class="steps">
+  <li><b>Find the EPIs.</b> Cell 0000 (m0) is only inside A'D', so <b>A'D' is essential</b>. Cell 1101 (m13) is only inside BD, so <b>BD is essential</b>.</li>
+  <li><b>Take all EPIs.</b> A'D' + BD already cover all eight 1s.</li>
+  <li><b>Add the fewest other PIs</b> for any 1s left over. Here none are left, so A'B is not needed.</li>
+  <li><b>Minimal cover:</b> F = BD + A'D'. In general: <b>all EPIs + the fewest extra PIs</b>.</li>
+</ol>
+
+<h3>Wrap-around: "THINK: DONUT"</h3>
+<p>Roll the map into a tube and then into a donut: the top row touches the bottom row, and the left column touches the right column. So the <b>four corners</b> are neighbours.</p>
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt kmap">
+      <tr><th>AB \ CD</th><th>00</th><th>01</th><th>11</th><th>10</th></tr>
+      <tr><th>00</th><td class="one g3">1</td><td class="zero">0</td><td class="zero">0</td><td class="one g3">1</td></tr>
+      <tr><th>01</th><td class="zero">0</td><td class="one g2">1</td><td class="one g2">1</td><td class="zero">0</td></tr>
+      <tr><th>11</th><td class="zero">0</td><td class="one g2">1</td><td class="one g2">1</td><td class="zero">0</td></tr>
+      <tr><th>10</th><td class="one g3">1</td><td class="zero">0</td><td class="zero">0</td><td class="one g3">1</td></tr>
+    </table></div>
+    <p style="font-size:14px;margin:8px 0 0"><span class="kg g3">B'D'</span><span class="kg g2">BD</span></p>
+  </div>
+  <div>
+    <p><b>Exit ticket / Lab 2 Q21:</b> Σm(0,2,5,7,8,10,13,15).</p>
+    <p><b>Corners</b> (m0, m2, m8, m10): B = 0 and D = 0 → <code>B'D'</code>.</p>
+    <p><b>Centre</b> (m5, m7, m13, m15): B = 1 and D = 1 → <code>BD</code>.</p>
+    <p><b>F = B'D' + BD</b> (this is B XNOR D). The common mistake is missing the corner group and writing four separate pairs.</p>
+  </div>
+</div>
+
+<h3>Don't-cares (X)</h3>
+<p>Sometimes an input can never happen. Example: a BCD digit (0–9 stored in 4 bits) never uses the codes 10–15. We mark those outputs <b>X</b> and treat each X as 0 or 1, <b>"whichever makes your groups BIGGER"</b>. You never have to cover an X.</p>
+<p>Example: output 1 when the BCD digit is 5 or more. F = Σm(5,6,7,8,9) + d(10,11,12,13,14,15). (d = don't-care list.)</p>
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt kmap">
+      <tr><th>AB \ CD</th><th>00</th><th>01</th><th>11</th><th>10</th></tr>
+      <tr><th>00</th><td class="zero">0</td><td class="zero">0</td><td class="zero">0</td><td class="zero">0</td></tr>
+      <tr><th>01</th><td class="zero">0</td><td class="one g2">1</td><td class="one g23">1</td><td class="one g3">1</td></tr>
+      <tr><th>11</th><td class="x g1">X</td><td class="x g12">X</td><td class="x g123">X</td><td class="x g13">X</td></tr>
+      <tr><th>10</th><td class="one g1">1</td><td class="one g1">1</td><td class="x g1">X</td><td class="x g1">X</td></tr>
+    </table></div>
+    <p style="font-size:14px;margin:8px 0 0"><span class="kg g1">A</span><span class="kg g2">BD</span><span class="kg g3">BC</span></p>
+  </div>
+  <div>
+    <p><b>Green (A):</b> treat the Xs as 1 → the bottom two rows make a group of <b>8</b>. Only A = 1 stays constant.</p>
+    <p><b>Blue (BD)</b> and <b>copper (BC)</b>: 2×2 blocks that borrow Xs from row 11.</p>
+    <p><b>F = A + BD + BC</b></p>
+    <p style="font-size:15px">Without don't-cares you'd get <code>AB'C' + A'BD + A'BC</code>: longer, with 3-input gates.</p>
+  </div>
+</div>
+
+<h3>Full worked example: F = C'</h3>
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt kmap">
+      <tr><th>AB \ CD</th><th>00</th><th>01</th><th>11</th><th>10</th></tr>
+      <tr><th>00</th><td class="one g1">1</td><td class="one g1">1</td><td class="zero">0</td><td class="zero">0</td></tr>
+      <tr><th>01</th><td class="one g1">1</td><td class="one g1">1</td><td class="zero">0</td><td class="zero">0</td></tr>
+      <tr><th>11</th><td class="one g1">1</td><td class="one g1">1</td><td class="zero">0</td><td class="zero">0</td></tr>
+      <tr><th>10</th><td class="one g1">1</td><td class="one g1">1</td><td class="zero">0</td><td class="zero">0</td></tr>
+    </table></div>
+  </div>
+  <div>
+    <div class="stepper" data-stepper style="margin:0">
+      <div class="stage"><p><b>Read the map.</b> Columns CD = 00 and CD = 01 are 1 in every row. That's F = Σm(0,1,4,5,8,9,12,13): eight minterms.</p></div>
+      <div class="stage"><p><b>Naive SOP.</b> Eight 4-input AND gates plus one big OR = <b>9 gates</b>.</p></div>
+      <div class="stage"><p><b>Group.</b> The two columns side by side form one group of <b>8</b>. That removes 3 variables.</p></div>
+      <div class="stage"><p><b>What stays constant?</b> A and B take every value. D is 0 in one column and 1 in the other. Only <b>C = 0</b> is the same everywhere.</p></div>
+      <div class="stage"><p><b>Answer: F = C'</b>. Nine gates become <b>one</b> NOT gate.</p></div>
+    </div>
+  </div>
+</div>
+<div class="callout fix"><b>Slide correction</b><p>The slide says <b>F = B'</b>. That is wrong: B = 1 in rows 01 and 11, and those rows are also 1. The column heading that stays fixed is C = 0, so the correct answer is <b>F = C'</b>.</p></div>
+
+<h2>4. Bubble pushing (De Morgan on diagrams)</h2>
+<p>A bubble means NOT. De Morgan says you can move bubbles from a gate's output to its inputs if you also swap the shape (AND ↔ OR):</p>
+<div class="formula">NAND = (AB)' = A' + B' = OR with bubbles on both inputs<small>and NOR = (A+B)' = A'·B' = AND with bubbles on both inputs. Diagrams are on <a href="m1-01-boolean-gates.html">Boolean algebra &amp; gates</a>.</small></div>
+<h3>Worked example: push the bar all the way in</h3>
+<ol class="steps">
+  <li><b>Start:</b> <code>~(A·B + C)</code>. The bar covers an OR of two parts.</li>
+  <li><b>Break the outer bar, flip + to ·:</b> <code>~(A·B) · ~C</code></li>
+  <li><b>Don't stop!</b> <code>~(A·B)</code> still has a bar over a group. Break it, flip · to +: <code>~A + ~B</code></li>
+  <li><b>Result:</b> <code>(~A + ~B) · ~C</code>. Now every bar sits on a single letter.</li>
+</ol>
+
+<h2>5. NAND and NOR are universal</h2>
+<p>With only NAND gates (or only NOR gates) you can build NOT, AND and OR, and so <em>any</em> circuit. The key trick: <b>tie both inputs together</b> and a NAND or NOR becomes a NOT gate.</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 660 260" width="660" role="img" aria-label="NAND-only circuits: NOT uses 1 NAND, AND uses 2, OR uses 3, and F = AB + C uses 3">
+    <!-- NOT from 1 NAND -->
+    <text x="10" y="18" class="b">NOT = 1 NAND</text>
+    <text x="10" y="64" class="m">A</text>
+    <path class="w" d="M24 60 H50 M50 50 V70 M50 50 H70 M50 70 H70"/>
+    <circle cx="50" cy="60" r="3" class="fill-ink"/>
+    <g transform="translate(70,40)"><path class="box" d="M0 0 H25 A20 20 0 0 1 25 40 H0 Z"/><circle cx="50" cy="20" r="5" class="box"/></g>
+    <path class="w-hi" d="M125 60 H155"/><text x="160" y="64" class="m hi">A'</text>
+    <!-- AND from 2 NANDs -->
+    <text x="220" y="18" class="b">AND = 2 NANDs</text>
+    <text x="222" y="54" class="m">A</text><text x="222" y="74" class="m">B</text>
+    <path class="w" d="M236 50 H270 M236 70 H270"/>
+    <g transform="translate(270,40)"><path class="box" d="M0 0 H25 A20 20 0 0 1 25 40 H0 Z"/><circle cx="50" cy="20" r="5" class="box"/></g>
+    <path class="w" d="M325 60 H370 M370 50 V70 M370 50 H400 M370 70 H400"/>
+    <circle cx="370" cy="60" r="3" class="fill-ink"/>
+    <text x="330" y="52" class="m dim">(AB)'</text>
+    <g transform="translate(400,40)"><path class="box" d="M0 0 H25 A20 20 0 0 1 25 40 H0 Z"/><circle cx="50" cy="20" r="5" class="box"/></g>
+    <path class="w-hi" d="M455 60 H490"/><text x="495" y="64" class="m hi">A·B</text>
+    <!-- OR from 3 NANDs -->
+    <text x="10" y="148" class="b">OR = 3 NANDs</text>
+    <text x="10" y="184" class="m">A</text><text x="10" y="229" class="m">B</text>
+    <path class="w" d="M24 180 H50 M50 170 V190 M50 170 H70 M50 190 H70"/>
+    <path class="w" d="M24 225 H50 M50 215 V235 M50 215 H70 M50 235 H70"/>
+    <circle cx="50" cy="180" r="3" class="fill-ink"/><circle cx="50" cy="225" r="3" class="fill-ink"/>
+    <g transform="translate(70,160)"><path class="box" d="M0 0 H25 A20 20 0 0 1 25 40 H0 Z"/><circle cx="50" cy="20" r="5" class="box"/></g>
+    <g transform="translate(70,205)"><path class="box" d="M0 0 H25 A20 20 0 0 1 25 40 H0 Z"/><circle cx="50" cy="20" r="5" class="box"/></g>
+    <path class="w" d="M125 180 H160 V193 H200 M125 225 H160 V213 H200"/>
+    <text x="130" y="174" class="m dim">A'</text><text x="130" y="241" class="m dim">B'</text>
+    <g transform="translate(200,183)"><path class="box" d="M0 0 H25 A20 20 0 0 1 25 40 H0 Z"/><circle cx="50" cy="20" r="5" class="box"/></g>
+    <path class="w-hi" d="M255 203 H285"/><text x="290" y="207" class="m hi">A + B</text>
+    <!-- F = AB + C -->
+    <text x="370" y="148" class="b">F = AB + C = 3 NANDs</text>
+    <text x="378" y="174" class="m">A</text><text x="378" y="194" class="m">B</text><text x="378" y="229" class="m">C</text>
+    <path class="w" d="M392 170 H430 M392 190 H430"/>
+    <path class="w" d="M392 225 H410 M410 215 V235 M410 215 H430 M410 235 H430"/>
+    <circle cx="410" cy="225" r="3" class="fill-ink"/>
+    <g transform="translate(430,160)"><path class="box" d="M0 0 H25 A20 20 0 0 1 25 40 H0 Z"/><circle cx="50" cy="20" r="5" class="box"/></g>
+    <g transform="translate(430,205)"><path class="box" d="M0 0 H25 A20 20 0 0 1 25 40 H0 Z"/><circle cx="50" cy="20" r="5" class="box"/></g>
+    <path class="w" d="M485 180 H515 V193 H540 M485 225 H515 V213 H540"/>
+    <g transform="translate(540,183)"><path class="box" d="M0 0 H25 A20 20 0 0 1 25 40 H0 Z"/><circle cx="50" cy="20" r="5" class="box"/></g>
+    <path class="w-hi" d="M595 203 H625"/><text x="630" y="207" class="m hi">F</text>
+  </svg>
+  <figcaption>A dot means the wire splits. A NAND with both inputs joined is a NOT. F = ((AB)'·C')' = AB + C by De Morgan.</figcaption>
+</figure>
+
+<figure class="diagram">
+  <svg viewBox="0 0 660 260" width="660" role="img" aria-label="NOR-only circuits: NOT uses 1 NOR, OR uses 2, AND uses 3">
+    <!-- NOT from 1 NOR -->
+    <text x="10" y="18" class="b">NOT = 1 NOR</text>
+    <text x="10" y="64" class="m">A</text>
+    <path class="w" d="M24 60 H50 M50 50 V70 M50 50 H77 M50 70 H77"/>
+    <circle cx="50" cy="60" r="3" class="fill-ink"/>
+    <g transform="translate(70,40)"><path class="box" d="M0 0 Q20 20 0 40 Q40 40 55 20 Q40 0 0 0 Z"/><circle cx="60" cy="20" r="5" class="box"/></g>
+    <path class="w-hi" d="M135 60 H160"/><text x="165" y="64" class="m hi">A'</text>
+    <!-- OR from 2 NORs -->
+    <text x="220" y="18" class="b">OR = 2 NORs</text>
+    <text x="222" y="54" class="m">A</text><text x="222" y="74" class="m">B</text>
+    <path class="w" d="M236 50 H277 M236 70 H277"/>
+    <g transform="translate(270,40)"><path class="box" d="M0 0 Q20 20 0 40 Q40 40 55 20 Q40 0 0 0 Z"/><circle cx="60" cy="20" r="5" class="box"/></g>
+    <path class="w" d="M335 60 H380 M380 50 V70 M380 50 H417 M380 70 H417"/>
+    <circle cx="380" cy="60" r="3" class="fill-ink"/>
+    <text x="336" y="52" class="m dim">(A+B)'</text>
+    <g transform="translate(410,40)"><path class="box" d="M0 0 Q20 20 0 40 Q40 40 55 20 Q40 0 0 0 Z"/><circle cx="60" cy="20" r="5" class="box"/></g>
+    <path class="w-hi" d="M475 60 H505"/><text x="510" y="64" class="m hi">A + B</text>
+    <!-- AND from 3 NORs -->
+    <text x="10" y="148" class="b">AND = 3 NORs</text>
+    <text x="10" y="184" class="m">A</text><text x="10" y="229" class="m">B</text>
+    <path class="w" d="M24 180 H50 M50 170 V190 M50 170 H77 M50 190 H77"/>
+    <path class="w" d="M24 225 H50 M50 215 V235 M50 215 H77 M50 235 H77"/>
+    <circle cx="50" cy="180" r="3" class="fill-ink"/><circle cx="50" cy="225" r="3" class="fill-ink"/>
+    <g transform="translate(70,160)"><path class="box" d="M0 0 Q20 20 0 40 Q40 40 55 20 Q40 0 0 0 Z"/><circle cx="60" cy="20" r="5" class="box"/></g>
+    <g transform="translate(70,205)"><path class="box" d="M0 0 Q20 20 0 40 Q40 40 55 20 Q40 0 0 0 Z"/><circle cx="60" cy="20" r="5" class="box"/></g>
+    <path class="w" d="M135 180 H170 V193 H217 M135 225 H170 V213 H217"/>
+    <text x="138" y="174" class="m dim">A'</text><text x="138" y="241" class="m dim">B'</text>
+    <g transform="translate(210,183)"><path class="box" d="M0 0 Q20 20 0 40 Q40 40 55 20 Q40 0 0 0 Z"/><circle cx="60" cy="20" r="5" class="box"/></g>
+    <path class="w-hi" d="M275 203 H305"/><text x="310" y="207" class="m hi">A·B</text>
+    <!-- gate count note -->
+    <rect x="390" y="150" width="255" height="96" rx="8" class="box-b"/>
+    <text x="404" y="174" class="b">Gate counts</text>
+    <text x="404" y="198" class="m">NAND-only: NOT 1 · AND 2 · OR 3</text>
+    <text x="404" y="222" class="m">NOR-only:  NOT 1 · OR 2 · AND 3</text>
+  </svg>
+  <figcaption>NOR-only is the mirror image of NAND-only: the "cheap" gate (2 gates) swaps between AND and OR. (A'+B')' = A·B by De Morgan.</figcaption>
+</figure>
+
+<div class="scroll"><table>
+  <tr><th>Gate</th><th>NAND only</th><th>NOR only</th></tr>
+  <tr><td>NOT A</td><td><code>NAND(A, A)</code></td><td><code>NOR(A, A)</code></td></tr>
+  <tr><td>A AND B</td><td><code>NAND(NAND(A,B), NAND(A,B))</code></td><td><code>NOR(NOR(A,A), NOR(B,B))</code></td></tr>
+  <tr><td>A OR B</td><td><code>NAND(NAND(A,A), NAND(B,B))</code></td><td><code>NOR(NOR(A,B), NOR(A,B))</code></td></tr>
+</table></div>
+
+<div class="callout tip"><b>Why chips love NAND</b><p>In CMOS (the transistor technology in almost every chip), a NAND needs only <b>4 transistors</b>, but an AND needs <b>6</b> (a NAND plus a 2-transistor NOT). So NAND is the cheaper building block. NAND and NOR flash memory are named after these gates. Universal does not mean "more powerful": it computes nothing that AND/OR/NOT can't.</p></div>
+
+<h3>Universal gates in Verilog</h3>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · or_from_nand.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> or_from_nand (<span class="kw">input</span> a, <span class="kw">input</span> b, <span class="kw">output</span> y);</td><td class="n">An OR gate built only from NANDs. See <a href="m1-00-verilog-basics.html">Verilog basics</a> if this is new.</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> na, nb;</td><td class="n">Two internal wires that will carry A' and B'.</td></tr>
+    <tr><td class="c">  <span class="kw">nand</span> g1 (na, a, a);</td><td class="n">Built-in NAND gate. Output first: na = NAND(a, a) = a'.</td></tr>
+    <tr><td class="c">  <span class="kw">nand</span> g2 (nb, b, b);</td><td class="n">nb = b'.</td></tr>
+    <tr><td class="c">  <span class="kw">nand</span> g3 (y, na, nb);</td><td class="n">y = (a'·b')' = a + b, by De Morgan.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">Three NAND gates, as in the diagram.</td></tr>
+  </table>
+</div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Flipping the SOP/POS rule. SOP: 0 → X'. POS: 1 → X'.</li>
+  <li>Labelling K-map rows/columns 00, 01, 10, 11 (binary). It must be <b>00, 01, 11, 10</b> (Gray code).</li>
+  <li>Grouping diagonally, or making a group of 3 or 6.</li>
+  <li>Forgetting wrap-around, especially the four-corner group.</li>
+  <li>Making groups too small. Always try the biggest group first.</li>
+  <li>Adding groups you don't need. After taking the EPIs, check what is still uncovered.</li>
+  <li>Thinking every X must be covered. It doesn't; use an X only if it makes a group bigger.</li>
+  <li>Stopping De Morgan after one bar.</li>
+  <li>Calling NAND "more powerful". It is <b>universal</b>, which is different.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>Write the minterm for A=1, B=0, C=1, D=0.</summary><div class="a"><p>1010₂ = 10. 1 → letter, 0 → complemented letter: <b>m10 = AB'CD'</b>.</p></div></details>
+  <details class="q"><summary>Write the maxterm for A=0, B=1, C=1.</summary><div class="a"><p>011₂ = 3. For a maxterm, 0 → letter, 1 → complemented letter: <b>M3 = (A + B' + C')</b>.</p></div></details>
+  <details class="q"><summary>A truth table's F column (rows 0–7) is 0,1,1,0,1,0,0,1. Give Σ, Π and the canonical SOP.</summary><div class="a">
+    <p>1s at rows 1, 2, 4, 7 → <b>Σm(1,2,4,7)</b>. 0s at rows 0, 3, 5, 6 → <b>ΠM(0,3,5,6)</b>.</p>
+    <p>SOP: <code>A'B'C + A'BC' + AB'C' + ABC</code>. (This is A ⊕ B ⊕ C: 1 when an odd number of inputs are 1.)</p></div></details>
+  <details class="q"><summary>Minimize F = Σm(0,2,5,7,8,10,13,15).</summary><div class="a"><p>Corners m0, m2, m8, m10 → <code>B'D'</code>. Centre m5, m7, m13, m15 → <code>BD</code>. <b>F = B'D' + BD</b>.</p></div></details>
+  <details class="q"><summary>Why are K-map columns in the order 00, 01, 11, 10?</summary><div class="a"><p>That is Gray code: neighbours differ in only one bit, even across the wrap (10 → 00). In binary order, 01 and 10 would sit side by side but differ in two bits, so grouping them would be wrong.</p></div></details>
+  <details class="q"><summary>Push the bubbles: simplify ~(A·B + C) until every NOT is on a single letter.</summary><div class="a"><p><code>~(AB) · ~C</code> → <b><code>(~A + ~B) · ~C</code></b>.</p></div></details>
+  <details class="q"><summary>Build XOR from four 2-input NAND gates.</summary><div class="a">
+    <p>N = NAND(A, B) = (AB)'.<br>P = NAND(A, N) = (A·(AB)')' = (AB')'.<br>Q = NAND(B, N) = (A'B)'.<br>Y = NAND(P, Q) = AB' + A'B = <b>A ⊕ B</b>.</p>
+    <p>Why P works: A·(AB)' = A·(A' + B') = AB'.</p></div></details>
+  <details class="q"><summary>How many NOR gates does an AND need? How many NAND gates does an OR need?</summary><div class="a"><p>Both need <b>3</b>: two to invert the inputs, and one to combine them.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=YmKmS9bpMqM" target="_blank" rel="noopener"><i class="play"></i><span><b>Boolean Function Representation: SOP and POS Form | Minterms and Maxterms Explained</b><small>ALL ABOUT ELECTRONICS</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=k_gavfON5uA" target="_blank" rel="noopener"><i class="play"></i><span><b>4 Variable Karnaugh Map (Part 1)</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=_F9nAb6m4U4" target="_blank" rel="noopener"><i class="play"></i><span><b>Don't Care in Karnaugh Map (K' Map)</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=ChtmE09BSy0" target="_blank" rel="noopener"><i class="play"></i><span><b>NAND Gate as Universal Gate (Part 1)</b><small>Neso Academy</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

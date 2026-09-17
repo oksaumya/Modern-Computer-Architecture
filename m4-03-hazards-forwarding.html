@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pipeline Hazards</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+<style>
+  /* pipeline chart: one row per instruction, one column per clock cycle */
+  table.pipe { width: auto; font-family: var(--mono); font-size: 13px; }
+  table.pipe th, table.pipe td { text-align: center; padding: 5px 6px; min-width: 44px; }
+  table.pipe td:first-child, table.pipe th:first-child { text-align: left; white-space: nowrap; min-width: 0; }
+  .pipe .IF  { background: var(--blue-soft);   color: var(--blue);   font-weight: 700; }
+  .pipe .ID  { background: var(--green-soft);  color: var(--green);  font-weight: 700; }
+  .pipe .EX  { background: var(--copper-soft); color: var(--copper); font-weight: 700; }
+  .pipe .MEM { background: var(--surface-2);   color: var(--ink);    font-weight: 700; }
+  .pipe .WB  { background: color-mix(in srgb, var(--blue) 24%, var(--surface)); color: var(--ink); font-weight: 700; }
+  .pipe .BUB { background: var(--red-soft);    color: var(--red);    font-weight: 700; }
+  .pipe .fw  { box-shadow: inset 0 0 0 3px var(--copper); }
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 4 / Hazards &amp; forwarding</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 4 · CPU Datapath &amp; Pipelining <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>Hazards, forwarding &amp; branch prediction</h1>
+  <p class="idea">A <b>hazard</b> is anything that stops the next instruction from running in its planned clock cycle. There are three kinds: <b>structural</b>, <b>data</b> and <b>control</b>. The fixes are to <b>forward</b> a value early, <b>stall</b> (wait), or <b>predict</b> and fix mistakes afterwards.</p>
+  <div class="analogy"><b>Think of it like this:</b> an assembly line where worker 2 needs a part that worker 1 is still finishing. Worker 1 can hand it over directly instead of sending it all the way round the belt (<b>forwarding</b>). If it isn't ready at all, worker 2 waits one tick (<b>stall</b>). At a fork in the belt, the line guesses which way to go. If the guess was wrong, the half-built items are thrown away (<b>flush</b>).</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Hazard</dt><dd>A situation where the next instruction can't safely run in the next clock cycle.</dd></div>
+  <div class="term"><dt>Stall / bubble</dt><dd>A deliberate do-nothing cycle (like a NOP) inserted so an instruction waits. Each stall adds 1 clock cycle.</dd></div>
+  <div class="term"><dt>Forwarding (bypassing)</dt><dd>Sending a result straight from a later pipeline register back to the ALU input, before it has been written to the register file.</dd></div>
+  <div class="term"><dt>Flush</dt><dd>Throwing away instructions that were fetched by mistake (turning them into bubbles).</dd></div>
+  <div class="term"><dt>Branch penalty</dt><dd>The number of cycles lost when a branch goes a way we didn't expect.</dd></div>
+  <div class="term"><dt>Branch predictor</dt><dd>Hardware that guesses "taken" or "not taken" before the branch is actually decided.</dd></div>
+  <div class="term"><dt>BTB (branch target buffer)</dt><dd>A small cache: branch address → its target address. Used in IF, so a predicted-taken branch can jump immediately.</dd></div>
+  <div class="term"><dt>Register numbers</dt><dd>Textbook examples write <code>$2</code>, <code>$12</code>, … meaning register number 2, number 12, and so on. <code>$0</code> is <code>$zero</code>, always 0.</dd></div>
+</dl>
+
+<h2>1. The three kinds of hazards</h2>
+<div class="scroll"><table>
+  <tr><th>Hazard</th><th>Cause</th><th>Example</th><th>Fix</th></tr>
+  <tr><td><b>Structural</b></td><td>Two instructions need the <b>same hardware</b> in the same cycle.</td><td>One shared memory: IF fetches an instruction while MEM reads data.</td><td>Separate instruction and data memories. Register file: write in the first half of the cycle, read in the second half.</td></tr>
+  <tr><td><b>Data</b></td><td>An instruction needs a value that an <b>earlier instruction hasn't saved yet</b>.</td><td><code>sub $2,…</code> then <code>and $12,$2,$5</code></td><td>Forwarding, stalling, or reordering the code.</td></tr>
+  <tr><td><b>Control</b></td><td>A branch outcome isn't known yet, but the <b>next instruction must be fetched now</b>.</td><td><code>beq</code> decided in EX or MEM</td><td>Stall, decide the branch earlier (in ID), or predict and flush.</td></tr>
+</table></div>
+
+<h2>2. Data dependencies: RAW, WAW, WAR</h2>
+<p>Take two instructions, <b>i</b> first and <b>j</b> later. Hennessy &amp; Patterson name each possible clash by what j does after i:</p>
+<div class="scroll"><table>
+  <tr><th>Name</th><th>Meaning</th><th>MIPS example (i then j)</th><th>Also called</th><th>Problem in a 5-stage pipeline?</th></tr>
+  <tr class="hl"><td><b>RAW</b> · read after write</td><td>j <b>reads</b> a register that i <b>writes</b>.</td><td><code>add $t0,$s1,$s2</code><br><code>sub $t1,$t0,$s3</code></td><td>True (data) dependency</td><td><b>Yes</b>, the common hazard. Fix with forwarding or stalls.</td></tr>
+  <tr><td><b>WAW</b> · write after write</td><td>Both <b>write</b> the same register.</td><td><code>add $t0,$s1,$s2</code><br><code>sub $t0,$s3,$s4</code></td><td>Output dependency</td><td>No. It only matters with out-of-order execution (fixed by register renaming).</td></tr>
+  <tr><td><b>WAR</b> · write after read</td><td>j <b>writes</b> a register that i <b>reads</b>.</td><td><code>add $t1,$t0,$s1</code><br><code>sub $t0,$s2,$s3</code></td><td>Anti-dependency</td><td>No. It only matters with out-of-order execution (fixed by renaming).</td></tr>
+</table></div>
+<p>"Read after read" (RAR) is never a hazard, because reading doesn't change anything. A simple 5-stage pipeline finishes instructions in order, so <b>only RAW causes hazards here</b>. Out-of-order CPUs (<a href="m6-05-ilp-superscalar-ooo.html">ILP &amp; renaming</a>) must also handle WAW and WAR.</p>
+
+<h2>3. Spotting a data hazard</h2>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · textbook example (P&amp;H)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">sub</span> $2, $1, $3</td><td class="n">$2 = $1 − $3. <b>Writes $2</b>, but only in WB (cycle 5).</td></tr>
+    <tr><td class="c"><span class="kw">and</span> $12, $2, $5</td><td class="n">$12 = $2 AND $5. Reads $2 in cycle 3 (too early), <b>hazard</b>.</td></tr>
+    <tr><td class="c"><span class="kw">or</span>  $13, $6, $2</td><td class="n">$13 = $6 OR $2. Reads $2 in cycle 4 (too early), <b>hazard</b>.</td></tr>
+    <tr><td class="c"><span class="kw">add</span> $14, $2, $2</td><td class="n">$14 = $2 + $2. Reads $2 in cycle 5, the same cycle it is written. <b>OK</b>: write happens in the first half, read in the second.</td></tr>
+    <tr><td class="c"><span class="kw">sw</span>  $15, <span class="num">100</span>($2)</td><td class="n">Store $15 at memory[$2 + 100]. Reads $2 in cycle 6. <b>OK</b>.</td></tr>
+  </table>
+</div>
+
+<div class="callout tip"><b>The quick rule</b><p>An instruction reads its registers in <b>ID</b>. The writer saves in <b>WB</b>, 3 cycles after its own ID. So if the reader comes <b>1 or 2 instructions</b> after the writer, it reads too early: <b>hazard</b>. At <b>3 or more</b> after, it's safe.</p></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 250" width="640" role="img" aria-label="Pipeline diagram for sub, and, or, add, sw with forwarding arrows: EX/MEM to and in cycle 4, MEM/WB to or in cycle 5, register-file split for add in cycle 5">
+    <!-- columns: cycle c at x = 150 + (c-1)*68, width 64 ; rows at y = 40 + r*38, height 26 -->
+    <text x="150" y="18" class="m dim">CC1</text><text x="218" y="18" class="m dim">CC2</text><text x="286" y="18" class="m dim">CC3</text><text x="354" y="18" class="m dim">CC4</text><text x="422" y="18" class="m dim">CC5</text><text x="490" y="18" class="m dim">CC6</text><text x="558" y="18" class="m dim">CC7</text>
+    <text x="4" y="57" class="m b">sub $2,$1,$3</text>
+    <rect x="150" y="40" width="64" height="26" rx="4" class="box-b"/><text x="182" y="58" class="m" text-anchor="middle">IF</text>
+    <rect x="218" y="40" width="64" height="26" rx="4" class="box-g"/><text x="250" y="58" class="m" text-anchor="middle">ID</text>
+    <rect x="286" y="40" width="64" height="26" rx="4" class="box-hi"/><text x="318" y="58" class="m" text-anchor="middle">EX</text>
+    <rect x="354" y="40" width="64" height="26" rx="4" class="box"/><text x="386" y="58" class="m" text-anchor="middle">MEM</text>
+    <rect x="422" y="40" width="64" height="26" rx="4" class="box-b"/><text x="454" y="58" class="m" text-anchor="middle">WB</text>
+    <text x="4" y="95" class="m">and $12,$2,$5</text>
+    <rect x="218" y="78" width="64" height="26" rx="4" class="box-b"/><text x="250" y="96" class="m" text-anchor="middle">IF</text>
+    <rect x="286" y="78" width="64" height="26" rx="4" class="box-g"/><text x="318" y="96" class="m" text-anchor="middle">ID</text>
+    <rect x="354" y="78" width="64" height="26" rx="4" class="box-hi"/><text x="386" y="96" class="m" text-anchor="middle">EX</text>
+    <rect x="422" y="78" width="64" height="26" rx="4" class="box"/><text x="454" y="96" class="m" text-anchor="middle">MEM</text>
+    <rect x="490" y="78" width="64" height="26" rx="4" class="box-b"/><text x="522" y="96" class="m" text-anchor="middle">WB</text>
+    <text x="4" y="133" class="m">or  $13,$6,$2</text>
+    <rect x="286" y="116" width="64" height="26" rx="4" class="box-b"/><text x="318" y="134" class="m" text-anchor="middle">IF</text>
+    <rect x="354" y="116" width="64" height="26" rx="4" class="box-g"/><text x="386" y="134" class="m" text-anchor="middle">ID</text>
+    <rect x="422" y="116" width="64" height="26" rx="4" class="box-hi"/><text x="454" y="134" class="m" text-anchor="middle">EX</text>
+    <rect x="490" y="116" width="64" height="26" rx="4" class="box"/><text x="522" y="134" class="m" text-anchor="middle">MEM</text>
+    <rect x="558" y="116" width="64" height="26" rx="4" class="box-b"/><text x="590" y="134" class="m" text-anchor="middle">WB</text>
+    <text x="4" y="171" class="m">add $14,$2,$2</text>
+    <rect x="354" y="154" width="64" height="26" rx="4" class="box-b"/><text x="386" y="172" class="m" text-anchor="middle">IF</text>
+    <rect x="422" y="154" width="64" height="26" rx="4" class="box-g"/><text x="454" y="172" class="m" text-anchor="middle">ID</text>
+    <rect x="490" y="154" width="64" height="26" rx="4" class="box-hi"/><text x="522" y="172" class="m" text-anchor="middle">EX</text>
+    <rect x="558" y="154" width="64" height="26" rx="4" class="box"/><text x="590" y="172" class="m" text-anchor="middle">MEM</text>
+    <text x="4" y="209" class="m">sw $15,100($2)</text>
+    <rect x="422" y="192" width="64" height="26" rx="4" class="box-b"/><text x="454" y="210" class="m" text-anchor="middle">IF</text>
+    <rect x="490" y="192" width="64" height="26" rx="4" class="box-g"/><text x="522" y="210" class="m" text-anchor="middle">ID</text>
+    <rect x="558" y="192" width="64" height="26" rx="4" class="box-hi"/><text x="590" y="210" class="m" text-anchor="middle">EX</text>
+    <!-- forward EX/MEM -> and.EX in CC4 -->
+    <path class="w-hi" d="M362 66 V76"/>
+    <polygon points="362,78 358,70 366,70" class="fill-hi"/>
+    <!-- forward MEM/WB -> or.EX in CC5 -->
+    <path class="w-hi" d="M430 66 V114"/>
+    <polygon points="430,116 426,108 434,108" class="fill-hi"/>
+    <!-- regfile split for add in CC5 -->
+    <path class="w" d="M478 66 V152" stroke-dasharray="4 3"/>
+    <polygon points="478,154 474,146 482,146" class="fill-ink"/>
+    <text x="4" y="242" class="m hi">copper arrow = forwarding</text>
+    <text x="236" y="242" class="m">dashed = reg file: write, then read, same cycle</text>
+  </svg>
+  <figcaption>Arrows point straight down, from where the value of $2 exists to where it's needed <em>in the same cycle</em>. Forwarding never sends a value backwards in time.</figcaption>
+</figure>
+
+<h2>4. Forwarding</h2>
+<p>The new value of $2 already exists <b>at the end of sub's EX stage</b>, sitting in the EX/MEM register. A cycle later it is in the MEM/WB register. So we add a <b>MUX in front of each ALU input</b> that can pick the value from the register file (normal), from EX/MEM, or from MEM/WB.</p>
+
+<!--PIPE:fwd-->
+<div class="scroll"><table class="pipe">
+  <tr><th>Instruction</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th></tr>
+  <tr><td><code>sub $2,$1,$3</code></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM fw">MEM</td><td class="WB fw">WB</td><td></td><td></td><td></td><td></td></tr>
+  <tr><td><code>and $12,$2,$5</code></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX fw">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td><td></td></tr>
+  <tr><td><code>or $13,$6,$2</code></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX fw">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td></tr>
+  <tr><td><code>add $14,$2,$2</code></td><td></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td></tr>
+  <tr><td><code>sw $15,100($2)</code></td><td></td><td></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td></tr>
+</table></div>
+<!--/PIPE-->
+<p style="font-size:15px">Outlined cells are where a value is forwarded: sub's EX/MEM value goes to and's EX in cycle 4, and sub's MEM/WB value goes to or's EX in cycle 5. With forwarding, <b>no stalls</b> are needed, so the program takes 9 cycles.</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 330" width="640" role="img" aria-label="Forwarding hardware: two 3-input MUXes before the ALU choose between the ID/EX value, the EX/MEM value and the MEM/WB value; a forwarding unit sets ForwardA and ForwardB">
+    <!-- pipeline registers -->
+    <rect x="40" y="30" width="14" height="190" rx="3" class="fill-ink"/>
+    <rect x="340" y="30" width="14" height="190" rx="3" class="fill-ink"/>
+    <rect x="500" y="30" width="14" height="190" rx="3" class="fill-ink"/>
+    <text x="47" y="20" class="m" text-anchor="middle">ID/EX</text>
+    <text x="347" y="20" class="m" text-anchor="middle">EX/MEM</text>
+    <text x="507" y="20" class="m" text-anchor="middle">MEM/WB</text>
+    <!-- MUX A and B -->
+    <rect x="150" y="40" width="26" height="70" rx="6" class="box-hi"/>
+    <text x="153" y="59" class="m">00</text><text x="153" y="79" class="m">01</text><text x="153" y="99" class="m">10</text>
+    <rect x="150" y="140" width="26" height="70" rx="6" class="box-hi"/>
+    <text x="153" y="159" class="m">00</text><text x="153" y="179" class="m">01</text><text x="153" y="199" class="m">10</text>
+    <!-- normal inputs from ID/EX -->
+    <path class="w" d="M54 55 H150 M54 155 H150"/>
+    <text x="62" y="50" class="m dim">rs</text>
+    <text x="62" y="150" class="m dim">rt</text>
+    <!-- ALU -->
+    <path class="w" d="M176 75 H220 M176 175 H220"/>
+    <polygon points="220,50 270,90 270,160 220,200 220,137 232,125 220,113" class="box-g"/>
+    <text x="234" y="130" class="b">ALU</text>
+    <path class="w" d="M270 125 H340"/>
+    <!-- MEM stage -->
+    <path class="w" d="M354 125 H390"/>
+    <rect x="390" y="95" width="70" height="60" rx="8" class="box"/>
+    <text x="425" y="122" class="m" text-anchor="middle">Data</text>
+    <text x="425" y="138" class="m" text-anchor="middle">memory</text>
+    <path class="w" d="M460 125 H500"/>
+    <!-- WB mux -->
+    <path class="w" d="M514 125 H560"/>
+    <rect x="560" y="105" width="14" height="40" rx="5" class="box-hi"/>
+    <path class="w" d="M574 125 H630"/>
+    <text x="636" y="98" class="m dim" text-anchor="end">to reg file</text>
+    <!-- forward from EX/MEM (copper) -->
+    <path class="w-hi" d="M370 125 V240 H110 V95 H150 M110 195 H150"/>
+    <circle cx="370" cy="125" r="3.5" class="fill-hi"/>
+    <circle cx="110" cy="195" r="3.5" class="fill-hi"/>
+    <text x="376" y="234" class="m hi">from EX/MEM</text>
+    <!-- forward from MEM/WB (green) -->
+    <path class="w-g" d="M600 125 V252 H130 V75 H150 M130 175 H150"/>
+    <circle cx="600" cy="125" r="3.5" class="fill-ink"/>
+    <circle cx="130" cy="175" r="3.5" class="fill-ink"/>
+    <text x="440" y="268" class="m g">from MEM/WB</text>
+    <!-- forwarding unit -->
+    <rect x="215" y="270" width="140" height="34" rx="8" class="box-b"/>
+    <text x="285" y="292" class="b" text-anchor="middle">Forwarding unit</text>
+    <path class="w" d="M215 280 H205 V116 H163 V110" stroke-dasharray="4 3"/>
+    <path class="w" d="M215 294 H163 V210" stroke-dasharray="4 3"/>
+    <text x="146" y="132" class="m b">ForwardA</text>
+    <text x="94" y="298" class="m b">ForwardB</text>
+    <text x="215" y="322" class="m dim">compares ID/EX.Rs, ID/EX.Rt with EX/MEM.Rd and MEM/WB.Rd</text>
+  </svg>
+  <figcaption>rs, rt: the two register values read in ID. Copper: a value one instruction old (in EX/MEM). Green: a value two instructions old (in MEM/WB, after the MemtoReg MUX). The dashed lines are control signals from the forwarding unit.</figcaption>
+</figure>
+
+<div class="scroll"><table>
+  <tr><th>ForwardA / ForwardB</th><th>ALU input comes from</th><th>Used when</th></tr>
+  <tr><td>00</td><td>ID/EX (register file)</td><td>No hazard</td></tr>
+  <tr><td>10</td><td>EX/MEM (ALU result)</td><td>The previous instruction writes this register</td></tr>
+  <tr><td>01</td><td>MEM/WB (write-back value)</td><td>The instruction two back writes this register</td></tr>
+</table></div>
+
+<h3>The forwarding conditions (exam favourite)</h3>
+<p>"Rd" here means <b>the register the instruction will write</b> (for <code>lw</code> or <code>addi</code> that is rt, already chosen by the RegDst MUX). <code>and</code>/<code>or</code>/<code>not</code> are plain logic words.</p>
+<div class="code">
+  <div class="code-head"><span><b>pseudocode</b> · forwarding unit</span><span>line → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="com"># EX hazard (1 instruction back)</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">if</span> EX/MEM.RegWrite</td><td class="n">The instruction in MEM really will write a register…</td></tr>
+    <tr><td class="c">   <span class="kw">and</span> EX/MEM.Rd != <span class="num">0</span></td><td class="n">…and it isn't $zero (writes to $0 are thrown away, so never forward them)…</td></tr>
+    <tr><td class="c">   <span class="kw">and</span> EX/MEM.Rd == ID/EX.Rs:</td><td class="n">…and it is the register the EX instruction wants as its first operand.</td></tr>
+    <tr><td class="c">      ForwardA = <span class="num">10</span></td><td class="n">Take ALU input A from EX/MEM.</td></tr>
+    <tr><td class="c"><span class="com"># same test with ID/EX.Rt  →  ForwardB = 10</span></td><td class="n">Same idea for the second operand.</td></tr>
+    <tr><td class="c"> </td><td class="n"></td></tr>
+    <tr><td class="c"><span class="com"># MEM hazard (2 instructions back)</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">if</span> MEM/WB.RegWrite</td><td class="n">The instruction in WB will write a register…</td></tr>
+    <tr><td class="c">   <span class="kw">and</span> MEM/WB.Rd != <span class="num">0</span></td><td class="n">…not $zero…</td></tr>
+    <tr><td class="c">   <span class="kw">and not</span> (EX hazard for Rs)</td><td class="n">…and the <b>newer</b> instruction in MEM is not also writing that register (the newest value wins)…</td></tr>
+    <tr><td class="c">   <span class="kw">and</span> MEM/WB.Rd == ID/EX.Rs:</td><td class="n">…and it matches the first operand.</td></tr>
+    <tr><td class="c">      ForwardA = <span class="num">01</span></td><td class="n">Take ALU input A from MEM/WB.</td></tr>
+    <tr><td class="c"><span class="com"># same test with ID/EX.Rt  →  ForwardB = 01</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="callout tip"><b>Why "not EX hazard"? The double data hazard</b><p><code>add $1,$1,$2</code> · <code>add $1,$1,$3</code> · <code>add $1,$1,$4</code>. When the third add is in EX, <b>both</b> earlier adds wrote $1. The correct value is the <b>most recent</b> one (in EX/MEM), so the EX/MEM check has priority.</p></div>
+
+<h2>5. The load-use hazard: forwarding is not enough</h2>
+<p><code>lw</code> gets its value from data memory at the <b>end of MEM</b>. If the very next instruction needs that value at the <b>start of its EX</b>, that would be the same moment, and nothing can travel backwards in time. So we must <b>stall one cycle</b> and then forward from MEM/WB.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · load-use example (P&amp;H)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">lw</span>  $2, <span class="num">20</span>($1)</td><td class="n">Load memory[$1 + 20] into $2. The value is ready only after MEM (cycle 4).</td></tr>
+    <tr><td class="c"><span class="kw">and</span> $4, $2, $5</td><td class="n">Needs $2 in its EX. Right after the lw, so this is a <b>load-use hazard</b>: 1 stall, then forward from MEM/WB.</td></tr>
+    <tr><td class="c"><span class="kw">or</span>  $8, $2, $6</td><td class="n">After the stall, its ID lines up with lw's WB, so the split-cycle register file handles it.</td></tr>
+    <tr><td class="c"><span class="kw">add</span> $9, $4, $2</td><td class="n">Needs $4 from <code>and</code> (2 back), forwarded from MEM/WB.</td></tr>
+  </table>
+</div>
+
+<!--PIPE:loaduse-->
+<div class="scroll"><table class="pipe">
+  <tr><th>Instruction</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th></tr>
+  <tr><td><code>lw $2,20($1)</code></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB fw">WB</td><td></td><td></td><td></td><td></td></tr>
+  <tr><td><code>and $4,$2,$5</code></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="BUB">stall</td><td class="EX fw">EX</td><td class="MEM">MEM</td><td class="WB fw">WB</td><td></td><td></td></tr>
+  <tr><td><code>or $8,$2,$6</code></td><td></td><td></td><td class="IF">IF</td><td class="BUB">stall</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td></tr>
+  <tr><td><code>add $9,$4,$2</code></td><td></td><td></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX fw">EX</td><td class="MEM">MEM</td><td class="WB">WB</td></tr>
+</table></div>
+<!--/PIPE-->
+<p style="font-size:15px">In cycle 4, <code>and</code> is held in ID and <code>or</code> is held in IF, while a bubble (all control signals 0) goes into EX. Total: 5 + 4 − 1 + <b>1 stall = 9 cycles</b>.</p>
+
+<h3>Hazard detection unit (in ID)</h3>
+<div class="code">
+  <div class="code-head"><span><b>pseudocode</b> · stall test</span><span>line → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">if</span> ID/EX.MemRead</td><td class="n">The instruction now in EX is a <code>lw</code> (only lw reads memory)…</td></tr>
+    <tr><td class="c">   <span class="kw">and</span> (ID/EX.Rt == IF/ID.Rs</td><td class="n">…and the register it loads into (its rt) is the first operand of the instruction in ID…</td></tr>
+    <tr><td class="c">        <span class="kw">or</span> ID/EX.Rt == IF/ID.Rt):</td><td class="n">…or the second operand…</td></tr>
+    <tr><td class="c">    stall the pipeline</td><td class="n">…then stall for one cycle.</td></tr>
+  </table>
+</div>
+<ol class="flow arrows">
+  <li><b>Zero the controls</b>Set the control signals going into ID/EX to 0. The EX, MEM and WB stages then do nothing (a bubble).</li>
+  <li><b>Freeze PC</b><code>PCWrite = 0</code>, so the same instruction is fetched again.</li>
+  <li><b>Freeze IF/ID</b><code>IF/IDWrite = 0</code>, so the instruction in ID is decoded again next cycle.</li>
+  <li><b>Next cycle</b>The lw is now in WB. Forward its value from MEM/WB.</li>
+</ol>
+
+<h2>6. Counting stalls</h2>
+<div class="scroll"><table>
+  <tr><th>Reader comes … after the writer</th><th>No forwarding</th><th>With forwarding (writer is R-type)</th><th>With forwarding (writer is <code>lw</code>)</th></tr>
+  <tr><td>1 instruction (next one)</td><td><b>2 stalls</b></td><td>0</td><td><b>1 stall</b></td></tr>
+  <tr><td>2 instructions</td><td><b>1 stall</b></td><td>0</td><td>0</td></tr>
+  <tr><td>3 or more</td><td>0 (split-cycle register file)</td><td>0</td><td>0</td></tr>
+</table></div>
+<div class="callout tip"><b>Count stalls carefully</b><p>A stall delays <b>every</b> later instruction too. That can shrink the gap to the next dependency, or remove it. Recheck each pair after inserting stalls. Example: in the sub/and/or program <em>without</em> forwarding, <code>and</code> needs 2 stalls. After those stalls, <code>or</code> already reads $2 after it is written, so the total is <b>2 stalls, 11 cycles</b> (vs 9 with forwarding).</p></div>
+
+<h3>Worked example (Lab 4A idea): reorder code to avoid stalls</h3>
+<p>Task: "a = b + e; c = b + f". In plain words: <em>add the values b and e and store the answer in a; then add b and f and store the answer in c</em>. The variables live in memory at offsets from <code>$t0</code>: b at 0, e at 4, f at 8, a at 12, c at 16.</p>
+<div class="vs">
+  <div>
+    <h3>Original (13 cycles)</h3>
+    <div class="code" style="margin:0">
+      <table class="ann">
+        <tr><td class="c"><span class="kw">lw</span>  $t1, <span class="num">0</span>($t0)</td><td class="n">t1 = b</td></tr>
+        <tr><td class="c"><span class="kw">lw</span>  $t2, <span class="num">4</span>($t0)</td><td class="n">t2 = e</td></tr>
+        <tr><td class="c"><span class="kw">add</span> $t3, $t1, $t2</td><td class="n">uses t2 right after its lw: <b>stall</b></td></tr>
+        <tr><td class="c"><span class="kw">sw</span>  $t3, <span class="num">12</span>($t0)</td><td class="n">a = t3</td></tr>
+        <tr><td class="c"><span class="kw">lw</span>  $t4, <span class="num">8</span>($t0)</td><td class="n">t4 = f</td></tr>
+        <tr><td class="c"><span class="kw">add</span> $t5, $t1, $t4</td><td class="n">uses t4 right after its lw: <b>stall</b></td></tr>
+        <tr><td class="c"><span class="kw">sw</span>  $t5, <span class="num">16</span>($t0)</td><td class="n">c = t5</td></tr>
+      </table>
+    </div>
+  </div>
+  <div>
+    <h3>Reordered (11 cycles)</h3>
+    <div class="code" style="margin:0">
+      <table class="ann">
+        <tr><td class="c"><span class="kw">lw</span>  $t1, <span class="num">0</span>($t0)</td><td class="n">t1 = b</td></tr>
+        <tr><td class="c"><span class="kw">lw</span>  $t2, <span class="num">4</span>($t0)</td><td class="n">t2 = e</td></tr>
+        <tr><td class="c"><span class="kw">lw</span>  $t4, <span class="num">8</span>($t0)</td><td class="n">moved up: t4 = f</td></tr>
+        <tr><td class="c"><span class="kw">add</span> $t3, $t1, $t2</td><td class="n">t2 is 2 back: forward, no stall</td></tr>
+        <tr><td class="c"><span class="kw">sw</span>  $t3, <span class="num">12</span>($t0)</td><td class="n">forward t3 (EX/MEM)</td></tr>
+        <tr><td class="c"><span class="kw">add</span> $t5, $t1, $t4</td><td class="n">t4 is 3 back: fine</td></tr>
+        <tr><td class="c"><span class="kw">sw</span>  $t5, <span class="num">16</span>($t0)</td><td class="n">forward t5</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+<p><b>Original:</b> 7 instructions → 5 + 7 − 1 = 11 cycles, plus 2 stalls = <b>13</b>.</p>
+<!--PIPE:orig-->
+<div class="scroll"><table class="pipe">
+  <tr><th>Instruction</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>10</th><th>11</th><th>12</th><th>13</th></tr>
+  <tr><td><code>lw $t1,0($t0)</code></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td><code>lw $t2,4($t0)</code></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB fw">WB</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td><code>add $t3,$t1,$t2</code></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="BUB">stall</td><td class="EX fw">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td><code>sw $t3,12($t0)</code></td><td></td><td></td><td></td><td class="IF">IF</td><td class="BUB">stall</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td><td></td><td></td></tr>
+  <tr><td><code>lw $t4,8($t0)</code></td><td></td><td></td><td></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB fw">WB</td><td></td><td></td><td></td></tr>
+  <tr><td><code>add $t5,$t1,$t4</code></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="BUB">stall</td><td class="EX fw">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td></tr>
+  <tr><td><code>sw $t5,16($t0)</code></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="IF">IF</td><td class="BUB">stall</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td></tr>
+</table></div>
+<!--/PIPE-->
+<p><b>Reordered:</b> no <code>lw</code> is directly followed by a user of its value, so there are <b>0 stalls and 11 cycles</b>.</p>
+<!--PIPE:reord-->
+<div class="scroll"><table class="pipe">
+  <tr><th>Instruction</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>10</th><th>11</th></tr>
+  <tr><td><code>lw $t1,0($t0)</code></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td><code>lw $t2,4($t0)</code></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td><code>lw $t4,8($t0)</code></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td><td></td><td></td></tr>
+  <tr><td><code>add $t3,$t1,$t2</code></td><td></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td><td></td></tr>
+  <tr><td><code>sw $t3,12($t0)</code></td><td></td><td></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td></tr>
+  <tr><td><code>add $t5,$t1,$t4</code></td><td></td><td></td><td></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td></tr>
+  <tr><td><code>sw $t5,16($t0)</code></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td></tr>
+</table></div>
+<!--/PIPE-->
+
+<h2>7. Control hazards (branches)</h2>
+<p>The PC has to be updated <b>every cycle</b>, but <code>beq</code> only knows whether to jump after comparing its two registers. By then, the pipeline has already fetched the next instructions. If the branch is taken, those instructions are wrong and must be <b>flushed</b>.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · branch example (addresses on the left)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="num">40</span>: <span class="kw">beq</span> $1, $3, <span class="num">7</span></td><td class="n">If $1 = $3, jump to 44 + 7 × 4 = <b>72</b>.</td></tr>
+    <tr><td class="c"><span class="num">44</span>: <span class="kw">and</span> $12, $2, $5</td><td class="n">Fetched next by default (PC + 4).</td></tr>
+    <tr><td class="c"><span class="num">48</span>: <span class="kw">or</span>  $13, $6, $2</td><td class="n"></td></tr>
+    <tr><td class="c"><span class="num">52</span>: <span class="kw">add</span> $14, $2, $2</td><td class="n"></td></tr>
+    <tr><td class="c"><span class="num">72</span>: <span class="kw">lw</span>  $4, <span class="num">50</span>($7)</td><td class="n">The branch target.</td></tr>
+  </table>
+</div>
+<h3>Branch decided in MEM: 3-cycle penalty</h3>
+<!--PIPE:brmem-->
+<div class="scroll"><table class="pipe">
+  <tr><th>Instruction</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th></tr>
+  <tr><td>40 <code>beq</code> <small>(decides in MEM)</small></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM fw">MEM</td><td class="WB">WB</td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>44 <code>and</code></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="BUB">flush</td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>48 <code>or</code></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="BUB">flush</td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>52 <code>add</code></td><td></td><td></td><td></td><td class="IF">IF</td><td class="BUB">flush</td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>72 <code>lw</code> (target)</td><td></td><td></td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td></tr>
+</table></div>
+<!--/PIPE-->
+<p style="font-size:15px">The branch is resolved at the end of cycle 4. The three instructions fetched in cycles 2, 3 and 4 are flushed, and the target is fetched in cycle 5.</p>
+<h3>Branch decided in ID: 1-cycle penalty</h3>
+<!--PIPE:brid-->
+<div class="scroll"><table class="pipe">
+  <tr><th>Instruction</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th></tr>
+  <tr><td>40 <code>beq</code> <small>(decides in ID)</small></td><td class="IF">IF</td><td class="ID fw">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td><td></td><td></td></tr>
+  <tr><td>44 <code>and</code></td><td></td><td class="IF">IF</td><td class="BUB">flush</td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>72 <code>lw</code> (target)</td><td></td><td></td><td class="IF">IF</td><td class="ID">ID</td><td class="EX">EX</td><td class="MEM">MEM</td><td class="WB">WB</td></tr>
+</table></div>
+<!--/PIPE-->
+<p style="font-size:15px">Now only the one instruction fetched in cycle 2 is wrong. Moving the decision to ID needs an equality comparator and the target adder in ID. That can create new data hazards for the comparison.</p>
+
+<h3>Ways to handle branches</h3>
+<div class="scroll"><table>
+  <tr><th>Method</th><th>How it works</th><th>Cost</th></tr>
+  <tr><td><b>Always stall</b></td><td>Wait until the branch is decided.</td><td>Every branch pays the penalty. Slow.</td></tr>
+  <tr><td><b>Predict not taken</b> (static)</td><td>Keep fetching PC + 4. If the branch is taken, flush.</td><td>Pays only when taken.</td></tr>
+  <tr><td><b>BTFN</b> (static)</td><td><b>B</b>ackward <b>T</b>aken, <b>F</b>orward <b>N</b>ot taken. Branches that jump back are usually loops, so predict taken.</td><td>Good for loops. No extra memory.</td></tr>
+  <tr><td><b>1-bit predictor</b> (dynamic)</td><td>Remember the last outcome of this branch and predict the same.</td><td>2 misses per loop visit.</td></tr>
+  <tr><td><b>2-bit predictor</b> (dynamic)</td><td>A saturating counter: only changes its prediction after 2 wrong guesses in a row.</td><td>1 miss per loop visit.</td></tr>
+  <tr><td><b>+ BTB</b></td><td>Stores each branch's target so IF can jump right away when "taken" is predicted.</td><td>A little extra memory.</td></tr>
+</table></div>
+
+<h3>The 2-bit saturating counter</h3>
+<p>An FSM with 4 states (see <a href="m2-06-fsm.html">FSMs</a>). A taken branch (T) moves the counter up (towards 11). A not-taken branch (N) moves it down (towards 00). It never goes past 11 or 00 (<b>saturating</b>). The top bit is the prediction.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 660 252" width="660" role="img" aria-label="2-bit predictor state diagram: Strongly Taken 11, Weakly Taken 10, Weakly Not taken 01, Strongly Not taken 00; T moves left toward strongly taken, N moves right toward strongly not taken">
+    <circle cx="90" cy="130" r="44" class="box-g"/>
+    <text x="90" y="118" class="m b" text-anchor="middle">11</text>
+    <text x="90" y="136" text-anchor="middle">Strongly</text>
+    <text x="90" y="152" text-anchor="middle">taken</text>
+    <circle cx="250" cy="130" r="44" class="box-g"/>
+    <text x="250" y="118" class="m b" text-anchor="middle">10</text>
+    <text x="250" y="136" text-anchor="middle">Weakly</text>
+    <text x="250" y="152" text-anchor="middle">taken</text>
+    <circle cx="410" cy="130" r="44" class="box-b"/>
+    <text x="410" y="118" class="m b" text-anchor="middle">01</text>
+    <text x="410" y="136" text-anchor="middle">Weakly</text>
+    <text x="410" y="152" text-anchor="middle">not taken</text>
+    <circle cx="570" cy="130" r="44" class="box-b"/>
+    <text x="570" y="118" class="m b" text-anchor="middle">00</text>
+    <text x="570" y="136" text-anchor="middle">Strongly</text>
+    <text x="570" y="152" text-anchor="middle">not taken</text>
+    <!-- N arrows (top, rightwards) -->
+    <path class="w-hi" d="M121 99 Q170 40 219 99"/><polygon points="219,99 209.1,94.2 216.1,88.4" class="fill-hi"/>
+    <path class="w-hi" d="M281 99 Q330 40 379 99"/><polygon points="379,99 369.1,94.2 376.1,88.4" class="fill-hi"/>
+    <path class="w-hi" d="M441 99 Q490 40 539 99"/><polygon points="539,99 529.1,94.2 536.1,88.4" class="fill-hi"/>
+    <text x="170" y="60" class="hi" text-anchor="middle">N</text>
+    <text x="330" y="60" class="hi" text-anchor="middle">N</text>
+    <text x="490" y="60" class="hi" text-anchor="middle">N</text>
+    <!-- T arrows (bottom, leftwards) -->
+    <path class="w" d="M219 161 Q170 220 121 161"/><polygon points="121,161 130.9,165.8 123.9,171.6" class="fill-ink"/>
+    <path class="w" d="M379 161 Q330 220 281 161"/><polygon points="281,161 290.9,165.8 283.9,171.6" class="fill-ink"/>
+    <path class="w" d="M539 161 Q490 220 441 161"/><polygon points="441,161 450.9,165.8 443.9,171.6" class="fill-ink"/>
+    <text x="170" y="210" class="b" text-anchor="middle">T</text>
+    <text x="330" y="210" class="b" text-anchor="middle">T</text>
+    <text x="490" y="210" class="b" text-anchor="middle">T</text>
+    <!-- self loops -->
+    <path class="w" d="M59 99 C0 70 0 190 59 161"/><polygon points="59,161 52,169.4 48,161.4" class="fill-ink"/>
+    <text x="20" y="135" class="b">T</text>
+    <path class="w-hi" d="M601 161 C660 190 660 70 601 99"/><polygon points="601,99 608,90.6 612,98.6" class="fill-hi"/>
+    <text x="633" y="135" class="hi">N</text>
+    <text x="170" y="244" class="b" text-anchor="middle">predict TAKEN</text>
+    <text x="490" y="244" class="b" text-anchor="middle">predict NOT TAKEN</text>
+    <text x="330" y="20" class="m dim" text-anchor="middle">T = branch was taken · N = branch was not taken</text>
+  </svg>
+  <figcaption>Green states predict taken, blue states predict not taken. From "strongly taken", one surprise only moves the counter to "weakly taken", so the prediction does not flip yet.</figcaption>
+</figure>
+
+<h3>Worked example: a loop that runs 10 times</h3>
+<p>The loop's branch at the bottom goes <b>T nine times, then N once</b> (the exit). Here is the loop's <em>second</em> visit, after the first visit has trained the predictor:</p>
+<div class="scroll"><table class="tt">
+  <tr><th>Iteration</th><th>1</th><th>2</th><th>3–8</th><th>9</th><th>10</th><th>Misses (accuracy)</th></tr>
+  <tr><td>Actual</td><td>T</td><td>T</td><td>T</td><td>T</td><td>N</td><td></td></tr>
+  <tr><td>1-bit predicts</td><td><b>N ✗</b></td><td>T</td><td>T</td><td>T</td><td><b>T ✗</b></td><td><b>2</b> (80%)</td></tr>
+  <tr><td>2-bit state</td><td>WT</td><td>ST</td><td>ST</td><td>ST</td><td>ST</td><td></td></tr>
+  <tr><td>2-bit predicts</td><td>T</td><td>T</td><td>T</td><td>T</td><td><b>T ✗</b></td><td><b>1</b> (90%)</td></tr>
+</table></div>
+<p>The 1-bit predictor misses <b>twice per visit</b>: at the exit, and again on the first iteration of the next visit, because it remembered "N". The 2-bit counter only drops from ST to WT at the exit, so it still predicts T on re-entry: <b>1 miss per visit</b>.</p>
+
+<h2>8. Effective CPI with hazards</h2>
+<div class="formula">Effective CPI = 1 + Σ (fraction × stall probability × stall cycles)<small>Fraction = share of instructions of that kind. The ideal pipeline has CPI = 1. Each kind of stall adds its average cost per instruction.</small></div>
+<ol class="steps">
+  <li><b>Branches only:</b> 20% of instructions are branches, 20% of those are mispredicted, penalty 1 cycle. CPI = 1 + 0.2 × 0.2 × 1 = <b>1.04</b>.</li>
+  <li><b>Load-use + branches:</b> 20% are <code>lw</code> and half of those need a stall (1 cycle). 15% are branches, 30% mispredicted, penalty 2. CPI = 1 + 0.2 × 0.5 × 1 + 0.15 × 0.3 × 2 = 1 + 0.10 + 0.09 = <b>1.19</b>.</li>
+  <li><b>Compared with single-cycle:</b> 800 ps × 1 vs 200 ps × 1.19 = 238 ps per instruction, a speedup of 800 / 238 ≈ <b>3.36×</b> (down from 4× without hazards).</li>
+</ol>
+
+<h2>9. Lab 4B: data-dependent branches on real hardware</h2>
+<p>The lab loop, in C-like form: <code>if (data[i] &gt;= 128) sum += data[i];</code>. In plain words: <em>look at item number i of the list <code>data</code>; if it is at least 128, add it to the running total <code>sum</code></em>. This is repeated for every i. Here it is in MIPS:</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · sum of big values</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="com"># $s0 = address of data, $s1 = n, $s2 = sum, $t0 = i</span></td><td class="n">Which register holds what.</td></tr>
+    <tr><td class="c">      <span class="kw">add</span>  $t0, $zero, $zero</td><td class="n">i = 0.</td></tr>
+    <tr><td class="c">loop: <span class="kw">beq</span>  $t0, $s1, done</td><td class="n">If i = n, the loop is finished, so jump to <code>done</code>.</td></tr>
+    <tr><td class="c">      <span class="kw">sll</span>  $t1, $t0, <span class="num">2</span></td><td class="n">t1 = i × 4 (each item is 4 bytes).</td></tr>
+    <tr><td class="c">      <span class="kw">add</span>  $t1, $t1, $s0</td><td class="n">t1 = address of data[i].</td></tr>
+    <tr><td class="c">      <span class="kw">lw</span>   $t2, <span class="num">0</span>($t1)</td><td class="n">t2 = data[i].</td></tr>
+    <tr><td class="c">      <span class="kw">slti</span> $t3, $t2, <span class="num">128</span></td><td class="n">t3 = 1 if data[i] &lt; 128, else 0. (Uses t2 right after its lw: a load-use stall!)</td></tr>
+    <tr><td class="c">      <span class="kw">bne</span>  $t3, $zero, skip</td><td class="n"><b>The data-dependent branch.</b> If the value is small, skip the add.</td></tr>
+    <tr><td class="c">      <span class="kw">add</span>  $s2, $s2, $t2</td><td class="n">sum = sum + data[i].</td></tr>
+    <tr><td class="c">skip: <span class="kw">addi</span> $t0, $t0, <span class="num">1</span></td><td class="n">i = i + 1.</td></tr>
+    <tr><td class="c">      <span class="kw">j</span>    loop</td><td class="n">Go round again.</td></tr>
+    <tr><td class="c">done:</td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="vs">
+  <div><h3>Random data</h3><p>The <code>bne</code> outcome is a coin flip, so even a 2-bit predictor is wrong about half the time. Each miss flushes the pipeline. Modern CPUs have 15–20 stage pipelines, so a miss costs many cycles.</p></div>
+  <div><h3>Sorted data</h3><p>The outcomes look like T T T … T N N N … N. The predictor is wrong only around the switch point, so the <b>same loop runs much faster</b>, even though it does exactly the same work.</p></div>
+</div>
+<h3>The branchless fix</h3>
+<p>Replace the <code>bne</code> + <code>add</code> with arithmetic that gives the same result and has <b>no branch to mispredict</b>:</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · branchless body</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">slti</span> $t3, $t2, <span class="num">128</span></td><td class="n">t3 = 1 if small, 0 if big.</td></tr>
+    <tr><td class="c"><span class="kw">addi</span> $t3, $t3, <span class="num">-1</span></td><td class="n">t3 = 0 if small, −1 if big. −1 is <code>0xFFFFFFFF</code> (all 32 bits are 1).</td></tr>
+    <tr><td class="c"><span class="kw">and</span>  $t4, $t2, $t3</td><td class="n">"Mask": t4 = 0 if small, data[i] if big.</td></tr>
+    <tr><td class="c"><span class="kw">add</span>  $s2, $s2, $t4</td><td class="n">Always add. Adding 0 changes nothing.</td></tr>
+  </table>
+</div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>Load-use always needs 1 stall</b>, even with forwarding. R-type → next instruction needs 0 stalls with forwarding.</li>
+  <li><b>ForwardA = 10 means EX/MEM</b> (the newer value) and <b>01 means MEM/WB</b>. They are easy to swap.</li>
+  <li>Forget the <b>Rd ≠ 0</b> check and you'll forward a "result" into $zero, which must stay 0.</li>
+  <li>The instruction <b>3 after</b> a writer needs no forwarding, because the register file writes in the first half of the cycle and reads in the second.</li>
+  <li>Hazard detection for load-use checks <b>ID/EX.MemRead</b> and compares <b>ID/EX.Rt</b> (lw's destination) with IF/ID.Rs and IF/ID.Rt.</li>
+  <li>A <code>sw</code> writes <b>memory</b>, not a register (RegWrite = 0), so no later instruction ever needs a register value forwarded from it.</li>
+  <li>WAW and WAR are <b>not</b> hazards in a simple in-order 5-stage pipeline.</li>
+  <li>1-bit predictor: <b>2</b> misses per loop visit. 2-bit: <b>1</b>.</li>
+  <li>Branch penalty depends on where the branch is decided: MEM → 3 flushed, ID → 1 flushed.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary><code>add $t0,$t1,$t2</code> then <code>sub $t3,$t0,$t4</code>. Name the dependency. How is it fixed, and what are ForwardA and ForwardB?</summary><div class="a"><p><b>RAW</b> on $t0. When sub is in EX, the add is in MEM, so $t0 is forwarded from EX/MEM. $t0 is sub's rs (first operand), so <b>ForwardA = 10</b> and <b>ForwardB = 00</b>. No stall.</p></div></details>
+  <details class="q"><summary><code>lw $t0,0($s0)</code> then <code>add $t1,$t0,$t0</code>. How many stalls with forwarding? Without forwarding? Total cycles for these 2 instructions?</summary><div class="a"><p>With forwarding: load-use, <b>1 stall</b>, so 5 + 2 − 1 + 1 = <b>7 cycles</b>. Without forwarding: the add must wait until lw's WB for its ID, <b>2 stalls</b>, so <b>8 cycles</b>.</p></div></details>
+  <details class="q"><summary>Classify: (a) <code>add $t0,$s1,$s2</code> / <code>addi $t0,$s3,4</code>; (b) <code>add $t1,$t0,$s1</code> / <code>sub $t0,$s2,$s3</code>.</summary><div class="a"><p>(a) Both write $t0: <b>WAW</b> (output dependency). (b) The first reads $t0 and the second writes it: <b>WAR</b> (anti-dependency). Neither is a hazard in a 5-stage in-order pipeline.</p></div></details>
+  <details class="q"><summary>A 2-bit counter starts at Strongly Not taken (00). The branch goes T, T, N, T. Give each prediction and count the misses.</summary><div class="a"><p>SNT → predict N, actual T ✗ → WNT → predict N, actual T ✗ → WT → predict T, actual N ✗ → WNT → predict N, actual T ✗ → WT.<br><b>4 misses out of 4.</b> A bad starting state plus an irregular pattern defeats the predictor.</p></div></details>
+  <details class="q"><summary>A branch alternates T, N, T, N, T, N. Compare a 1-bit predictor (starting at T) with a 2-bit one (starting at ST).</summary><div class="a"><p>1-bit: T✓ N✗ T✗ N✗ T✗ N✗, so <b>5 misses</b>. 2-bit: ST→T✓, ST→T✗, WT→T✓, ST→T✗, WT→T✓, ST→T✗, so <b>3 misses</b>. The 2-bit counter bounces between ST and WT and always predicts T.</p></div></details>
+  <details class="q"><summary>25% of instructions are branches, 10% mispredicted, 2-cycle penalty. Also 30% are <code>lw</code>, and 40% of those are followed by a use (1 stall). What is the effective CPI?</summary><div class="a"><p>Branches: 0.25 × 0.10 × 2 = 0.05. Load-use: 0.30 × 0.40 × 1 = 0.12. CPI = 1 + 0.05 + 0.12 = <b>1.17</b>.</p></div></details>
+  <details class="q"><summary>20% of instructions are branches and 60% of them are taken. The CPU predicts not-taken. Find the CPI if the branch is decided in MEM (3-cycle penalty) vs in ID (1 cycle).</summary><div class="a"><p>MEM: 1 + 0.2 × 0.6 × 3 = <b>1.36</b>. ID: 1 + 0.2 × 0.6 × 1 = <b>1.12</b>.</p></div></details>
+  <details class="q"><summary>Why can't forwarding alone fix <code>lw $2,20($1)</code> followed by <code>and $4,$2,$5</code>?</summary><div class="a"><p>The loaded value exists only at the <b>end</b> of lw's MEM stage, which is the same moment <code>and</code> needs it at the <b>start</b> of its EX. Forwarding can't send data backwards in time, so one bubble is inserted and the value is then forwarded from MEM/WB.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=srlgaJgaxRE" target="_blank" rel="noopener"><i class="play"></i><span><b>L-4.6: What is Hazard in Pipelining | various types of Hazards</b><small>Gate Smashers</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=2Sa55D_Ve4U" target="_blank" rel="noopener"><i class="play"></i><span><b>Lecture 8. Pipelining II: Data and Control Dependence Handling</b><small>Carnegie Mellon Computer Architecture (Onur Mutlu)</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=nczJ58WvtYo" target="_blank" rel="noopener"><i class="play"></i><span><b>How Branch Prediction Works in CPUs</b><small>Computerphile</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=qsJ2C8bEoSk" target="_blank" rel="noopener"><i class="play"></i><span><b>MIPS Pipelining Part Four - Branch Prediction</b><small>Gedare Bloom</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

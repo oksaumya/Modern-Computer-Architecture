@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Single-Cycle Datapath</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 4 / Single-cycle datapath</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 4 · CPU Datapath &amp; Pipelining <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>Fetch-decode-execute &amp; the single-cycle datapath</h1>
+  <p class="idea">A CPU repeats one loop forever: <b>fetch</b> an instruction, <b>decode</b> it, <b>execute</b> it. The <b>datapath</b> is the set of parts the data flows through (PC, memories, register file, ALU, MUXes). The <b>control unit</b> sets the switches so each instruction takes the right route. In a <b>single-cycle</b> CPU, every instruction finishes inside one clock tick.</p>
+  <div class="analogy"><b>Think of it like this:</b> a kitchen where every order must be finished within one fixed time slot. The slot has to be long enough for the slowest dish (a full meal), so a cup of tea also waits the full slot. That is the single-cycle CPU: simple, but it wastes time on quick instructions.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>PC (program counter)</dt><dd>A 32-bit register holding the <b>address</b> of the instruction being run now.</dd></div>
+  <div class="term"><dt>Datapath</dt><dd>The hardware that stores, moves and changes data: memories, registers, ALU, adders, MUXes and the wires between them.</dd></div>
+  <div class="term"><dt>Control signal</dt><dd>A 1-bit (or few-bit) wire from the control unit that sets a MUX or enables a write. Example: <code>RegWrite = 1</code> means "save a result into a register".</dd></div>
+  <div class="term"><dt>MUX (multiplexer)</dt><dd>A switch: a select signal picks which one of its inputs goes to the output. See <a href="m1-03-mux-demux-decoder.html">MUX</a>.</dd></div>
+  <div class="term"><dt>ALU</dt><dd>Arithmetic Logic Unit. Adds, subtracts, ANDs, ORs and compares. It also outputs <b>Zero</b> = 1 when the result is 0.</dd></div>
+  <div class="term"><dt>Sign-extend</dt><dd>Stretch a 16-bit number to 32 bits by copying its top (sign) bit. −1 (<code>FFFF</code>) becomes <code>FFFFFFFF</code>, still −1.</dd></div>
+  <div class="term"><dt>Critical path</dt><dd>The slowest route through the circuit. It sets the shortest safe clock period.</dd></div>
+  <div class="term"><dt>Single-cycle</dt><dd>Design where each instruction starts and finishes in exactly one clock cycle. CPI = 1.</dd></div>
+</dl>
+
+<div class="callout tip"><b>Register names used on this page</b><p>MIPS has 32 registers (see <a href="m3-03-mips-registers-formats.html">MIPS registers</a>). Here: <code>$t0</code>–<code>$t7</code> are <b>temporaries</b> (scratch space), <code>$s0</code>–<code>$s7</code> are <b>saved</b> registers (long-lived variables), <code>$zero</code> is always 0.</p></div>
+
+<h2>1. The fetch-decode-execute cycle</h2>
+<p>Every instruction goes through the same five steps. The single-cycle CPU does all five inside one clock cycle. The <a href="m4-02-pipeline-5-stage.html">pipeline</a> later turns each step into its own stage.</p>
+<ol class="flow arrows">
+  <li><b>1 · Fetch (IF)</b>Read the instruction at address PC from instruction memory. Compute PC + 4.</li>
+  <li><b>2 · Decode (ID)</b>Split the 32 bits into fields. Read the two registers named by rs and rt. Sign-extend the immediate.</li>
+  <li><b>3 · Execute (EX)</b>The ALU does the maths: add/sub/and/or/slt, or works out a memory address, or compares for a branch.</li>
+  <li><b>4 · Memory (MEM)</b><code>lw</code> reads data memory. <code>sw</code> writes it. Others skip this step.</li>
+  <li><b>5 · Write back (WB)</b>Save the result into a register (R-type, <code>lw</code>). Load the new PC.</li>
+</ol>
+<div class="callout tip"><b>Why PC + 4?</b><p>Every MIPS instruction is 32 bits = 4 bytes, and memory is byte-addressed. So the next instruction sits 4 addresses later.</p></div>
+
+<h2>2. The parts of the datapath</h2>
+<div class="scroll"><table>
+  <tr><th>Part</th><th>Job</th><th>Read / write</th></tr>
+  <tr><td><b>PC</b></td><td>Holds the address of the current instruction.</td><td>Updated on every clock edge.</td></tr>
+  <tr><td><b>Instruction memory</b></td><td>Holds the program. Address in → 32-bit instruction out.</td><td>Read only (during a run).</td></tr>
+  <tr><td><b>Adder (PC + 4)</b></td><td>Computes the address of the next instruction.</td><td>Combinational.</td></tr>
+  <tr><td><b>Register file</b></td><td>32 registers × 32 bits. 2 read ports, 1 write port. See <a href="m2-05-register-file.html">Register file</a>.</td><td>Reads are combinational (instant). Write happens on the clock edge, only if <code>RegWrite = 1</code>.</td></tr>
+  <tr><td><b>Sign-extend</b></td><td>16-bit immediate → 32 bits.</td><td>Combinational.</td></tr>
+  <tr><td><b>ALU</b></td><td>Does the operation chosen by a 4-bit ALU control code. Built from adders and MUXes.</td><td>Combinational. Outputs Result and Zero.</td></tr>
+  <tr><td><b>Data memory</b></td><td>Holds program data (arrays, variables).</td><td>Read if <code>MemRead</code>. Write on clock edge if <code>MemWrite</code>.</td></tr>
+  <tr><td><b>Shift-left-2 + branch adder</b></td><td>Branch target = (PC + 4) + (sign-extended imm × 4).</td><td>Combinational.</td></tr>
+  <tr><td><b>4 MUXes</b></td><td><b>RegDst</b>, <b>ALUSrc</b>, <b>MemtoReg</b>, <b>PCSrc</b> (explained below).</td><td>Set by control.</td></tr>
+</table></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 660 372" width="660" role="img" aria-label="Simplified single-cycle MIPS datapath: PC, instruction memory, register file, sign-extend, ALU, data memory and four MUXes. The lw path is highlighted.">
+    <!-- PC -->
+    <rect x="14" y="160" width="40" height="50" rx="6" class="box-b"/>
+    <text x="23" y="190" class="b">PC</text>
+    <!-- PC+4 adder -->
+    <rect x="90" y="30" width="50" height="50" rx="8" class="box"/>
+    <text x="102" y="60" class="b">Add</text>
+    <text x="68" y="73" class="m">4</text>
+    <path class="w" d="M78 68 H90"/>
+    <path class="w" d="M66 185 V42 H90"/>
+    <circle cx="66" cy="185" r="3.5" class="fill-ink"/>
+    <!-- Instruction memory -->
+    <rect x="80" y="135" width="90" height="100" rx="8" class="box"/>
+    <text x="125" y="180" class="b" text-anchor="middle">Instruction</text>
+    <text x="125" y="197" class="b" text-anchor="middle">memory</text>
+    <path class="w-hi" d="M54 185 H80"/>
+    <!-- instruction bus -->
+    <path class="w-hi" d="M170 185 H178 M178 145 V285"/>
+    <path class="w-hi" d="M178 145 H240"/>
+    <text x="206" y="140" class="m dim">rs</text>
+    <path class="w" d="M178 170 H240"/>
+    <text x="206" y="165" class="m dim">rt</text>
+    <path class="w-hi" d="M178 196 H196"/>
+    <path class="w" d="M178 216 H196"/>
+    <path class="w-hi" d="M178 285 H250"/>
+    <text x="198" y="280" class="m dim">imm</text>
+    <!-- RegDst mux -->
+    <rect x="196" y="188" width="12" height="36" rx="5" class="box-hi"/>
+    <text x="186" y="182" class="m hi">RegDst</text>
+    <path class="w-hi" d="M208 206 H240"/>
+    <!-- Register file -->
+    <rect x="240" y="125" width="120" height="130" rx="8" class="box"/>
+    <text x="300" y="116" class="b" text-anchor="middle">Register file</text>
+    <text x="246" y="149" class="m">Read 1</text>
+    <text x="246" y="174" class="m">Read 2</text>
+    <text x="246" y="210" class="m">Write reg</text>
+    <text x="246" y="244" class="m">Write data</text>
+    <text x="354" y="164" class="m" text-anchor="end">Data 1</text>
+    <text x="354" y="226" class="m" text-anchor="end">Data 2</text>
+    <!-- sign extend -->
+    <rect x="250" y="270" width="100" height="30" rx="6" class="box"/>
+    <text x="300" y="290" class="m" text-anchor="middle">Sign-extend</text>
+    <!-- Data1 to ALU -->
+    <path class="w-hi" d="M360 160 H420"/>
+    <!-- Data2 to ALUSrc mux and to DM write data -->
+    <path class="w" d="M360 222 H390"/>
+    <path class="w" d="M380 222 V318 H490 V235 H500"/>
+    <circle cx="380" cy="222" r="3.5" class="fill-ink"/>
+    <!-- imm to ALUSrc mux, and up to shift-left-2 -->
+    <path class="w-hi" d="M350 285 H372 V242 H390"/>
+    <path class="w" d="M372 242 V80 H388"/>
+    <circle cx="372" cy="242" r="3.5" class="fill-hi"/>
+    <!-- ALUSrc mux -->
+    <rect x="390" y="200" width="14" height="50" rx="5" class="box-hi"/>
+    <text x="384" y="266" class="m hi">ALUSrc</text>
+    <path class="w-hi" d="M404 225 H420"/>
+    <!-- ALU -->
+    <polygon points="420,130 470,155 470,215 420,240 420,197 432,185 420,173" class="box-g"/>
+    <text x="436" y="160" class="b">ALU</text>
+    <!-- shift left 2 and branch adder -->
+    <rect x="388" y="68" width="40" height="24" rx="5" class="box"/>
+    <text x="408" y="85" class="m" text-anchor="middle">&lt;&lt;2</text>
+    <path class="w" d="M428 80 H440"/>
+    <rect x="440" y="40" width="50" height="55" rx="8" class="box"/>
+    <text x="452" y="72" class="b">Add</text>
+    <path class="w" d="M140 55 H440"/>
+    <circle cx="160" cy="55" r="3.5" class="fill-ink"/>
+    <text x="236" y="50" class="m dim">PC+4</text>
+    <path class="w" d="M160 55 V20 H590 V42 H600"/>
+    <path class="w" d="M490 68 H600"/>
+    <text x="508" y="63" class="m dim">target</text>
+    <!-- PCSrc mux -->
+    <rect x="600" y="30" width="14" height="50" rx="5" class="box-hi"/>
+    <text x="607" y="96" class="m hi" text-anchor="middle">PCSrc</text>
+    <path class="w" d="M614 55 H632 V10 H6 V185 H14"/>
+    <text x="440" y="120" class="m dim">PCSrc = Branch · Zero</text>
+    <!-- ALU result to DM address, and bypass -->
+    <path class="w-hi" d="M470 185 H500"/>
+    <path class="w" d="M485 185 V135 H595 V228 H610"/>
+    <circle cx="485" cy="185" r="3.5" class="fill-hi"/>
+    <!-- Data memory -->
+    <rect x="500" y="150" width="80" height="140" rx="8" class="box"/>
+    <text x="504" y="189" class="m">Address</text>
+    <text x="576" y="209" class="m" text-anchor="end">Read data</text>
+    <text x="504" y="239" class="m">Write data</text>
+    <text x="540" y="266" class="b" text-anchor="middle">Data</text>
+    <text x="540" y="281" class="b" text-anchor="middle">memory</text>
+    <path class="w-hi" d="M580 205 H610"/>
+    <!-- MemtoReg mux -->
+    <rect x="610" y="190" width="14" height="55" rx="5" class="box-hi"/>
+    <text x="617" y="260" class="m hi" text-anchor="middle">MemtoReg</text>
+    <!-- write back -->
+    <path class="w-hi" d="M624 217 H652 V350 H230 V240 H240"/>
+    <text x="380" y="344" class="m dim">write-back to register file</text>
+  </svg>
+  <figcaption>Simplified single-cycle datapath. Copper wires show the route <code>lw</code> uses, the longest one. The four copper-edged boxes are MUXes, each set by a control signal. A dot marks where a wire splits.</figcaption>
+</figure>
+
+<h3>What each MUX chooses</h3>
+<div class="scroll"><table>
+  <tr><th>MUX</th><th>Input when signal = 0</th><th>Input when signal = 1</th><th>Why it exists</th></tr>
+  <tr><td><b>RegDst</b></td><td><code>rt</code> field</td><td><code>rd</code> field</td><td>I-type (<code>lw</code>, <code>addi</code>) saves into rt. R-type saves into rd.</td></tr>
+  <tr><td><b>ALUSrc</b></td><td>Register Data 2</td><td>Sign-extended immediate</td><td>R-type uses two registers. <code>lw</code>/<code>sw</code>/<code>addi</code> use a register + a constant.</td></tr>
+  <tr><td><b>MemtoReg</b></td><td>ALU result</td><td>Data-memory read data</td><td>R-type saves the ALU answer. <code>lw</code> saves the value loaded from memory.</td></tr>
+  <tr><td><b>PCSrc</b></td><td>PC + 4</td><td>Branch target</td><td>Chosen when <code>Branch = 1</code> AND ALU <code>Zero = 1</code> (a taken <code>beq</code>).</td></tr>
+</table></div>
+
+<h2>3. The main control unit</h2>
+<p>The control unit reads the 6-bit <b>opcode</b> and sets every control signal. In a single-cycle CPU it is plain combinational logic (a truth table). "X" means <b>don't care</b>: the value doesn't matter because it is never used.</p>
+<div class="scroll"><table class="tt">
+  <tr><th>Instruction</th><th>RegDst</th><th>ALUSrc</th><th>MemtoReg</th><th>RegWrite</th><th>MemRead</th><th>MemWrite</th><th>Branch</th><th>ALUOp</th></tr>
+  <tr><td>R-type</td><td class="one">1</td><td class="zero">0</td><td class="zero">0</td><td class="one">1</td><td class="zero">0</td><td class="zero">0</td><td class="zero">0</td><td>10</td></tr>
+  <tr class="hl"><td>lw</td><td class="zero">0</td><td class="one">1</td><td class="one">1</td><td class="one">1</td><td class="one">1</td><td class="zero">0</td><td class="zero">0</td><td>00</td></tr>
+  <tr><td>sw</td><td>X</td><td class="one">1</td><td>X</td><td class="zero">0</td><td class="zero">0</td><td class="one">1</td><td class="zero">0</td><td>00</td></tr>
+  <tr><td>beq</td><td>X</td><td class="zero">0</td><td>X</td><td class="zero">0</td><td class="zero">0</td><td class="zero">0</td><td class="one">1</td><td>01</td></tr>
+</table></div>
+<ul>
+  <li><b>sw and beq have RegWrite = 0</b>. They never save into a register, so RegDst and MemtoReg are "X".</li>
+  <li><b>ALUOp</b> is a 2-bit hint: <code>00</code> = add (for addresses), <code>01</code> = subtract (for beq's compare), <code>10</code> = "look at the funct field".</li>
+</ul>
+
+<h3>ALU control (the second, smaller decoder)</h3>
+<div class="scroll"><table class="tt">
+  <tr><th>ALUOp</th><th>funct</th><th>Operation</th><th class="out">ALU control</th></tr>
+  <tr><td>00</td><td>X</td><td>add (lw, sw)</td><td class="out">0010</td></tr>
+  <tr><td>01</td><td>X</td><td>subtract (beq)</td><td class="out">0110</td></tr>
+  <tr><td>10</td><td>100000 (add)</td><td>add</td><td class="out">0010</td></tr>
+  <tr><td>10</td><td>100010 (sub)</td><td>subtract</td><td class="out">0110</td></tr>
+  <tr><td>10</td><td>100100 (and)</td><td>AND</td><td class="out">0000</td></tr>
+  <tr><td>10</td><td>100101 (or)</td><td>OR</td><td class="out">0001</td></tr>
+  <tr><td>10</td><td>101010 (slt)</td><td>set on less than</td><td class="out">0111</td></tr>
+</table></div>
+<div class="callout tip"><b>How beq uses subtract</b><p><code>beq</code> computes rs − rt. If they are equal, the answer is 0, so <b>Zero = 1</b>. Zero AND Branch drives PCSrc and the CPU jumps.</p></div>
+
+<h2>4. Following four instructions through the datapath</h2>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · four instruction types</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">add</span>  $t0, $s1, $s2</td><td class="n">R-type. $t0 = $s1 + $s2. Reads rs=$s1 and rt=$s2, ALU adds, result saved to rd=$t0. Skips data memory.</td></tr>
+    <tr><td class="c"><span class="kw">lw</span>   $t0, <span class="num">8</span>($s3)</td><td class="n">"Load word". Address = $s3 + 8. Read 4 bytes from memory there and save them into $t0. Uses <b>every</b> part.</td></tr>
+    <tr><td class="c"><span class="kw">sw</span>   $t0, <span class="num">8</span>($s3)</td><td class="n">"Store word". Address = $s3 + 8. Copy $t0 into memory there. No register is written.</td></tr>
+    <tr><td class="c"><span class="kw">beq</span>  $t0, $t1, <span class="num">3</span></td><td class="n">"Branch if equal". If $t0 = $t1, jump to (PC + 4) + 3 × 4. Otherwise just go to PC + 4.</td></tr>
+  </table>
+</div>
+
+<h3>Worked example: trace <code>lw $t0, 8($s3)</code> (the longest path)</h3>
+<div class="stepper" data-stepper>
+  <div class="stage"><p><b>Fetch.</b> PC → instruction memory → the 32-bit word for <code>lw</code>. At the same time, the adder computes PC + 4.</p></div>
+  <div class="stage"><p><b>Decode.</b> Control sees opcode 35 (lw) and sets RegDst = 0, ALUSrc = 1, MemtoReg = 1, RegWrite = 1, MemRead = 1, MemWrite = 0, Branch = 0, ALUOp = 00. The register file reads <code>$s3</code> (rs). The immediate 8 is sign-extended to 32 bits.</p></div>
+  <div class="stage"><p><b>Execute.</b> ALUSrc = 1 picks the immediate. ALU computes $s3 + 8 = the memory address.</p></div>
+  <div class="stage"><p><b>Memory.</b> Data memory reads the word at that address.</p></div>
+  <div class="stage"><p><b>Write back.</b> MemtoReg = 1 picks the memory value. RegDst = 0 picks rt = <code>$t0</code>. On the clock edge the value is saved in $t0 and PC becomes PC + 4 (PCSrc = 0 because Branch = 0).</p></div>
+  <div class="stage"><p><b>Path used:</b> PC → Instruction memory → Register file → ALU → Data memory → MUX → Register file. Nothing else is this long.</p></div>
+</div>
+
+<h3>Worked example: where does a beq go?</h3>
+<ol class="steps">
+  <li><code>beq $t0, $t1, 3</code> sits at address <code>0x00400010</code>. So PC + 4 = <code>0x00400014</code>.</li>
+  <li>Immediate 3, sign-extended, shifted left 2 (× 4) = 12 = <code>0xC</code>.</li>
+  <li>Target = <code>0x00400014 + 0xC</code> = <b><code>0x00400020</code></b>. The offset counts <em>instructions</em> after PC + 4, not bytes.</li>
+</ol>
+
+<h2>5. Why single-cycle is slow: the critical path</h2>
+<p>Textbook (Patterson &amp; Hennessy) sample delays. Parts not listed (MUXes, sign-extend, adders) are treated as having no delay.</p>
+<div class="scroll"><table>
+  <tr><th>Instruction</th><th>Instr. memory</th><th>Register read</th><th>ALU</th><th>Data memory</th><th>Register write (setup)</th><th>Total</th></tr>
+  <tr><td>R-type</td><td>200</td><td>100</td><td>200</td><td>–</td><td>100</td><td><b>600 ps</b></td></tr>
+  <tr class="hl"><td>lw</td><td>200</td><td>100</td><td>200</td><td>200</td><td>100</td><td><b>800 ps</b></td></tr>
+  <tr><td>sw</td><td>200</td><td>100</td><td>200</td><td>200</td><td>–</td><td><b>700 ps</b></td></tr>
+  <tr><td>beq</td><td>200</td><td>100</td><td>200</td><td>–</td><td>–</td><td><b>500 ps</b></td></tr>
+  <tr><td>j</td><td>200</td><td>–</td><td>–</td><td>–</td><td>–</td><td><b>200 ps</b></td></tr>
+</table></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 250" width="640" role="img" aria-label="Stacked bar chart of delay per instruction: R-type 600, lw 800, sw 700, beq 500, j 200 picoseconds; the clock must be 800 ps for all">
+    <g class="grid"><path d="M70 40 V210 M190 40 V210 M310 40 V210 M430 40 V210"/></g>
+    <!-- scale: x = 70 + 0.6*ps -->
+    <text x="14" y="68" class="b">R-type</text>
+    <rect x="70" y="50" width="118" height="26" rx="4" class="box-b"/>
+    <rect x="190" y="50" width="58" height="26" rx="4" class="box-g"/>
+    <rect x="250" y="50" width="118" height="26" rx="4" class="box-hi"/>
+    <rect x="370" y="50" width="58" height="26" rx="4" class="box-g"/>
+    <text x="436" y="68" class="m">600</text>
+    <text x="14" y="102" class="b">lw</text>
+    <rect x="70" y="84" width="118" height="26" rx="4" class="box-b"/>
+    <rect x="190" y="84" width="58" height="26" rx="4" class="box-g"/>
+    <rect x="250" y="84" width="118" height="26" rx="4" class="box-hi"/>
+    <rect x="370" y="84" width="118" height="26" rx="4" class="box"/>
+    <rect x="490" y="84" width="58" height="26" rx="4" class="box-g"/>
+    <text x="556" y="102" class="m hi">800</text>
+    <text x="14" y="136" class="b">sw</text>
+    <rect x="70" y="118" width="118" height="26" rx="4" class="box-b"/>
+    <rect x="190" y="118" width="58" height="26" rx="4" class="box-g"/>
+    <rect x="250" y="118" width="118" height="26" rx="4" class="box-hi"/>
+    <rect x="370" y="118" width="118" height="26" rx="4" class="box"/>
+    <text x="496" y="136" class="m">700</text>
+    <text x="14" y="170" class="b">beq</text>
+    <rect x="70" y="152" width="118" height="26" rx="4" class="box-b"/>
+    <rect x="190" y="152" width="58" height="26" rx="4" class="box-g"/>
+    <rect x="250" y="152" width="118" height="26" rx="4" class="box-hi"/>
+    <text x="376" y="170" class="m">500</text>
+    <text x="14" y="204" class="b">j</text>
+    <rect x="70" y="186" width="118" height="26" rx="4" class="box-b"/>
+    <text x="196" y="204" class="m">200</text>
+    <!-- clock line at 800 ps -->
+    <path class="w-hi" d="M550 36 V216" stroke-dasharray="5 4"/>
+    <text x="548" y="30" class="m hi" text-anchor="end">clock period = 800 ps</text>
+    <text x="66" y="232" class="m dim">0</text>
+    <text x="178" y="232" class="m dim">200</text>
+    <text x="298" y="232" class="m dim">400</text>
+    <text x="418" y="232" class="m dim">600</text>
+    <text x="538" y="232" class="m dim">800 ps</text>
+    <!-- legend -->
+    <rect x="70" y="10" width="12" height="12" rx="3" class="box-b"/><text x="87" y="21" class="m">IM</text>
+    <rect x="116" y="10" width="12" height="12" rx="3" class="box-g"/><text x="133" y="21" class="m">Reg</text>
+    <rect x="170" y="10" width="12" height="12" rx="3" class="box-hi"/><text x="187" y="21" class="m">ALU</text>
+    <rect x="224" y="10" width="12" height="12" rx="3" class="box"/><text x="241" y="21" class="m">DM</text>
+  </svg>
+  <figcaption>Delay per instruction, drawn to scale. One clock period must cover the slowest instruction (<code>lw</code>, 800 ps), so a <code>j</code> that needs only 200 ps still waits 800 ps.</figcaption>
+</figure>
+
+<div class="formula">Clock period ≥ longest path = 800 ps → max clock rate = 1 / 800 ps = 1.25 GHz<small>Every instruction takes 800 ps, even though the average needs far less. This waste is why real CPUs use <a href="m4-02-pipeline-5-stage.html">pipelining</a>.</small></div>
+
+<div class="vs">
+  <div><h3>Single-cycle: good</h3><ul><li>Simple to design and understand.</li><li>CPI = 1 exactly.</li><li>Control is just a truth table.</li></ul></div>
+  <div><h3>Single-cycle: bad</h3><ul><li>Clock is set by the slowest instruction.</li><li>Needs <b>separate</b> instruction and data memories and extra adders, since nothing can be reused within one cycle.</li><li>Only one instruction in the hardware at a time.</li></ul></div>
+</div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>RegDst for lw is 0, not 1.</b> lw saves into <code>rt</code>. Only R-type uses <code>rd</code>.</li>
+  <li><b>sw writes memory, not a register.</b> RegWrite = 0, MemWrite = 1.</li>
+  <li><b>ALUSrc = 1 for lw and sw</b> (base + offset), <b>0 for beq</b> (compare two registers).</li>
+  <li><b>Branch target uses PC + 4</b>, not PC, and the offset is multiplied by 4.</li>
+  <li>The clock period is the <b>longest</b> instruction's delay, not the average.</li>
+  <li>Don't forget register-write setup time when adding up the lw path.</li>
+  <li>"X" (don't care) is not the same as 0. It means the value is irrelevant.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>List the control signals for <code>sw</code>.</summary><div class="a"><p>RegDst = X, ALUSrc = 1, MemtoReg = X, RegWrite = 0, MemRead = 0, MemWrite = 1, Branch = 0, ALUOp = 00.</p></div></details>
+  <details class="q"><summary>Using the sample delays, what is the delay of an R-type instruction? Which parts does it skip?</summary><div class="a"><p>200 + 100 + 200 + 100 = <b>600 ps</b>. It skips data memory.</p></div></details>
+  <details class="q"><summary>A single-cycle CPU (800 ps clock) runs 100 instructions. How long does it take?</summary><div class="a"><p>CPI = 1, so 100 × 1 × 800 ps = <b>80,000 ps = 80 ns</b>, whatever the mix of instructions.</p></div></details>
+  <details class="q"><summary>If the data memory were made 100 ps faster, what would the new clock period be?</summary><div class="a"><p>lw becomes 700 ps, sw 600 ps, R-type stays 600 ps. The longest is now lw at <b>700 ps</b>.</p></div></details>
+  <details class="q"><summary><code>beq $s0, $s1, -2</code> is at address <code>0x00400040</code>. Where does it jump if taken?</summary><div class="a"><p>PC + 4 = <code>0x00400044</code>. Offset = −2 × 4 = −8. Target = <code>0x00400044 − 8</code> = <b><code>0x0040003C</code></b>.</p></div></details>
+  <details class="q"><summary>Why is RegDst "X" for beq but not for lw?</summary><div class="a"><p>beq has RegWrite = 0, so no register is written and the chosen register number is ignored. lw <em>does</em> write, so it must pick rt (RegDst = 0).</p></div></details>
+  <details class="q"><summary>RegWrite is stuck at 0. Which of add, lw, sw, beq still work?</summary><div class="a"><p><b>sw and beq</b> still work because they never write a register. add and lw fail because their results are never saved.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=Z5JC9Ve1sfI" target="_blank" rel="noopener"><i class="play"></i><span><b>The Fetch-Execute Cycle: What's Your Computer Actually Doing?</b><small>Tom Scott</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=UVumk3Vc1Fo" target="_blank" rel="noopener"><i class="play"></i><span><b>ALU, Data Path &amp; Control Unit | Chapter-5 | COA</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=gTdLBcks5u8" target="_blank" rel="noopener"><i class="play"></i><span><b>MIPS Single Cycle Explained: LW, ADD, BEQ</b><small>Nachum Danzig</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

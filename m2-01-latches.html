@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Latches: SR &amp; D</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 2 / Latches</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 2 · Memory &amp; State <span class="tag class">From class notes · L05 &amp; Lab 0101</span></div>
+  <h1>Latches: how a circuit remembers one bit</h1>
+  <p class="idea">Everything in Module 1 had no memory. A CPU must remember things: the program counter, register values, what step it is on. A <strong>latch</strong> is the simplest circuit that stores one bit. It does this with a <strong>feedback loop</strong>: its output is wired back into its own input.</p>
+  <div class="analogy"><b>Think of it like this:</b> a light switch. Press "on" and the light stays on after you let go. Press "off" and it stays off. The switch <em>remembers</em> the last button you pressed. An adder can't do that: take away its inputs and its answer is gone.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Combinational circuit</dt><dd>Output depends only on the inputs <em>right now</em>. No memory. Adders, MUXes, decoders.</dd></div>
+  <div class="term"><dt>Sequential circuit</dt><dd>Output depends on the inputs <em>and</em> on what happened before (its stored state).</dd></div>
+  <div class="term"><dt>State</dt><dd>The value a circuit is currently storing. For a latch, that is its output Q.</dd></div>
+  <div class="term"><dt>Feedback</dt><dd>Wiring a gate's output back to an earlier gate's input, so the circuit keeps "seeing" its own value.</dd></div>
+  <div class="term"><dt>Q and Q'</dt><dd>Q is the stored bit. Q' ("Q bar", also written Q̄) should always be its opposite.</dd></div>
+  <div class="term"><dt>Set / Reset</dt><dd>Set means make Q = 1. Reset (also called clear) means make Q = 0.</dd></div>
+  <div class="term"><dt>Enable (E)</dt><dd>A control input. When E = 1 the latch listens to its data inputs. When E = 0 it ignores them.</dd></div>
+  <div class="term"><dt>Transparent</dt><dd>The output simply follows the input, as if the latch were a plain wire.</dd></div>
+</dl>
+
+<h2>1. Combinational vs sequential</h2>
+<p>Try building a counter with only AND, OR and XOR gates. You can't. A counter must know the last number to produce the next one, and those gates forget everything. The difference comes down to one thing: <strong>a feedback loop</strong>.</p>
+<div class="scroll"><table>
+  <tr><th></th><th>Combinational</th><th>Sequential</th></tr>
+  <tr><td>Output depends on</td><td>inputs right now</td><td>inputs + past state</td></tr>
+  <tr><td>Memory</td><td>none</td><td>remembers history</td></tr>
+  <tr><td>Same input gives</td><td>same output every time</td><td>possibly a different output</td></tr>
+  <tr><td>Examples</td><td>adders, MUXes, decoders</td><td>registers, counters, FSMs</td></tr>
+  <tr><td>When it updates</td><td>instantly (after gate delay)</td><td>when the clock says</td></tr>
+</table></div>
+
+<h2>2. The bistable element: memory with no controls</h2>
+<p>Connect two NOT gates (inverters) in a loop. If Q = 1, the first inverter makes Q' = 0, and the second turns that 0 back into Q = 1. The loop keeps itself going. It has exactly <strong>two stable states</strong> (Q = 1 or Q = 0), so it is called <strong>bistable</strong>. It holds its bit as long as it has power.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 400 165" width="400" role="img" aria-label="Two inverters connected in a loop. The output of each feeds the input of the other.">
+    <polygon points="150,20 150,70 195,45" class="box"/>
+    <circle cx="200" cy="45" r="5" class="box"/>
+    <path class="w" d="M205 45 H320"/>
+    <text x="328" y="50" class="b">Q</text>
+    <polygon points="250,95 250,145 205,120" class="box"/>
+    <circle cx="200" cy="120" r="5" class="box"/>
+    <path class="w-hi" d="M280 45 V120 H250"/>
+    <circle cx="280" cy="45" r="3.5" class="fill-ink"/>
+    <path class="w-hi" d="M195 120 H100 V45 H150"/>
+    <text x="110" y="140" class="m hi">Q'</text>
+    <text x="208" y="88" class="m dim">loop</text>
+  </svg>
+  <figcaption>Two inverters chasing each other. The copper wires are the feedback loop. It stores a bit, but there is no input to change it.</figcaption>
+</figure>
+<p>The problem: there is no way to <em>change</em> the stored bit. It is sealed. A <strong>latch</strong> replaces the inverters with gates that have extra inputs, so we can control it.</p>
+
+<h2>3. The SR latch (built from NOR gates)</h2>
+<p>Swap each inverter for a <strong>NOR gate</strong> (OR followed by NOT: output is 1 only when <em>all</em> inputs are 0). Each NOR gets one extra input: <b>S</b> (set) and <b>R</b> (reset). The two gates are <strong>cross-coupled</strong>: each gate's output feeds the other gate's input.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 480 235" width="480" role="img" aria-label="SR latch: two cross-coupled NOR gates. R and Q' feed the top gate which outputs Q. S and Q feed the bottom gate which outputs Q'.">
+    <text x="14" y="49" class="b">R</text>
+    <text x="14" y="189" class="b">S</text>
+    <path class="w" d="M34 45 H207 M34 185 H207"/>
+    <!-- top NOR -->
+    <path class="box" d="M200 30 Q220 60 200 90 Q245 90 260 60 Q245 30 200 30 Z"/>
+    <circle cx="265" cy="60" r="5" class="box"/>
+    <text x="214" y="64" class="m">NOR</text>
+    <!-- bottom NOR -->
+    <path class="box" d="M200 140 Q220 170 200 200 Q245 200 260 170 Q245 140 200 140 Z"/>
+    <circle cx="265" cy="170" r="5" class="box"/>
+    <text x="214" y="174" class="m">NOR</text>
+    <path class="w-g" d="M270 60 H420"/>
+    <path class="w-g" d="M270 170 H420"/>
+    <text x="428" y="65" class="g">Q</text>
+    <text x="428" y="175" class="g">Q'</text>
+    <!-- cross coupling -->
+    <path class="w-hi" d="M320 60 V105 L150 130 V155 H207"/>
+    <path class="w-hi" d="M350 170 V125 L130 100 V75 H207"/>
+    <circle cx="320" cy="60" r="3.5" class="fill-ink"/>
+    <circle cx="350" cy="170" r="3.5" class="fill-ink"/>
+    <text x="360" y="120" class="m hi">feedback</text>
+  </svg>
+  <figcaption>Cross-coupled NOR gates. Q goes back into the bottom gate; Q' goes back into the top gate (copper). A bubble ○ on a gate output means "NOT".</figcaption>
+</figure>
+<div class="formula">Q = (R + Q')'  &nbsp;&nbsp;·&nbsp;&nbsp;  Q' = (S + Q)'<small>+ means OR, and the ' after a bracket means NOT. In Verilog: <code>q = ~(r | qbar)</code>, <code>qbar = ~(s | q)</code>.</small></div>
+
+<div class="scroll"><table class="tt">
+  <tr><th>S</th><th>R</th><th class="out">Q (next)</th><th>Action</th></tr>
+  <tr><td>0</td><td>0</td><td class="out">Q</td><td>Hold: keep the old value</td></tr>
+  <tr><td>1</td><td>0</td><td class="out one">1</td><td>Set</td></tr>
+  <tr><td>0</td><td>1</td><td class="out zero">0</td><td>Reset</td></tr>
+  <tr class="hl"><td>1</td><td>1</td><td class="out">0 (and Q' = 0)</td><td><b>Forbidden</b></td></tr>
+</table></div>
+
+<h3>Why S = R = 1 is forbidden (click through)</h3>
+<div class="stepper" data-stepper>
+  <div class="stage"><p><b>Step 1: S = 1, R = 1.</b> A NOR with any input at 1 outputs 0. So the top gate gives <b>Q = 0</b> and the bottom gate gives <b>Q' = 0</b>.</p></div>
+  <div class="stage"><p><b>Step 2: the rule is broken.</b> Q and Q' are both 0. Q' is supposed to be the <em>opposite</em> of Q, so the latch is in a meaningless state.</p></div>
+  <div class="stage"><p><b>Step 3: now S and R both drop to 0 at the same moment.</b> Each gate now sees two 0s, so each tries to output 1. Both outputs start rising together.</p></div>
+  <div class="stage"><p><b>Step 4: a race.</b> Whichever gate is a tiny bit faster reaches 1 first and forces the other back to 0. That depends on picosecond differences in gate delay, so the result is <b>unpredictable</b> (non-deterministic). It may even oscillate for a while.</p></div>
+  <div class="stage"><p><b>Lesson:</b> never apply S = R = 1. The D latch below makes this combination impossible.</p></div>
+</div>
+
+<h3>The NAND version</h3>
+<p>You can also build an SR latch from two cross-coupled <strong>NAND</strong> gates. NAND gates are cheap, so this version is common in practice. Its inputs are <strong>active-LOW</strong>: a 0 does the action. We write them S' and R'.</p>
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt">
+      <tr><th>S'</th><th>R'</th><th class="out">Q (next)</th><th>Action</th></tr>
+      <tr><td>1</td><td>1</td><td class="out">Q</td><td>Hold</td></tr>
+      <tr><td>0</td><td>1</td><td class="out one">1</td><td>Set</td></tr>
+      <tr><td>1</td><td>0</td><td class="out zero">0</td><td>Reset</td></tr>
+      <tr class="hl"><td>0</td><td>0</td><td class="out">1 (and Q' = 1)</td><td>Forbidden</td></tr>
+    </table></div>
+  </div>
+  <div>
+    <p><b>Same idea, flipped.</b> NOR latch: 1 acts, forbidden is 11. NAND latch: 0 acts, forbidden is 00 (both outputs become 1).</p>
+    <p style="margin:0">Active-LOW just means "the input does its job when it is 0".</p>
+  </div>
+</div>
+
+<h3>Why a plain SR latch is hard to use</h3>
+<ol>
+  <li><b>Two control lines is one too many.</b> You must keep S and R from both being 1.</li>
+  <li><b>Any glitch gets through.</b> A 1 ns spike on S sets the latch by accident.</li>
+  <li><b>It has no notion of "now".</b> It reacts whenever its inputs change.</li>
+</ol>
+<p>The <strong>D latch</strong> fixes problems 1 and 2. The <a href="m2-02-flipflops-timing.html">flip-flop</a> fixes problem 3.</p>
+
+<h3>The Verilog, line by line</h3>
+<p>New to Verilog? Read <a href="m1-00-verilog-basics.html">Verilog for absolute beginners</a> first.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · sr_latch.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="com">// NOR-based SR latch</span></td><td class="n">A comment. Verilog ignores it.</td></tr>
+    <tr><td class="c"><span class="kw">module</span> sr_latch (</td><td class="n">Start a circuit block (a "chip") named <code>sr_latch</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">input wire</span> s,</td><td class="n">Input pin s (set).</td></tr>
+    <tr><td class="c">  <span class="kw">input wire</span> r,</td><td class="n">Input pin r (reset).</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> q,</td><td class="n">Output pin q, the stored bit.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> qbar</td><td class="n">Output pin qbar, which should be the opposite of q.</td></tr>
+    <tr><td class="c">);</td><td class="n">End of the pin list.</td></tr>
+    <tr><td class="c">  <span class="com">// Cross-coupled NORs:</span></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="com">// q depends on qbar, qbar depends on q.</span></td><td class="n">This is the feedback loop in words.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> q = ~(r | qbar);</td><td class="n">Top NOR gate. <code>|</code> is OR, <code>~</code> is NOT. q uses qbar as an input.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> qbar = ~(s | q);</td><td class="n">Bottom NOR gate. qbar uses q as an input. The two lines form a loop.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">End of the block.</td></tr>
+  </table>
+</div>
+
+<p>A <strong>testbench</strong> is a second Verilog file that "wiggles" the inputs and records what happens. It is not hardware; it is the test.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · sr_tb.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> sr_tb;</td><td class="n">The test block. It has no pins because nothing plugs into it.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span> s, r; <span class="kw">wire</span> q, qbar;</td><td class="n"><code>reg</code> = a variable the test can set. <code>wire</code> = something we only watch.</td></tr>
+    <tr><td class="c">  sr_latch dut(.s(s), .r(r), .q(q), .qbar(qbar));</td><td class="n">Place one latch, named <code>dut</code> ("device under test"), and connect its pins to our signals.</td></tr>
+    <tr><td class="c">  <span class="kw">initial begin</span></td><td class="n"><code>initial</code> runs the steps below once, from time 0. <code>begin … end</code> groups them.</td></tr>
+    <tr><td class="c">    <span class="kw">$dumpfile</span>(<span class="str">"sr.vcd"</span>); <span class="kw">$dumpvars</span>(<span class="num">0</span>, sr_tb);</td><td class="n">Record every signal into <code>sr.vcd</code>, so GTKWave can draw the waveform.</td></tr>
+    <tr><td class="c">    s=<span class="num">0</span>; r=<span class="num">0</span>; #<span class="num">5</span>; <span class="com">// initial — unknown</span></td><td class="n">Hold with nothing stored yet, so q is X (unknown). <code>#5</code> means "wait 5 time units".</td></tr>
+    <tr><td class="c">    s=<span class="num">1</span>; r=<span class="num">0</span>; #<span class="num">5</span>; <span class="com">// SET -&gt; q=1</span></td><td class="n">Set: q becomes 1.</td></tr>
+    <tr><td class="c">    s=<span class="num">0</span>; r=<span class="num">0</span>; #<span class="num">5</span>; <span class="com">// HOLD -&gt; q stays 1</span></td><td class="n">Inputs gone, but q stays 1. <b>This is memory.</b></td></tr>
+    <tr><td class="c">    s=<span class="num">0</span>; r=<span class="num">1</span>; #<span class="num">5</span>; <span class="com">// RESET -&gt; q=0</span></td><td class="n">Reset: q becomes 0.</td></tr>
+    <tr><td class="c">    s=<span class="num">0</span>; r=<span class="num">0</span>; #<span class="num">5</span>; <span class="com">// HOLD -&gt; q stays 0</span></td><td class="n">q remembers 0.</td></tr>
+    <tr><td class="c">    s=<span class="num">1</span>; r=<span class="num">1</span>; #<span class="num">5</span>; <span class="com">// FORBIDDEN</span></td><td class="n">Both high: q and qbar both show 0.</td></tr>
+    <tr><td class="c">    s=<span class="num">0</span>; r=<span class="num">0</span>; #<span class="num">5</span>; <span class="com">// metastable!</span></td><td class="n">Both drop together: the race. The simulator may show X or toggling. That is the correct behaviour.</td></tr>
+    <tr><td class="c">    <span class="kw">$finish</span>;</td><td class="n">Stop the simulation.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h2>4. The gated SR latch</h2>
+<p>Add an <strong>enable</strong> input E. Put an AND gate in front of S and in front of R, both also fed by E.</p>
+<ul>
+  <li><b>E = 1:</b> S and R pass through. The latch responds normally.</li>
+  <li><b>E = 0:</b> both AND gates output 0, so the latch sees S = R = 0 and <b>holds</b>.</li>
+</ul>
+<p>Now we can choose <em>when</em> the latch listens. But S = R = 1 is still possible while E = 1.</p>
+
+<h2>5. The D latch</h2>
+<p>Give the latch just <strong>one data input, D</strong>. Inside, make S = D·E and R = D'·E. Since D and D' are always opposite, <strong>S and R can never both be 1</strong>. The forbidden state is now impossible.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 580 205" width="580" role="img" aria-label="D latch: D and E feed an AND gate making S. NOT D and E feed a second AND gate making R. S and R drive an SR latch with outputs Q and Q'.">
+    <text x="14" y="54" class="b">D</text>
+    <text x="14" y="104" class="b">E</text>
+    <path class="w" d="M34 50 H200"/>
+    <path class="w" d="M34 100 H120"/>
+    <path class="w" d="M120 100 V70 H200 M120 100 V150 H200"/>
+    <circle cx="70" cy="50" r="3.5" class="fill-ink"/>
+    <circle cx="120" cy="100" r="3.5" class="fill-ink"/>
+    <path class="w" d="M70 50 V170 H92"/>
+    <polygon points="92,160 92,180 112,170" class="box"/>
+    <circle cx="116" cy="170" r="4" class="box"/>
+    <path class="w" d="M120 170 H200"/>
+    <text x="136" y="190" class="m dim">D'</text>
+    <path class="box" d="M200 35 H230 A25 25 0 0 1 230 85 H200 Z"/>
+    <text x="206" y="64" class="m">AND</text>
+    <path class="box" d="M200 135 H230 A25 25 0 0 1 230 185 H200 Z"/>
+    <text x="206" y="164" class="m">AND</text>
+    <path class="w-hi" d="M255 60 H340"/>
+    <path class="w-hi" d="M255 160 H340"/>
+    <text x="264" y="52" class="m hi">S=D·E</text>
+    <text x="264" y="152" class="m hi">R=D'·E</text>
+    <rect x="340" y="35" width="120" height="150" rx="8" class="box-b"/>
+    <text x="370" y="114" class="b">SR latch</text>
+    <text x="348" y="64" class="m">S</text>
+    <text x="348" y="164" class="m">R</text>
+    <text x="440" y="64" class="m">Q</text>
+    <text x="432" y="164" class="m">Q'</text>
+    <path class="w-g" d="M460 60 H540 M460 160 H540"/>
+    <text x="548" y="65" class="g">Q</text>
+    <text x="548" y="165" class="g">Q'</text>
+  </svg>
+  <figcaption>D latch = two AND gates + one NOT gate in front of an SR latch. S and R can never both be 1.</figcaption>
+</figure>
+
+<div class="scroll"><table class="tt">
+  <tr><th>E</th><th>D</th><th>S</th><th>R</th><th class="out">Q (next)</th><th>Meaning</th></tr>
+  <tr><td>0</td><td>x</td><td>0</td><td>0</td><td class="out">Q</td><td>Opaque: hold</td></tr>
+  <tr><td>1</td><td>0</td><td>0</td><td>1</td><td class="out zero">0</td><td>Transparent: Q = D</td></tr>
+  <tr><td>1</td><td>1</td><td>1</td><td>0</td><td class="out one">1</td><td>Transparent: Q = D</td></tr>
+</table></div>
+<p style="font-size:15px">x means "doesn't matter".</p>
+
+<h3>Transparency: what the waveform looks like</h3>
+<p>From Lab 05: <em>"While E is high, Q tracks D step-for-step. While E is low, whatever D was at the falling edge of E is what Q holds."</em></p>
+<figure class="diagram">
+  <svg viewBox="0 0 620 205" width="620" role="img" aria-label="Timing diagram of a D latch. While E is high, Q copies every change of D. While E is low, Q holds the value D had when E fell.">
+    <rect x="105" y="20" width="135" height="162" class="box-g" opacity="0.35"/>
+    <rect x="375" y="20" width="90" height="162" class="box-g" opacity="0.35"/>
+    <text x="126" y="14" class="m g">transparent</text>
+    <text x="381" y="14" class="m g">transparent</text>
+    <text x="286" y="14" class="m dim">hold</text>
+    <text x="516" y="14" class="m dim">hold</text>
+    <text x="20" y="45" class="b">E</text>
+    <text x="20" y="105" class="b">D</text>
+    <text x="20" y="165" class="b">Q</text>
+    <path class="w" d="M60 50 H105 V30 H240 V50 H375 V30 H465 V50 H600"/>
+    <path class="w" d="M60 110 H150 V90 H195 V110 H217.5 V90 H285 V110 H330 V90 H420 V110 H510 V90 H555 V110 H600"/>
+    <path class="w-hi" d="M60 170 H150 V150 H195 V170 H217.5 V150 H420 V170 H600"/>
+    <text x="268" y="198" class="m r">D changes ignored</text>
+    <text x="498" y="198" class="m r">ignored</text>
+  </svg>
+  <figcaption>Green = E high (transparent): Q copies D. White = E low: Q freezes at the value D had when E fell (1 the first time, 0 the second).</figcaption>
+</figure>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · d_latch.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="com">// Transparent D latch built from an SR latch</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">module</span> d_latch (</td><td class="n">A new block called <code>d_latch</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">input wire</span> d,</td><td class="n">The one data input.</td></tr>
+    <tr><td class="c">  <span class="kw">input wire</span> e,</td><td class="n">The enable input.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> q,</td><td class="n">Stored bit.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> qbar</td><td class="n">Its opposite.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> s_int, r_int;</td><td class="n">Two internal wires (not pins) that will carry S and R.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> s_int = d &amp; e;</td><td class="n">S = D AND E. <code>&amp;</code> is AND.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> r_int = ~d &amp; e;</td><td class="n">R = (NOT D) AND E. Only one of s_int, r_int can be 1.</td></tr>
+    <tr><td class="c">  sr_latch core(.s(s_int), .r(r_int),</td><td class="n">Reuse the SR latch from above. Place one copy named <code>core</code> and feed it our S and R.</td></tr>
+    <tr><td class="c">                .q(q), .qbar(qbar));</td><td class="n">Its outputs become the D latch's outputs.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<pre class="plain code" style="border-radius:var(--radius)"><span class="com"># compile all three files together, then run</span>
+iverilog -o d.vvp sr_latch.v d_latch.v d_tb.v
+vvp d.vvp</pre>
+
+<div class="callout tip"><b>Where are latches still used?</b><p>Inside SRAM memory cells (see <a href="m2-07-sram-dram.html">SRAM vs DRAM</a>), for "time borrowing" between pipeline stages, and in asynchronous reset circuits. Most other storage in a CPU uses flip-flops.</p></div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Saying S = R = 1 "sets and resets". It is <b>forbidden</b>: Q = Q' = 0, then a race.</li>
+  <li>Mixing up NOR and NAND latches. NOR: active-high, forbidden 11. NAND: active-low, forbidden 00.</li>
+  <li>Forgetting that a D latch is <b>transparent</b> the whole time E = 1. Every glitch on D reaches Q.</li>
+  <li>Calling a latch a flip-flop. A latch reacts to a <b>level</b>; a flip-flop reacts to an <b>edge</b>.</li>
+  <li>Q showing X at the start of simulation is normal: nothing has been stored yet.</li>
+  <li>iverilog "unknown module sr_latch"? Pass <code>sr_latch.v</code> on the command line too.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>What single feature turns a combinational circuit into a sequential one?</summary><div class="a"><p>A <b>feedback loop</b>: an output wired back to an input, so the circuit can hold a value.</p></div></details>
+  <details class="q"><summary>A NOR SR latch has Q = 1. Apply S = 0, R = 0. What is Q? Then apply S = 0, R = 1. What is Q?</summary><div class="a"><p>S = R = 0 is hold, so <b>Q stays 1</b>. S = 0, R = 1 is reset, so <b>Q = 0</b>.</p></div></details>
+  <details class="q"><summary>Why is S = R = 1 forbidden in a NOR latch? Give two reasons.</summary><div class="a"><p>1) Both outputs become 0, so Q' is no longer the opposite of Q. 2) If S and R then fall together, both gates race to 1 and the final state depends on tiny delay differences, so it is unpredictable.</p></div></details>
+  <details class="q"><summary>In a NAND SR latch, which input combination is forbidden, and what do the outputs show?</summary><div class="a"><p><b>S' = R' = 0</b>. Both outputs become <b>1</b>.</p></div></details>
+  <details class="q"><summary>Show why a D latch can never reach the forbidden state.</summary><div class="a"><p>S = D·E and R = D'·E. For both to be 1 we would need D = 1 <em>and</em> D' = 1 at the same time, which is impossible. So S·R = D·D'·E = 0 always.</p></div></details>
+  <details class="q"><summary>A D latch has E = 1 while D goes 0 → 1 → 0. Then E falls. Then D goes to 1. What is Q at the end?</summary><div class="a"><p>While E = 1, Q follows D: 0 → 1 → 0. When E falls, D is 0, so Q holds <b>0</b>. The later change of D is ignored. <b>Q = 0.</b></p></div></details>
+  <details class="q"><summary>List the three problems of a plain SR latch and which later circuit fixes each.</summary><div class="a"><p>Two control lines (fixed by the D latch), glitches get through (D latch with enable), no notion of "now" (fixed by the edge-triggered flip-flop).</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=kt8d3CYWGH4" target="_blank" rel="noopener"><i class="play"></i><span><b>SR Latch | NOR and NAND SR Latch</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=KM0DdEaY5sY" target="_blank" rel="noopener"><i class="play"></i><span><b>SR latch</b><small>Ben Eater</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=peCh_859q7Q" target="_blank" rel="noopener"><i class="play"></i><span><b>D latch</b><small>Ben Eater</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

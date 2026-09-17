@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Heterogeneous Computing</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 6 / Heterogeneous</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 6 · Parallelism &amp; Modern Architectures <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>Heterogeneous computing: big.LITTLE, CPU + GPU, CPU + NPU</h1>
+  <p class="idea">A <strong>heterogeneous</strong> chip mixes different kinds of processors, each good at one kind of job. Every job goes to the part that does it with the least energy. Your phone already works this way.</p>
+  <div class="analogy"><b>Think of it like this:</b> a delivery company doesn't use a truck for every parcel. A bicycle takes small, nearby letters cheaply. A truck takes heavy loads. A special refrigerated van takes food. The dispatcher (the scheduler) picks the right vehicle for each job.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Homogeneous</dt><dd>All cores are identical (like the SMP chip on <a href="m6-01-power-wall-multicore.html">the previous topic</a>).</dd></div>
+  <div class="term"><dt>Heterogeneous</dt><dd>The chip has different types of cores or processors.</dd></div>
+  <div class="term"><dt>P-core / big core</dt><dd>A performance core: fast, large, power-hungry.</dd></div>
+  <div class="term"><dt>E-core / LITTLE core</dt><dd>An efficiency core: slower, small, uses very little power.</dd></div>
+  <div class="term"><dt>Scheduler</dt><dd>The part of the OS that decides which task runs on which core.</dd></div>
+  <div class="term"><dt>SoC</dt><dd>System-on-Chip: CPU, GPU and other processors all on one chip.</dd></div>
+  <div class="term"><dt>GPU</dt><dd>Graphics processing unit: thousands of simple cores that do the same maths on lots of data.</dd></div>
+  <div class="term"><dt>NPU</dt><dd>Neural processing unit: a block made to run AI models (inference) with very little power.</dd></div>
+  <div class="term"><dt>ISP / DSP</dt><dd>Image signal processor (cleans up camera images) and digital signal processor (audio, radio signals).</dd></div>
+  <div class="term"><dt>Offload</dt><dd>Sending work from the CPU to another processor.</dd></div>
+  <div class="term"><dt>FPGA</dt><dd>A chip whose logic gates you can rewire after it is made.</dd></div>
+  <div class="term"><dt>ASIC</dt><dd>Application-specific integrated circuit: a chip designed for one job only.</dd></div>
+</dl>
+
+<h2>1. Why mix processor types?</h2>
+<p>Since the <a href="m6-01-power-wall-multicore.html">power wall</a>, we can't power every transistor at full speed. So the question became: <b>what gives the most useful work per watt?</b> The answer: a special processor for each common kind of job, switched on only when needed.</p>
+
+<h2>2. big.LITTLE and P/E cores</h2>
+<ul>
+  <li><b>ARM big.LITTLE</b> (announced 2011) puts a cluster of big cores and a cluster of little cores on one chip. Both run the same instruction set, so a task can move between them.</li>
+  <li><b>ARM DynamIQ</b> (2017) is the newer version. Big and little cores can sit together in the same cluster.</li>
+  <li><b>Apple</b> calls them P-cores and E-cores (for example in the M-series chips).</li>
+  <li><b>Intel</b> added P-cores and E-cores with 12th-gen Core (Alder Lake, 2021). A hardware helper, "Thread Director", gives the OS hints.</li>
+</ul>
+
+<figure class="diagram">
+  <svg viewBox="0 0 620 250" width="620" role="img" aria-label="The scheduler sends heavy tasks such as a game to the big cores and light tasks such as email sync to the little cores">
+    <rect x="20" y="30" width="150" height="40" rx="8" class="box-r"/><text x="34" y="55" class="m">game frame</text>
+    <rect x="20" y="85" width="150" height="40" rx="8" class="box-r"/><text x="34" y="110" class="m">video export</text>
+    <rect x="20" y="140" width="150" height="40" rx="8" class="box-g"/><text x="34" y="165" class="m">email sync</text>
+    <rect x="20" y="195" width="150" height="40" rx="8" class="box-g"/><text x="34" y="220" class="m">music playback</text>
+    <path class="w" d="M170 50 H215 M170 105 H215 M170 160 H215 M170 215 H215 M215 50 V215"/>
+    <rect x="215" y="100" width="120" height="66" rx="10" class="box-hi"/>
+    <text x="236" y="130" class="b">Scheduler</text>
+    <text x="236" y="150" class="m dim">(the OS)</text>
+    <path class="w-hi" d="M335 120 H380 V70 H400"/>
+    <path class="w-g" d="M335 146 H380 V190 H400"/>
+    <rect x="400" y="30" width="200" height="80" rx="10" class="box"/>
+    <text x="414" y="52" class="b">big / P-cores</text>
+    <rect x="414" y="64" width="40" height="34" rx="4" class="box-r"/>
+    <rect x="464" y="64" width="40" height="34" rx="4" class="box-r"/>
+    <text x="514" y="86" class="m dim">fast, hot</text>
+    <rect x="400" y="150" width="200" height="80" rx="10" class="box"/>
+    <text x="414" y="172" class="b">LITTLE / E-cores</text>
+    <rect x="414" y="186" width="24" height="30" rx="4" class="box-g"/>
+    <rect x="444" y="186" width="24" height="30" rx="4" class="box-g"/>
+    <rect x="474" y="186" width="24" height="30" rx="4" class="box-g"/>
+    <rect x="504" y="186" width="24" height="30" rx="4" class="box-g"/>
+    <text x="536" y="206" class="m dim">cool</text>
+  </svg>
+  <figcaption>Heavy, urgent work (red) goes to the big cores. Light background work (green) goes to the little cores, which saves battery. Tasks can move when their demand changes.</figcaption>
+</figure>
+
+<h2>3. CPU + GPU</h2>
+<p>A CPU has a few big, clever cores. A GPU has <b>many simple cores</b> that run the same operation on lots of data at once. That is great for graphics, matrix maths and AI (details on <a href="m6-06-simd-gpu-tpu.html">SIMD &amp; GPUs</a>). How the data reaches the GPU matters a lot:</p>
+<figure class="diagram">
+  <svg viewBox="0 0 640 230" width="640" role="img" aria-label="Left: discrete GPU with its own memory, data copied over PCIe. Right: unified memory shared by CPU and GPU, no copy">
+    <text x="20" y="20" class="b">Discrete GPU (PC)</text>
+    <rect x="20" y="36" width="110" height="50" rx="8" class="box-b"/><text x="52" y="66" class="b">CPU</text>
+    <rect x="190" y="36" width="110" height="50" rx="8" class="box-g"/><text x="222" y="66" class="b">GPU</text>
+    <rect x="20" y="140" width="110" height="50" rx="8" class="box"/><text x="30" y="170" class="m">system RAM</text>
+    <rect x="190" y="140" width="110" height="50" rx="8" class="box"/><text x="200" y="170" class="m">GPU memory</text>
+    <path class="w" d="M75 86 V140 M245 86 V140"/>
+    <path class="w-hi" d="M130 61 H190"/>
+    <text x="140" y="54" class="m hi">PCIe</text>
+    <text x="20" y="215" class="r">data must be copied over PCIe</text>
+    <path class="grid" d="M330 20 V210"/>
+    <text x="360" y="20" class="b">Unified memory (Apple M-series)</text>
+    <rect x="360" y="36" width="110" height="50" rx="8" class="box-b"/><text x="392" y="66" class="b">CPU</text>
+    <rect x="510" y="36" width="110" height="50" rx="8" class="box-g"/><text x="542" y="66" class="b">GPU</text>
+    <rect x="360" y="140" width="260" height="50" rx="8" class="box-hi"/><text x="420" y="170" class="b">one shared memory pool</text>
+    <path class="w" d="M415 86 V140 M565 86 V140"/>
+    <text x="360" y="215" class="g">both read the same data, no copy</text>
+  </svg>
+  <figcaption>Copying data over PCIe takes time. For small jobs, the copy can cost more than the GPU saves. Unified memory avoids the copy.</figcaption>
+</figure>
+
+<h2>4. CPU + NPU</h2>
+<ul>
+  <li>An <b>NPU</b> is built for <b>inference</b>: running an already-trained neural network (face unlock, voice commands, photo effects).</li>
+  <li>It works mostly with <b>INT8</b>: 8-bit whole numbers instead of 32-bit decimal (floating-point) numbers. The answers are nearly as good, and much cheaper to compute.</li>
+  <li><b>Example:</b> a model with 100 million weights needs 100M × 4 bytes = <b>400 MB</b> in 32-bit float, but only 100M × 1 byte = <b>100 MB</b> in INT8. That is 4× less memory to store and move.</li>
+  <li>Power budgets are small, often a few watts or less on phones. A CPU doing the same job would use far more energy.</li>
+</ul>
+
+<h2>5. A modern SoC</h2>
+<figure class="diagram">
+  <svg viewBox="0 0 640 300" width="640" role="img" aria-label="System on chip: CPU clusters with P and E cores, GPU, NPU, ISP and DSP all connected by an on-chip interconnect to shared memory">
+    <rect x="10" y="10" width="620" height="280" rx="12" fill="none" class="w" stroke-dasharray="6 4"/>
+    <text x="24" y="32" class="m dim">one SoC package</text>
+    <rect x="30" y="46" width="190" height="110" rx="10" class="box-b"/>
+    <text x="44" y="68" class="b">CPU clusters</text>
+    <rect x="44" y="80" width="36" height="30" rx="4" class="box-r"/><text x="50" y="100" class="m">P</text>
+    <rect x="86" y="80" width="36" height="30" rx="4" class="box-r"/><text x="92" y="100" class="m">P</text>
+    <rect x="44" y="116" width="26" height="26" rx="4" class="box-g"/><text x="50" y="134" class="m">E</text>
+    <rect x="76" y="116" width="26" height="26" rx="4" class="box-g"/><text x="82" y="134" class="m">E</text>
+    <rect x="108" y="116" width="26" height="26" rx="4" class="box-g"/><text x="114" y="134" class="m">E</text>
+    <rect x="140" y="116" width="26" height="26" rx="4" class="box-g"/><text x="146" y="134" class="m">E</text>
+    <rect x="240" y="46" width="120" height="110" rx="10" class="box-g"/>
+    <text x="280" y="90" class="b">GPU</text><text x="252" y="112" class="m dim">graphics +</text><text x="252" y="128" class="m dim">parallel maths</text>
+    <rect x="380" y="46" width="110" height="110" rx="10" class="box-hi"/>
+    <text x="418" y="90" class="b">NPU</text><text x="392" y="112" class="m dim">AI inference</text><text x="392" y="128" class="m dim">INT8</text>
+    <rect x="510" y="46" width="100" height="50" rx="8" class="box"/><text x="546" y="76" class="b">ISP</text>
+    <rect x="510" y="106" width="100" height="50" rx="8" class="box"/><text x="546" y="136" class="b">DSP</text>
+    <rect x="30" y="180" width="580" height="30" rx="6" class="box-b"/>
+    <text x="250" y="200" class="b">on-chip interconnect</text>
+    <path class="w" d="M125 156 V180 M300 156 V180 M435 156 V180 M560 156 V180"/>
+    <path class="w" d="M320 210 V232"/>
+    <rect x="160" y="232" width="320" height="44" rx="8" class="box"/>
+    <text x="200" y="259" class="b">Shared memory (LPDDR DRAM)</text>
+  </svg>
+  <figcaption>A phone or laptop SoC. Each block wakes up only for its own kind of work. This is the practical answer to dark silicon.</figcaption>
+</figure>
+
+<h2>6. The accelerator spectrum</h2>
+<figure class="diagram">
+  <svg viewBox="0 0 600 320" width="600" role="img" aria-label="Illustrative chart: CPU is most flexible but least efficient, then GPU, then FPGA, and ASIC is least flexible but most efficient">
+    <defs><marker id="arH" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M0 0 L10 5 L0 10 Z" class="fill-ink"/></marker></defs>
+    <path class="w" d="M70 270 H570" marker-end="url(#arH)"/>
+    <path class="w" d="M70 270 V30" marker-end="url(#arH)"/>
+    <text x="360" y="296" class="b">energy efficiency (work per watt) →</text>
+    <text x="20" y="24" class="b">↑ flexibility</text>
+    <path class="w-hi" stroke-dasharray="6 4" d="M130 70 L250 130 L370 180 L500 235"/>
+    <circle cx="130" cy="70" r="26" class="box-b"/><text x="116" y="75" class="b">CPU</text>
+    <circle cx="250" cy="130" r="26" class="box-g"/><text x="236" y="135" class="b">GPU</text>
+    <circle cx="370" cy="180" r="28" class="box-hi"/><text x="351" y="185" class="b">FPGA</text>
+    <circle cx="500" cy="235" r="26" class="box-r"/><text x="484" y="240" class="b">ASIC</text>
+    <text x="162" y="62" class="m dim">runs anything</text>
+    <text x="282" y="122" class="m dim">parallel maths</text>
+    <text x="404" y="172" class="m dim">rewirable logic</text>
+    <text x="452" y="196" class="m dim">one job (NPU, TPU)</text>
+    <text x="80" y="296" class="dim">Illustrative, not to scale</text>
+  </svg>
+  <figcaption>Moving right, you gain efficiency but lose flexibility. An ASIC can't be changed after it is made, so its job must be important and stable (for example, video decoding or AI inference).</figcaption>
+</figure>
+
+<div class="scroll"><table>
+  <tr><th></th><th>CPU</th><th>GPU</th><th>FPGA</th><th>ASIC (NPU/TPU)</th></tr>
+  <tr><td>Flexibility</td><td>Highest: any program</td><td>High, for data-parallel code</td><td>Medium: can be rewired</td><td>Lowest: fixed</td></tr>
+  <tr><td>Efficiency</td><td>Lowest</td><td>Good</td><td>Better</td><td>Highest</td></tr>
+  <tr><td>Design cost</td><td>Buy off the shelf</td><td>Buy off the shelf</td><td>Hardware design skills</td><td>Very high (a custom chip)</td></tr>
+  <tr><td>Typical use</td><td>OS, control logic</td><td>Graphics, training AI</td><td>Prototypes, networking</td><td>Phones, data centres at scale</td></tr>
+</table></div>
+
+<h2>7. Lab 6A tie-in: asymmetric duties</h2>
+<p>The ESP32 in Lab 6A has two <em>identical</em> cores, but the lab gives them <b>different jobs</b>. Core 0 handles the interrupt-driven sensor. Core 1 does the maths. That is heterogeneity in how the work is split, even though the hardware is the same. Real SoCs take the next step and make the hardware different too.</p>
+<h3>A fair throughput comparison</h3>
+<ol class="flow arrows">
+  <li><b>Fix the workload</b>Same sample rate, same window size, same run time.</li>
+  <li><b>Warm up</b>Ignore the first few seconds.</li>
+  <li><b>Measure</b>Throughput = windows processed ÷ seconds.</li>
+  <li><b>Repeat</b>3–5 runs per setup. Report the average.</li>
+  <li><b>Compare</b>Speedup = split ÷ single-core.</li>
+</ol>
+<div class="callout tip"><b>Reading the numbers (made-up example)</b><p>Say single-core gives 800 windows/s and split gives 1400 windows/s. Speedup = 1400 ÷ 800 = <b>1.75×</b>. That is less than 2×, because of the queue overhead and the serial parts (Amdahl). Use your own measurements in the report.</p></div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Saying little cores are "worse". They give <b>more work per watt</b> for light loads. That is the whole point.</li>
+  <li>Assuming the GPU is always faster. For small data, the PCIe copy can make it <b>slower</b>.</li>
+  <li>Mixing up training (learning the weights; usually on big GPUs/TPUs) and <b>inference</b> (using them; what NPUs target).</li>
+  <li>Placing the FPGA and ASIC the wrong way round: an ASIC is <b>more</b> efficient and <b>less</b> flexible.</li>
+  <li>big.LITTLE cores share the <b>same instruction set</b>. That is what lets tasks move between them.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>What problem does big.LITTLE solve?</summary><div class="a"><p>Most of the time a phone does light work. Running it on big cores wastes battery. Little cores handle light work efficiently, and big cores wake up only for heavy bursts.</p></div></details>
+  <details class="q"><summary>Why might a small matrix multiply run slower on a discrete GPU than on the CPU?</summary><div class="a"><p>The data must be copied to GPU memory over PCIe and back. For small data, that copy time is larger than the time the GPU saves.</p></div></details>
+  <details class="q"><summary>A 50-million-weight model: how much memory in 32-bit float and in INT8?</summary><div class="a"><p>50M × 4 bytes = <b>200 MB</b>. 50M × 1 byte = <b>50 MB</b>. INT8 is 4× smaller.</p></div></details>
+  <details class="q"><summary>Order CPU, ASIC, GPU, FPGA from most flexible to most efficient.</summary><div class="a"><p><b>CPU → GPU → FPGA → ASIC.</b> Flexibility falls and efficiency rises along the list.</p></div></details>
+  <details class="q"><summary>What is unified memory and why does it help?</summary><div class="a"><p>The CPU and GPU share one physical memory pool, so data doesn't need to be copied between them. That saves time and energy.</p></div></details>
+  <details class="q"><summary>Single-core: 500 windows/s. Split: 900 windows/s. What is the speedup, and why isn't it 2×?</summary><div class="a"><p>900 ÷ 500 = <b>1.8×</b>. The queue adds overhead, and part of the work can't run in parallel (Amdahl's law).</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=KClygZtp8mA" target="_blank" rel="noopener"><i class="play"></i><span><b>ARM big.LITTLE Technology Explained</b><small>Arm®</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=IrBlWB2bxQU" target="_blank" rel="noopener"><i class="play"></i><span><b>The big.LITTLE CPU Revolution: From Arm &amp; Apple to Intel &amp; AMD</b><small>ExplainingComputers</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=mCaenGlWURw" target="_blank" rel="noopener"><i class="play"></i><span><b>Heterogeneous Computing: CPU vs GPU vs Accelerators Explained</b><small>CodeLucky</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CSA222 Study Notes</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+<style>
+  .stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 18px 0 6px; }
+  .stack div { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 14px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); font-size: 15px; }
+  .stack div.on { background: var(--copper-soft); border-color: var(--copper); }
+  .stack div span:last-child { font: 700 12px/1 var(--mono); color: var(--copper); white-space: nowrap; }
+  .plan { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin-top: 14px; }
+  .plan div { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; font-size: 14px; }
+  .plan b { display: block; font-family: var(--display); font-size: 16px; }
+  .plan .soon { border-color: var(--copper); background: var(--copper-soft); }
+  .none { color: var(--ink-2); display: none; margin-top: 16px; }
+</style>
+
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / All topics</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="idx-hero">
+  <div class="eyebrow">CSA222 · Modern Computer Architecture</div>
+  <h1>From one logic gate to a whole computer</h1>
+  <p>Short study notes that assume you know nothing yet. Every topic has plain-English explanations, diagrams, code explained line by line, worked examples, exam traps, practice questions and videos. Pick a topic below.</p>
+  <div class="legend"><span class="tag class">From class notes</span> Written from your lecture and lab PDFs. <span class="tag book">From syllabus</span> Written from the syllabus and standard textbooks (Patterson &amp; Hennessy).</div>
+</section>
+
+<div class="plan">
+  <div><b>Contest 1</b>Modules 1–2</div>
+  <div class="soon"><b>Contest 2</b>Modules 3–4</div>
+  <div><b>Mid-sem</b>Modules 1–4</div>
+  <div><b>Contest 3</b>Modules 5–6</div>
+</div>
+
+<div class="stack" aria-label="Where each module sits in a computer, from software down to transistors">
+  <div><span>Applications, languages (C, Python)</span><span>M3</span></div>
+  <div class="on"><span>Instruction set (ISA): MIPS, RISC-V</span><span>M3</span></div>
+  <div class="on"><span>CPU datapath, pipeline, caches, multicore</span><span>M4 · M5 · M6</span></div>
+  <div class="on"><span>Registers, counters, FSMs, memory cells</span><span>M2</span></div>
+  <div class="on"><span>Logic gates, adders, MUXes</span><span>M1</span></div>
+  <div><span>Transistors</span><span></span></div>
+</div>
+
+<label for="q" class="eyebrow" style="margin-top:18px;display:block">Find a topic</label>
+<input id="q" class="search" type="search" placeholder="Try: K-map, overflow, pipeline, cache, mutex…" autocomplete="off">
+<p class="none" id="none">No topic matches that search.</p>
+
+<section class="module">
+  <div class="module-head"><span class="mnum">M1</span><h2>Digital Foundations</h2><span class="when">Weeks 1–2 · Contest 1</span></div>
+  <p>How 0s and 1s become logic, and how logic adds numbers.</p>
+  <ul class="topic-list">
+    <li><a href="m1-00-verilog-basics.html"><b><span class="n">1.0</span>Verilog for absolute beginners</b><span>Start here if you have never coded: module, wire, assign, testbench, GTKWave.</span></a></li>
+    <li><a href="m1-01-boolean-gates.html"><b><span class="n">1.1</span>Boolean algebra &amp; logic gates</b><span>AND, OR, NOT, XOR and friends, truth tables, laws, De Morgan.</span></a></li>
+    <li><a href="m1-02-logic-minimization.html"><b><span class="n">1.2</span>Logic minimization &amp; K-maps</b><span>SOP/POS, minterms, K-maps, don't-cares, NAND/NOR universality.</span></a></li>
+    <li><a href="m1-03-mux-demux-decoder.html"><b><span class="n">1.3</span>MUX, DEMUX &amp; decoders</b><span>Picking one signal out of many, and routing one signal to many.</span></a></li>
+    <li><a href="m1-04-adders.html"><b><span class="n">1.4</span>Adders: half, full, ripple, look-ahead</b><span>Adding bits in hardware, and making it fast (Labs 1A/1B).</span></a></li>
+    <li><a href="m1-05-number-systems.html"><b><span class="n">1.5</span>Number systems &amp; two's complement</b><span>Binary, hex, negative numbers, sign extension, conversions.</span></a></li>
+    <li><a href="m1-06-overflow.html"><b><span class="n">1.6</span>Adder-subtractor &amp; overflow</b><span>One circuit for + and −, and the carry and overflow flags (CF, OF).</span></a></li>
+  </ul>
+</section>
+
+<section class="module">
+  <div class="module-head"><span class="mnum">M2</span><h2>Sequential Circuits &amp; Memory</h2><span class="when">Weeks 3–4 · Contest 1</span></div>
+  <p>Circuits that remember: latches, flip-flops, registers, state machines, RAM.</p>
+  <ul class="topic-list">
+    <li><a href="m2-01-latches.html"><b><span class="n">2.1</span>Latches: SR &amp; D</b><span>Feedback creates memory. The forbidden state and the D latch fix.</span></a></li>
+    <li><a href="m2-02-flipflops-timing.html"><b><span class="n">2.2</span>Flip-flops &amp; timing</b><span>Edge vs level triggering, D/JK/T flip-flops, setup/hold, metastability.</span></a></li>
+    <li><a href="m2-03-registers-shift.html"><b><span class="n">2.3</span>Registers &amp; shift registers</b><span>The 8-bit register with load and reset, SISO/SIPO/PISO/PIPO (Lab 2A).</span></a></li>
+    <li><a href="m2-04-counters.html"><b><span class="n">2.4</span>Counters</b><span>Ripple vs synchronous counters, up/down, mod-N, ring and Johnson.</span></a></li>
+    <li><a href="m2-05-register-file.html"><b><span class="n">2.5</span>Register file</b><span>Two reads and one write per cycle: decoder, write-enable, MUXes (Lab 2B).</span></a></li>
+    <li><a href="m2-06-fsm.html"><b><span class="n">2.6</span>FSMs: Moore vs Mealy</b><span>State diagrams, transition tables, the 1011 sequence detector.</span></a></li>
+    <li><a href="m2-07-sram-dram.html"><b><span class="n">2.7</span>SRAM vs DRAM</b><span>6 transistors vs 1 transistor + 1 capacitor, refresh, where each is used.</span></a></li>
+  </ul>
+</section>
+
+<section class="module">
+  <div class="module-head"><span class="mnum">M3</span><h2>Computer Organization &amp; ISA</h2><span class="when">Weeks 5–6 · Contest 2</span></div>
+  <p>The language a CPU speaks, and how C code becomes MIPS assembly.</p>
+  <ul class="topic-list">
+    <li><a href="m3-01-von-neumann-harvard.html"><b><span class="n">3.1</span>Von Neumann vs Harvard</b><span>Shared memory vs separate memory for code and data.</span></a></li>
+    <li><a href="m3-02-cisc-risc-riscv.html"><b><span class="n">3.2</span>CISC vs RISC &amp; RISC-V</b><span>Two design philosophies, and RISC-V's modular extensions.</span></a></li>
+    <li><a href="m3-03-mips-registers-formats.html"><b><span class="n">3.3</span>MIPS32 registers &amp; instruction formats</b><span>32 registers, and the R, I, J formats encoded bit by bit.</span></a></li>
+    <li><a href="m3-04-c-to-mips.html"><b><span class="n">3.4</span>C to MIPS: if-else, loops, arrays</b><span>C explained from zero, then translated. Lab 3A: array sum and max.</span></a></li>
+    <li><a href="m3-05-functions-stack.html"><b><span class="n">3.5</span>Functions, stack &amp; recursion in MIPS</b><span>jal/jr, stack frames, recursive factorial, the MARS simulator (Lab 3B).</span></a></li>
+  </ul>
+</section>
+
+<section class="module">
+  <div class="module-head"><span class="mnum">M4</span><h2>CPU Datapath &amp; Pipelining</h2><span class="when">Weeks 7–8 · Contest 2</span></div>
+  <p>How a CPU runs one instruction, then many at once on an assembly line.</p>
+  <ul class="topic-list">
+    <li><a href="m4-01-single-cycle-datapath.html"><b><span class="n">4.1</span>Fetch-decode-execute &amp; single-cycle datapath</b><span>The path an instruction takes through the CPU.</span></a></li>
+    <li><a href="m4-02-pipeline-5-stage.html"><b><span class="n">4.2</span>5-stage pipeline</b><span>IF → ID → EX → MEM → WB, with pipeline timing charts.</span></a></li>
+    <li><a href="m4-03-hazards-forwarding.html"><b><span class="n">4.3</span>Hazards, forwarding &amp; branch prediction</b><span>RAW/WAW/WAR, load-use stalls, control hazards (Lab 4A/4B).</span></a></li>
+    <li><a href="m4-04-performance.html"><b><span class="n">4.4</span>Performance: CPI, IPC &amp; Amdahl's Law</b><span>How to measure speed, and the limits of speeding things up.</span></a></li>
+  </ul>
+</section>
+
+<section class="module">
+  <div class="module-head"><span class="mnum">M5</span><h2>Memory Hierarchy &amp; Cache</h2><span class="when">Weeks 9–10 · Contest 3</span></div>
+  <p>Why memory is slow, and how caches make it look fast.</p>
+  <ul class="topic-list">
+    <li><a href="m5-01-memory-wall-locality.html"><b><span class="n">5.1</span>Memory wall &amp; locality</b><span>Temporal and spatial locality, row vs column traversal (Labs 5A/5B).</span></a></li>
+    <li><a href="m5-02-cache-organization.html"><b><span class="n">5.2</span>Cache organization &amp; lookup</b><span>Direct-mapped and set-associative caches, tag/index/offset examples.</span></a></li>
+    <li><a href="m5-03-cache-policies.html"><b><span class="n">5.3</span>Replacement &amp; write policies</b><span>LRU vs FIFO, write-through vs write-back.</span></a></li>
+    <li><a href="m5-04-amat.html"><b><span class="n">5.4</span>AMAT &amp; multi-level caches</b><span>Average memory access time, with a solved problem set.</span></a></li>
+    <li><a href="m5-05-virtual-memory.html"><b><span class="n">5.5</span>Virtual memory, page tables &amp; TLB</b><span>Pages, address translation, the TLB shortcut.</span></a></li>
+  </ul>
+</section>
+
+<section class="module">
+  <div class="module-head"><span class="mnum">M6</span><h2>Parallelism, Multicore &amp; Modern Architectures</h2><span class="when">Weeks 11–12 · Contest 3</span></div>
+  <p>Why single cores stopped getting faster, and what replaced them.</p>
+  <ul class="topic-list">
+    <li><a href="m6-01-power-wall-multicore.html"><b><span class="n">6.1</span>Power wall &amp; multicore</b><span>How the end of Dennard scaling led to many cores.</span></a></li>
+    <li><a href="m6-02-mesi-cache-coherence.html"><b><span class="n">6.2</span>Cache coherence &amp; MESI</b><span>Keeping each core's cached copies consistent.</span></a></li>
+    <li><a href="m6-03-atomics-mutex.html"><b><span class="n">6.3</span>Data races, atomics &amp; mutexes</b><span>TAS, CAS, locks, and the shared counter demo (Lab 6B).</span></a></li>
+    <li><a href="m6-04-heterogeneous.html"><b><span class="n">6.4</span>Heterogeneous computing</b><span>big.LITTLE, CPU + GPU, CPU + NPU, dual-core offload (Lab 6A).</span></a></li>
+    <li><a href="m6-05-ilp-superscalar-ooo.html"><b><span class="n">6.5</span>ILP: superscalar, OoO &amp; renaming</b><span>Running more instructions per cycle, and running them out of order.</span></a></li>
+    <li><a href="m6-06-simd-gpu-tpu.html"><b><span class="n">6.6</span>SIMD, GPUs &amp; AI hardware</b><span>Vectors, GPU threads, TPUs, chiplets, the matmul benchmark (Lab 6C).</span></a></li>
+    <li><a href="m6-07-spectre-meltdown.html"><b><span class="n">6.7</span>Spectre &amp; Meltdown</b><span>When speculative execution leaks secrets.</span></a></li>
+  </ul>
+</section>
+</main>
+
+<script>
+(function () {
+  var box = document.getElementById("q");
+  var none = document.getElementById("none");
+  box.addEventListener("input", function () {
+    var t = box.value.trim().toLowerCase();
+    var shown = 0;
+    document.querySelectorAll(".module").forEach(function (m) {
+      var any = 0;
+      m.querySelectorAll(".topic-list li").forEach(function (li) {
+        var hit = !t || li.textContent.toLowerCase().indexOf(t) !== -1;
+        li.hidden = !hit;
+        if (hit) any++;
+      });
+      m.hidden = !any;
+      shown += any;
+    });
+    none.style.display = shown ? "none" : "block";
+  });
+})();
+</script>

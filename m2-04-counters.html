@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Counters</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 2 / Counters</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 2 · Memory &amp; State <span class="tag class">From class notes · L06 &amp; Lab 06</span></div>
+  <h1>Counters: ripple, synchronous, ring &amp; Johnson</h1>
+  <p class="idea">A <strong>counter</strong> is a register that steps through a fixed sequence of values, one step per clock edge. An n-bit binary counter goes 0, 1, 2 … 2ⁿ−1 and then wraps back to 0. The CPU's program counter (PC) is a counter.</p>
+  <div class="analogy"><b>Think of it like this:</b> a car's odometer. The right wheel turns every kilometre. A wheel moves on only when every wheel to its right has just rolled over from 9 to 0. In binary the rule is the same, but each wheel only has 0 and 1.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Counter</dt><dd>Register + incrementer (+1 logic) + feedback of the result into the register.</dd></div>
+  <div class="term"><dt>Modulus (mod-N)</dt><dd>The number of different states before the counter repeats. A 3-bit binary counter is mod-8.</dd></div>
+  <div class="term"><dt>Ripple (asynchronous) counter</dt><dd>Each flip-flop is clocked by the previous flip-flop's output.</dd></div>
+  <div class="term"><dt>Synchronous counter</dt><dd>All flip-flops share one clock; logic decides which ones change.</dd></div>
+  <div class="term"><dt>t_pd</dt><dd>Propagation delay: how long one flip-flop takes to update its output.</dd></div>
+  <div class="term"><dt>Excitation table</dt><dd>Tells you which flip-flop input produces a wanted change Q → Q⁺.</dd></div>
+  <div class="term"><dt>One-hot</dt><dd>Exactly one bit is 1 at a time, e.g. 0100.</dd></div>
+  <div class="term"><dt>⌈x⌉ (ceiling)</dt><dd>Round x up to the next whole number. ⌈3.58⌉ = 4.</dd></div>
+</dl>
+
+<h2>1. The counting rule</h2>
+<p>Look at binary counting: 000, 001, 010, 011, 100… Bit 0 flips every time. Bit 1 flips when bit 0 was 1. Bit 2 flips when bits 0 and 1 were both 1.</p>
+<div class="formula">A bit flips exactly when every bit below it is 1<small>So, using T flip-flops (T = 1 means flip): T0 = 1 · T1 = Q0 · T2 = Q0·Q1 · T3 = Q0·Q1·Q2</small></div>
+
+<h2>2. Ripple (asynchronous) counter</h2>
+<p>Every flip-flop is a T flip-flop with T = 1, so each one flips whenever it is clocked. Only FF0 sees the real clock. Each later flip-flop is clocked by the output of the one before it, and flips when that output <b>falls</b> from 1 to 0 (the bubble on the clock pin means "falling edge").</p>
+<figure class="diagram">
+  <svg viewBox="0 0 600 195" width="600" role="img" aria-label="3-bit ripple counter: three T flip-flops with T tied to 1. The clock drives FF0, Q0 clocks FF1, Q1 clocks FF2.">
+    <text x="100" y="14" class="m">T=1</text>
+    <text x="280" y="14" class="m">T=1</text>
+    <text x="460" y="14" class="m">T=1</text>
+    <path class="w" d="M115 20 V50 M295 20 V50 M475 20 V50"/>
+    <rect x="60" y="50" width="110" height="80" rx="6" class="box-b"/>
+    <rect x="240" y="50" width="110" height="80" rx="6" class="box-b"/>
+    <rect x="420" y="50" width="110" height="80" rx="6" class="box-b"/>
+    <text x="96" y="100" class="b">T FF0</text>
+    <text x="276" y="100" class="b">T FF1</text>
+    <text x="456" y="100" class="b">T FF2</text>
+    <text x="110" y="66" class="m">T</text><text x="290" y="66" class="m">T</text><text x="470" y="66" class="m">T</text>
+    <text x="152" y="74" class="m">Q</text><text x="332" y="74" class="m">Q</text><text x="512" y="74" class="m">Q</text>
+    <path class="w" d="M60 102 L70 110 L60 118 M240 102 L250 110 L240 118 M420 102 L430 110 L420 118"/>
+    <circle cx="56" cy="110" r="4" class="box"/>
+    <circle cx="236" cy="110" r="4" class="box"/>
+    <circle cx="416" cy="110" r="4" class="box"/>
+    <text x="12" y="102" class="m b">clk</text>
+    <path class="w-hi" d="M12 110 H52"/>
+    <path class="w-hi" d="M170 70 H200 V110 H232"/>
+    <path class="w-hi" d="M350 70 H380 V110 H412"/>
+    <path class="w-g" d="M530 70 H580"/>
+    <text x="560" y="62" class="g">Q2</text>
+    <circle cx="185" cy="70" r="3.5" class="fill-ink"/>
+    <circle cx="365" cy="70" r="3.5" class="fill-ink"/>
+    <path class="w-g" d="M185 70 V170 M365 70 V170"/>
+    <text x="176" y="186" class="g">Q0</text>
+    <text x="356" y="186" class="g">Q1</text>
+  </svg>
+  <figcaption>The copper path is the "clock" for each stage: it ripples from left to right. Outputs: Q0 (LSB), Q1, Q2 (MSB).</figcaption>
+</figure>
+<ul>
+  <li>2-bit sequence: 00, 01, 10, 11, 00… Q1 toggles only when Q0 falls 1→0.</li>
+  <li>n stages count <b>mod 2ⁿ</b> and divide the clock frequency by 2ⁿ.</li>
+</ul>
+
+<h3>The speed limit: watch 7 → 8</h3>
+<p>Each stage waits for the one before it, so the bits change one after another. For a moment the counter shows <b>wrong values</b> (glitches):</p>
+<div class="scroll"><table class="tt">
+  <tr><th>Time after the edge</th><th class="out">Q3 Q2 Q1 Q0</th><th>Value</th></tr>
+  <tr><td>before</td><td class="out">0111</td><td class="one">7 ✓</td></tr>
+  <tr><td>1 t_pd (Q0 flips)</td><td class="out">0110</td><td>6 ✗</td></tr>
+  <tr><td>2 t_pd (Q1 flips)</td><td class="out">0100</td><td>4 ✗</td></tr>
+  <tr><td>3 t_pd (Q2 flips)</td><td class="out">0000</td><td>0 ✗</td></tr>
+  <tr class="hl"><td>4 t_pd (Q3 flips)</td><td class="out">1000</td><td class="one">8 ✓</td></tr>
+</table></div>
+<div class="formula">t_settle = n × t_pd &nbsp;&nbsp;→&nbsp;&nbsp; f_max = 1 / (n × t_pd)<small>t_pd = 10 ns: 4-bit → 1/(40 ns) = 25 MHz · 16-bit → 1/(160 ns) ≈ 6 MHz. A CPU clock is about 3 GHz, so ripple counters are far too slow.</small></div>
+
+<h2>3. Synchronous counter</h2>
+<p>All flip-flops share <b>one clock</b>. Combinational logic (the T equations) works out in advance which flip-flops should flip. At the edge they all change together, so the count is valid right after the edge, with no glitches.</p>
+<div class="scroll"><table>
+  <tr><th></th><th>Ripple</th><th>Synchronous</th></tr>
+  <tr><td>Clocking</td><td>chained</td><td>shared</td></tr>
+  <tr><td>Speed</td><td>slow (delay grows with n)</td><td>fast</td></tr>
+  <tr><td>Glitches</td><td>yes</td><td>no</td></tr>
+  <tr><td>Complexity</td><td>simple</td><td>needs next-state logic</td></tr>
+  <tr><td>Use</td><td>toy or low-speed dividers</td><td>anything performance-critical</td></tr>
+</table></div>
+
+<h3>Design method</h3>
+<ol class="flow arrows">
+  <li><b>1. Sequence</b>Write the count order.</li>
+  <li><b>2. State table</b>Present state → next state.</li>
+  <li><b>3. Excitation</b>Find each flip-flop's input.</li>
+  <li><b>4. Simplify</b>Use K-maps.</li>
+  <li><b>5. Wire</b>Shared clock.</li>
+</ol>
+
+<div class="vs">
+  <div>
+    <h3>T flip-flop excitation table</h3>
+    <div class="scroll" style="margin:0"><table class="tt">
+      <tr><th>Q → Q⁺</th><th class="out">T</th></tr>
+      <tr><td>0 → 0</td><td class="out zero">0</td></tr>
+      <tr><td>0 → 1</td><td class="out one">1</td></tr>
+      <tr><td>1 → 0</td><td class="out one">1</td></tr>
+      <tr><td>1 → 1</td><td class="out zero">0</td></tr>
+    </table></div>
+  </div>
+  <div>
+    <p><b>How to read it:</b> "if the bit must change, T = 1; if it stays, T = 0".</p>
+    <p style="margin:0">It is the characteristic table read backwards: we know the change we want and ask which input causes it.</p>
+  </div>
+</div>
+
+<h3>Worked example: 2-bit up counter</h3>
+<div class="stepper" data-stepper>
+  <div class="stage"><p><b>Step 1: sequence.</b> 00 → 01 → 10 → 11 → 00 (repeat).</p></div>
+  <div class="stage"><p><b>Step 2 &amp; 3: state table + excitation.</b> For each bit, compare now and next: changed → T = 1.</p>
+    <div class="scroll"><table class="tt">
+      <tr><th>Q1 Q0</th><th>Next</th><th class="out">T1</th><th>T0</th></tr>
+      <tr><td>00</td><td>01</td><td class="out zero">0</td><td class="one">1</td></tr>
+      <tr><td>01</td><td>10</td><td class="out one">1</td><td class="one">1</td></tr>
+      <tr><td>10</td><td>11</td><td class="out zero">0</td><td class="one">1</td></tr>
+      <tr><td>11</td><td>00</td><td class="out one">1</td><td class="one">1</td></tr>
+    </table></div></div>
+  <div class="stage"><p><b>Step 4: simplify.</b> T0 is 1 in every row, so <b>T0 = 1</b>. T1 is 1 exactly when Q0 = 1, so <b>T1 = Q0</b>.</p></div>
+  <div class="stage"><p><b>Step 5: wire it.</b> Both flip-flops on the same clock; FF0's T tied to 1; FF1's T connected to Q0. Done.</p></div>
+</div>
+
+<h3>Extending to 3 bits</h3>
+<div class="scroll"><table class="tt">
+  <tr><th>Q2 Q1 Q0</th><th>Next</th><th class="out">T2</th><th>T1</th><th>T0</th></tr>
+  <tr><td>000</td><td>001</td><td class="out zero">0</td><td class="zero">0</td><td class="one">1</td></tr>
+  <tr><td>001</td><td>010</td><td class="out zero">0</td><td class="one">1</td><td class="one">1</td></tr>
+  <tr><td>010</td><td>011</td><td class="out zero">0</td><td class="zero">0</td><td class="one">1</td></tr>
+  <tr class="hl"><td>011</td><td>100</td><td class="out one">1</td><td class="one">1</td><td class="one">1</td></tr>
+  <tr><td>100</td><td>101</td><td class="out zero">0</td><td class="zero">0</td><td class="one">1</td></tr>
+  <tr><td>101</td><td>110</td><td class="out zero">0</td><td class="one">1</td><td class="one">1</td></tr>
+  <tr><td>110</td><td>111</td><td class="out zero">0</td><td class="zero">0</td><td class="one">1</td></tr>
+  <tr class="hl"><td>111</td><td>000</td><td class="out one">1</td><td class="one">1</td><td class="one">1</td></tr>
+</table></div>
+<p>Result: <b>T0 = 1, T1 = Q0, T2 = Q1·Q0</b>, exactly the counting rule. T2 is 1 only in the two highlighted rows, where Q1 = Q0 = 1.</p>
+
+<h3>Timing diagram of a 3-bit synchronous counter</h3>
+<figure class="diagram">
+  <svg viewBox="0 0 600 220" width="600" role="img" aria-label="Timing diagram: clock with 8 rising edges; Q0 toggles every edge, Q1 every 2 edges, Q2 every 4 edges; count goes 1 to 7 then 0.">
+    <g class="grid">
+      <path d="M110 15 V190 M170 15 V190 M230 15 V190 M290 15 V190 M350 15 V190 M410 15 V190 M470 15 V190 M530 15 V190"/>
+    </g>
+    <text x="10" y="40" class="m b">CLK</text>
+    <text x="10" y="85" class="m b">Q0</text>
+    <text x="10" y="130" class="m b">Q1</text>
+    <text x="10" y="175" class="m b">Q2</text>
+    <text x="10" y="210" class="m b">count</text>
+    <path class="w" d="M80 45 H110 V25 H140 V45 H170 V25 H200 V45 H230 V25 H260 V45 H290 V25 H320 V45 H350 V25 H380 V45 H410 V25 H440 V45 H470 V25 H500 V45 H530 V25 H560 V45"/>
+    <path class="w-g" d="M80 90 H110 V70 H170 V90 H230 V70 H290 V90 H350 V70 H410 V90 H470 V70 H530 V90 H560"/>
+    <path class="w-g" d="M80 135 H170 V115 H290 V135 H410 V115 H530 V135 H560"/>
+    <path class="w-hi" d="M80 180 H290 V160 H530 V180 H560"/>
+    <g>
+      <text x="88" y="210" class="m">0</text><text x="136" y="210" class="m">1</text><text x="196" y="210" class="m">2</text>
+      <text x="256" y="210" class="m">3</text><text x="316" y="210" class="m">4</text><text x="376" y="210" class="m">5</text>
+      <text x="436" y="210" class="m">6</text><text x="496" y="210" class="m">7</text><text x="552" y="210" class="m">0</text>
+    </g>
+  </svg>
+  <figcaption>All bits change together on each rising edge (faint vertical lines). Q0 has half the clock frequency, Q1 a quarter, Q2 an eighth: each output bit is a clock divider.</figcaption>
+</figure>
+
+<h3>The Verilog, line by line</h3>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · up2.v (built from the T equations)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> up2 (</td><td class="n">A 2-bit up counter.</td></tr>
+    <tr><td class="c">  <span class="kw">input</span> clk, rst,</td><td class="n">Clock and reset.</td></tr>
+    <tr><td class="c">  <span class="kw">output reg</span> [<span class="num">1</span>:<span class="num">0</span>] q</td><td class="n">The 2-bit count.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> T0 = <span class="num">1'b1</span>;</td><td class="n">T0 = 1, straight from the design.</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> T1 = q[<span class="num">0</span>];</td><td class="n">T1 = Q0.</td></tr>
+    <tr><td class="c">  <span class="kw">always @(posedge</span> clk<span class="kw">) begin</span></td><td class="n">One shared clock for both bits: synchronous.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rst) q &lt;= <span class="num">2'b00</span>;</td><td class="n">Reset to 0.</td></tr>
+    <tr><td class="c">    <span class="kw">else begin</span></td><td class="n"></td></tr>
+    <tr><td class="c">      q[<span class="num">0</span>] &lt;= q[<span class="num">0</span>] ^ T0;</td><td class="n"><code>^</code> is XOR. Q XOR T = "flip if T is 1": a T flip-flop made from a D flip-flop.</td></tr>
+    <tr><td class="c">      q[<span class="num">1</span>] &lt;= q[<span class="num">1</span>] ^ T1;</td><td class="n">Bit 1 flips only when q[0] was 1.</td></tr>
+    <tr><td class="c">    <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<p>Real designs don't write T equations by hand. They write <code>q + 1</code> and the synthesis tool works out the logic:</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · up_counter4.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> up_counter4 (</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">input</span> clk, rst, en,</td><td class="n"><code>en</code> = enable: count only when it is 1.</td></tr>
+    <tr><td class="c">  <span class="kw">output reg</span> [<span class="num">3</span>:<span class="num">0</span>] q</td><td class="n">4-bit count, 0 to 15.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always @(posedge</span> clk<span class="kw">) begin</span></td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rst)</td><td class="n">Reset has top priority…</td></tr>
+    <tr><td class="c">      q &lt;= <span class="num">4'b0000</span>;</td><td class="n">…and starts the count at 0.</td></tr>
+    <tr><td class="c">    <span class="kw">else if</span> (en)</td><td class="n">Enabled?</td></tr>
+    <tr><td class="c">      q &lt;= q + <span class="num">4'b0001</span>;  <span class="com">// wraps: 1111+1 = 0000</span></td><td class="n">Add 1. A 4-bit result has no room for a 5th bit, so 15 + 1 wraps to 0 for free.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">en = 0: hold.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h2>4. Down, up/down and mod-N counters</h2>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · down_counter4.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> down_counter4 (</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">input</span> clk, rst, en,</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">output reg</span> [<span class="num">3</span>:<span class="num">0</span>] q</td><td class="n"></td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always @(posedge</span> clk<span class="kw">) begin</span></td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rst)</td><td class="n"></td></tr>
+    <tr><td class="c">      q &lt;= <span class="num">4'b1111</span>;</td><td class="n">Reset to the <b>maximum</b> (15), so there is room to count down.</td></tr>
+    <tr><td class="c">    <span class="kw">else if</span> (en)</td><td class="n"></td></tr>
+    <tr><td class="c">      q &lt;= q - <span class="num">4'b0001</span>;</td><td class="n">Subtract 1. 0000 − 1 wraps to 1111.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · updown4.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> updown4 (</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">input</span> clk, rst, up_down,</td><td class="n"><code>up_down</code> picks the direction: 1 = up, 0 = down.</td></tr>
+    <tr><td class="c">  <span class="kw">output reg</span> [<span class="num">3</span>:<span class="num">0</span>] q</td><td class="n"></td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always @(posedge</span> clk<span class="kw">) begin</span></td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rst) q &lt;= <span class="num">4'b0000</span>;</td><td class="n">Reset.</td></tr>
+    <tr><td class="c">    <span class="kw">else if</span> (up_down)</td><td class="n">Direction = up?</td></tr>
+    <tr><td class="c">      q &lt;= q + <span class="num">4'b0001</span>;</td><td class="n">Count up.</td></tr>
+    <tr><td class="c">    <span class="kw">else</span></td><td class="n">Otherwise…</td></tr>
+    <tr><td class="c">      q &lt;= q - <span class="num">4'b0001</span>;</td><td class="n">…count down.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h3>Mod-N counters</h3>
+<p>A mod-N counter has N states: 0 … N−1. Example: <b>mod-6</b> from a 3-bit counter gives 0 → 1 → 2 → 3 → 4 → 5 → 0.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · mod6.v (synchronous)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> mod6 (<span class="kw">input</span> clk, rst,</td><td class="n"></td></tr>
+    <tr><td class="c">             <span class="kw">output reg</span> [<span class="num">2</span>:<span class="num">0</span>] q);</td><td class="n">3 bits are enough for 6 states (⌈log₂6⌉ = 3).</td></tr>
+    <tr><td class="c">  <span class="kw">always @(posedge</span> clk<span class="kw">)</span></td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rst || q == <span class="num">3'd5</span>)</td><td class="n"><code>||</code> = OR, <code>==</code> = "is equal to", <code>3'd5</code> = the number 5 in 3 bits. If reset, or we are at the last state…</td></tr>
+    <tr><td class="c">      q &lt;= <span class="num">3'd0</span>;</td><td class="n">…go back to 0 (a synchronous reset used as the wrap).</td></tr>
+    <tr><td class="c">    <span class="kw">else</span></td><td class="n"></td></tr>
+    <tr><td class="c">      q &lt;= q + <span class="num">3'd1</span>;</td><td class="n">Otherwise count up.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="callout tip"><b>"Detect 6" or "detect 5"?</b><p>The class describes mod-6 as "detect 6 and reset". That is the <b>asynchronous-clear</b> version: the counter reaches 110 and is cleared immediately, so 6 appears only as a brief glitch. In a <b>synchronous</b> design (above), you detect the last valid state, <b>5</b>, and load 0 at the next edge. Both give the sequence 0–5.</p></div>
+<ul>
+  <li><b>Output bits as clock dividers:</b> bit 0 = clock ÷ 2, bit 1 = ÷ 4, bit 2 = ÷ 8.</li>
+  <li><b>Watch seconds:</b> a mod-60 counter.</li>
+</ul>
+<div class="formula">flip-flops needed = ⌈log₂ N⌉<small>mod-12: log₂12 ≈ 3.58 → 4 flip-flops · dividing 1 MHz to 1 kHz needs mod-1000: log₂1000 ≈ 9.97 → 10 flip-flops</small></div>
+
+<h2>5. Ring and Johnson counters</h2>
+<p>Both are shift registers whose last output is fed back to the first input.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 600 170" width="600" role="img" aria-label="Four flip-flops in a chain with a feedback wire from q3 back to q0. Ring counter feeds q3 directly; Johnson counter feeds NOT q3.">
+    <rect x="60" y="40" width="80" height="50" rx="6" class="box-b"/>
+    <rect x="190" y="40" width="80" height="50" rx="6" class="box-b"/>
+    <rect x="320" y="40" width="80" height="50" rx="6" class="box-b"/>
+    <rect x="450" y="40" width="80" height="50" rx="6" class="box-b"/>
+    <text x="84" y="70" class="b">q[0]</text>
+    <text x="214" y="70" class="b">q[1]</text>
+    <text x="344" y="70" class="b">q[2]</text>
+    <text x="474" y="70" class="b">q[3]</text>
+    <path class="w" d="M140 65 H190 M270 65 H320 M400 65 H450"/>
+    <polygon points="190,65 180,60 180,70" class="fill-ink"/>
+    <polygon points="320,65 310,60 310,70" class="fill-ink"/>
+    <polygon points="450,65 440,60 440,70" class="fill-ink"/>
+    <path class="w-hi" d="M530 65 H570 V125 H30 V65 H60"/>
+    <polygon points="60,65 50,60 50,70" class="fill-hi"/>
+    <text x="230" y="118" class="m hi">feedback</text>
+    <text x="40" y="155" class="m">Ring: q[3] → q[0]</text>
+    <text x="300" y="155" class="m">Johnson: NOT q[3] → q[0]</text>
+  </svg>
+  <figcaption>All four flip-flops share one clock (not drawn). The only difference between the two counters is whether the feedback is inverted.</figcaption>
+</figure>
+
+<div class="vs">
+  <div>
+    <h3>Ring counter</h3>
+    <p>Preset a single 1, and it circulates. n flip-flops give <b>n states</b>, each one-hot, so no decoding is needed. Used for LED chasers and one-hot FSMs.</p>
+    <div class="scroll" style="margin:0"><table class="tt">
+      <tr><th>Edge</th><th class="out">q[3:0]</th></tr>
+      <tr><td>reset</td><td class="out">0001</td></tr>
+      <tr><td>1</td><td class="out">0010</td></tr>
+      <tr><td>2</td><td class="out">0100</td></tr>
+      <tr><td>3</td><td class="out">1000</td></tr>
+      <tr class="hl"><td>4</td><td class="out">0001</td></tr>
+    </table></div>
+  </div>
+  <div>
+    <h3>Johnson (twisted-ring) counter</h3>
+    <p>Feeds back the <b>inverted</b> last bit. n flip-flops give <b>2n states</b>, and only one bit changes per step.</p>
+    <div class="scroll" style="margin:0"><table class="tt">
+      <tr><th>Edge</th><th class="out">q[3:0]</th></tr>
+      <tr><td>reset</td><td class="out">0000</td></tr>
+      <tr><td>1</td><td class="out">0001</td></tr>
+      <tr><td>2</td><td class="out">0011</td></tr>
+      <tr><td>3</td><td class="out">0111</td></tr>
+      <tr><td>4</td><td class="out">1111</td></tr>
+      <tr><td>5</td><td class="out">1110</td></tr>
+      <tr><td>6</td><td class="out">1100</td></tr>
+      <tr><td>7</td><td class="out">1000</td></tr>
+      <tr class="hl"><td>8</td><td class="out">0000</td></tr>
+    </table></div>
+  </div>
+</div>
+<p style="font-size:15px">Both tables use the left-shift convention of the code below (<code>{q[2:0], feedback}</code>). The class slide draws the ring as 1000 → 0100 → 0010 → 0001, which is the same idea shifting the other way.</p>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · ring &amp; Johnson</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="com">// 4-bit ring counter</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">always @(posedge</span> clk<span class="kw">)</span></td><td class="n">Every rising edge…</td></tr>
+    <tr><td class="c">  <span class="kw">if</span> (rst) q &lt;= <span class="num">4'b0001</span>;</td><td class="n">Reset must load a single 1. (All zeros would stay zero forever.)</td></tr>
+    <tr><td class="c">  <span class="kw">else</span> q &lt;= {q[<span class="num">2</span>:<span class="num">0</span>], q[<span class="num">3</span>]};</td><td class="n">Shift left; the bit falling off the top (q[3]) re-enters at the bottom.</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="com">// 4-bit Johnson counter</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">always @(posedge</span> clk<span class="kw">)</span></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">if</span> (rst) q &lt;= <span class="num">4'b0000</span>;</td><td class="n">Johnson starts from all zeros.</td></tr>
+    <tr><td class="c">  <span class="kw">else</span> q &lt;= {q[<span class="num">2</span>:<span class="num">0</span>], ~q[<span class="num">3</span>]};</td><td class="n">Same shift, but the re-entering bit is <b>inverted</b> (<code>~</code> = NOT). That doubles the number of states.</td></tr>
+  </table>
+</div>
+
+<h2>6. Comparing counter types</h2>
+<div class="scroll"><table>
+  <tr><th>Type</th><th>Clocking</th><th>States (n FFs)</th><th>Extra logic</th><th>Best for</th></tr>
+  <tr><td><b>Ripple</b></td><td>chained</td><td>2ⁿ</td><td>none</td><td>cheap dividers</td></tr>
+  <tr><td><b>Synchronous</b></td><td>shared</td><td>2ⁿ</td><td>adder / T logic</td><td>speed-critical (PC, timers)</td></tr>
+  <tr><td><b>Ring</b></td><td>shared</td><td>n</td><td>feedback only</td><td>one-hot sequencing</td></tr>
+  <tr><td><b>Johnson</b></td><td>shared</td><td>2n</td><td>inverted feedback</td><td>more states, glitch-free decoding</td></tr>
+</table></div>
+<p><b>Where counters are used:</b> the program counter, frequency division (e.g. baud rates for serial ports), timers, watchdogs, PWM (motor/LED brightness control), and memory addressing and refresh.</p>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Using a ripple counter at high speed: its settle time is n × t_pd and it shows false values on the way.</li>
+  <li>Wrong number of state bits: use ⌈log₂N⌉ (mod-12 needs 4, not 3).</li>
+  <li>Forgetting the reset state: the counter can power up anywhere.</li>
+  <li>Resetting a down counter to 0 instead of MAX.</li>
+  <li>Resetting a ring counter to 0000: it then never leaves 0000.</li>
+  <li>Mixing up states: ring = n, Johnson = 2n, binary = 2ⁿ.</li>
+  <li>Writing T1 = 1 for a 2-bit counter: bit 1 only flips when Q0 = 1.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>Write T0 … T3 for a 4-bit synchronous up counter.</summary><div class="a"><p>T0 = 1, T1 = Q0, T2 = Q0·Q1, <b>T3 = Q0·Q1·Q2</b>. A bit flips when all lower bits are 1.</p></div></details>
+  <details class="q"><summary>A 4-bit ripple counter goes from 0011 to 0100. List the values it passes through (one per t_pd).</summary><div class="a"><p>0011 → Q0 flips → <b>0010</b> → Q1 flips → <b>0000</b> → Q2 flips → <b>0100</b>. Q2 went 0→1 (not a fall), so Q3 does not flip. 3 t_pd in total, with two false values (2 and 0).</p></div></details>
+  <details class="q"><summary>t_pd = 5 ns. What is f_max of an 8-bit ripple counter?</summary><div class="a"><p>t_settle = 8 × 5 = 40 ns. f_max = 1 / 40 ns = <b>25 MHz</b>.</p></div></details>
+  <details class="q"><summary>How many flip-flops for a mod-60 counter? For mod-10?</summary><div class="a"><p>log₂60 ≈ 5.91 → <b>6</b>. log₂10 ≈ 3.32 → <b>4</b>.</p></div></details>
+  <details class="q"><summary>How many states do a 5-bit ring counter and a 5-bit Johnson counter have?</summary><div class="a"><p>Ring: <b>5</b>. Johnson: 2 × 5 = <b>10</b>.</p></div></details>
+  <details class="q"><summary>A 3-bit Johnson counter (<code>q &lt;= {q[1:0], ~q[2]}</code>) starts at 000. List its sequence.</summary><div class="a"><p>000 → 001 → 011 → 111 → 110 → 100 → 000. That is <b>6 states</b> = 2 × 3 ✓</p></div></details>
+  <details class="q"><summary>Using the T excitation table, find T2 T1 T0 for the step 101 → 110.</summary><div class="a"><p>Q2: 1→1 so T2 = 0. Q1: 0→1 so T1 = 1. Q0: 1→0 so T0 = 1. <b>T = 011</b>. Check: T2 = Q1·Q0 = 0·1 = 0 ✓, T1 = Q0 = 1 ✓.</p></div></details>
+  <details class="q"><summary>A 4-bit down counter was reset to 0000 by mistake. What does it show after the first enabled edge?</summary><div class="a"><p>0000 − 1 wraps to <b>1111</b> (15). So the very first step is a wrap-around (an underflow), which is usually not intended. Resetting to MAX gives a clean countdown: 15, 14, 13 …</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=s1DSZEaCX_g" target="_blank" rel="noopener"><i class="play"></i><span><b>3 Bit Asynchronous Up Counter</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=6e8oV2blkGs" target="_blank" rel="noopener"><i class="play"></i><span><b>3-Bit Synchronous Up Counter</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=yqg1sqhZG3M" target="_blank" rel="noopener"><i class="play"></i><span><b>Types of Counters | Comparison between Ripple and Synchronous counters</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=yOW-JsJL1Ks" target="_blank" rel="noopener"><i class="play"></i><span><b>Ring Counter</b><small>Neso Academy</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cache Organization</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+<style>.ann td.n code{background:color-mix(in srgb,var(--code-ink) 14%,transparent);color:var(--code-ink)}</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 5 / Cache organization</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 5 · Memory Hierarchy &amp; Cache <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>Cache organization &amp; lookup</h1>
+  <p class="idea">A cache is a small table of recently used memory blocks. To find a block quickly, the CPU splits every address into three parts: <strong>tag | index | offset</strong>. The index says <em>where to look</em>, the tag says <em>whether it is the right block</em>, and the offset says <em>which byte inside the block</em>.</p>
+  <div class="analogy"><b>Think of it like this:</b> a hotel with numbered rooms. Your room number (index) tells you which door to go to. The name on the booking (tag) proves the person inside is really you. The drawer number (offset) tells you where your socks are inside the room. A direct-mapped cache gives each guest exactly one possible room. A set-associative cache gives a few possible rooms on the same floor.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Block (line)</dt><dd>The fixed-size chunk of memory copied into the cache as one unit. A cache slot that holds a block is also called a <b>line</b>.</dd></div>
+  <div class="term"><dt>Hit / miss</dt><dd>Hit: the block is already in the cache. Miss: it is not, so it must be fetched from main memory.</dd></div>
+  <div class="term"><dt>Hit rate / miss rate</dt><dd>Hits ÷ total accesses, and misses ÷ total accesses. They add up to 1.</dd></div>
+  <div class="term"><dt>Miss penalty</dt><dd>The extra time a miss costs: fetching the block from the slower level and placing it in the cache.</dd></div>
+  <div class="term"><dt>Valid bit</dt><dd>1 if the slot holds real data. At power-on every valid bit is 0, so garbage is never taken as a hit.</dd></div>
+  <div class="term"><dt>Set</dt><dd>A group of slots that one address is allowed to use. The index picks the set.</dd></div>
+  <div class="term"><dt>Way</dt><dd>One slot inside a set. "4-way" means 4 slots per set.</dd></div>
+  <div class="term"><dt>Associativity</dt><dd>How many ways each set has: 1 (direct-mapped) up to all slots (fully associative).</dd></div>
+</dl>
+
+<h2>1. Three ways to organize a cache</h2>
+<p>The big design question: <b>for a given address, which cache slots may hold its block?</b></p>
+<div class="scroll"><table>
+  <tr><th>Organization</th><th>Where can a block go?</th><th>Sets × ways</th></tr>
+  <tr><td><b>Direct-mapped</b></td><td>Exactly one slot</td><td>many sets × 1 way</td></tr>
+  <tr><td><b>N-way set-associative</b></td><td>Any of N slots in one set</td><td>(slots ÷ N) sets × N ways</td></tr>
+  <tr><td><b>Fully associative</b></td><td>Any slot at all</td><td>1 set × all ways</td></tr>
+</table></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 660 205" width="660" role="img" aria-label="The same 8 slots arranged as direct-mapped (8 sets of 1), 2-way (4 sets of 2), 4-way (2 sets of 4) and fully associative (1 set of 8)">
+    <text x="70" y="18" class="b" text-anchor="middle">Direct-mapped</text><text x="70" y="34" class="m dim" text-anchor="middle">1 way per set</text>
+    <text x="230" y="18" class="b" text-anchor="middle">2-way</text><text x="230" y="34" class="m dim" text-anchor="middle">2 ways per set</text>
+    <text x="390" y="18" class="b" text-anchor="middle">4-way</text><text x="390" y="34" class="m dim" text-anchor="middle">4 ways per set</text>
+    <text x="562" y="18" class="b" text-anchor="middle">Fully associative</text><text x="562" y="34" class="m dim" text-anchor="middle">8 ways, 1 set</text>
+    <g>
+      <rect x="40" y="46" width="60" height="16" class="box-hi"/><rect x="40" y="62" width="60" height="16" class="box-b"/>
+      <rect x="40" y="78" width="60" height="16" class="box-hi"/><rect x="40" y="94" width="60" height="16" class="box-b"/>
+      <rect x="40" y="110" width="60" height="16" class="box-hi"/><rect x="40" y="126" width="60" height="16" class="box-b"/>
+      <rect x="40" y="142" width="60" height="16" class="box-hi"/><rect x="40" y="158" width="60" height="16" class="box-b"/>
+    </g>
+    <g>
+      <rect x="190" y="46" width="40" height="32" class="box-hi"/><rect x="230" y="46" width="40" height="32" class="box-hi"/>
+      <rect x="190" y="78" width="40" height="32" class="box-b"/><rect x="230" y="78" width="40" height="32" class="box-b"/>
+      <rect x="190" y="110" width="40" height="32" class="box-hi"/><rect x="230" y="110" width="40" height="32" class="box-hi"/>
+      <rect x="190" y="142" width="40" height="32" class="box-b"/><rect x="230" y="142" width="40" height="32" class="box-b"/>
+    </g>
+    <g>
+      <rect x="330" y="46" width="30" height="64" class="box-hi"/><rect x="360" y="46" width="30" height="64" class="box-hi"/>
+      <rect x="390" y="46" width="30" height="64" class="box-hi"/><rect x="420" y="46" width="30" height="64" class="box-hi"/>
+      <rect x="330" y="110" width="30" height="64" class="box-b"/><rect x="360" y="110" width="30" height="64" class="box-b"/>
+      <rect x="390" y="110" width="30" height="64" class="box-b"/><rect x="420" y="110" width="30" height="64" class="box-b"/>
+    </g>
+    <g>
+      <rect x="490" y="46" width="18" height="128" class="box-g"/><rect x="508" y="46" width="18" height="128" class="box-g"/>
+      <rect x="526" y="46" width="18" height="128" class="box-g"/><rect x="544" y="46" width="18" height="128" class="box-g"/>
+      <rect x="562" y="46" width="18" height="128" class="box-g"/><rect x="580" y="46" width="18" height="128" class="box-g"/>
+      <rect x="598" y="46" width="18" height="128" class="box-g"/><rect x="616" y="46" width="18" height="128" class="box-g"/>
+    </g>
+    <text x="70" y="196" class="m" text-anchor="middle">8 sets</text>
+    <text x="230" y="196" class="m" text-anchor="middle">4 sets</text>
+    <text x="390" y="196" class="m" text-anchor="middle">2 sets</text>
+    <text x="562" y="196" class="m" text-anchor="middle">1 set</text>
+  </svg>
+  <figcaption>The same 8 slots, grouped four ways. Each colour band is one set. An address may only use the slots of its own set.</figcaption>
+</figure>
+
+<h2>2. Splitting the address: tag | index | offset</h2>
+<div class="formula" style="text-align:left">offset bits = log₂(block size in bytes)<br>index bits &nbsp;= log₂(number of sets)<br>tag bits &nbsp;&nbsp;&nbsp;= address bits − index bits − offset bits</div>
+<p style="font-size:15px">log₂(x) asks "2 to what power gives x?" For example log₂(4096) = 12, because 2<sup>12</sup> = 4096. Number of sets = number of blocks ÷ ways.</p>
+
+<ol class="flow arrows">
+  <li><b>Offset</b>Low bits. Which byte inside the block.</li>
+  <li><b>Index</b>Middle bits. Which set to look in.</li>
+  <li><b>Tag</b>High bits. Stored in the slot and compared to prove it is the right block.</li>
+</ol>
+
+<h3>Worked example 1: direct-mapped</h3>
+<ol class="steps">
+  <li>32-bit address, 16 KB cache, 4-byte blocks, direct-mapped (1 way).</li>
+  <li>Blocks = 16 KB ÷ 4 B = 16,384 ÷ 4 = <b>4,096</b> = 2<sup>12</sup>. With 1 way, sets = 4,096.</li>
+  <li>offset = log₂(4) = <b>2 bits</b>; index = log₂(4096) = <b>12 bits</b>.</li>
+  <li>tag = 32 − 12 − 2 = <b>18 bits</b>.</li>
+</ol>
+<h3>Worked example 2: same cache, 4-way set-associative</h3>
+<ol class="steps">
+  <li>Still 4,096 blocks, but now 4 per set: sets = 4,096 ÷ 4 = <b>1,024</b> = 2<sup>10</sup>.</li>
+  <li>offset = <b>2 bits</b> (block size did not change); index = log₂(1024) = <b>10 bits</b>.</li>
+  <li>tag = 32 − 10 − 2 = <b>20 bits</b>. Two bits moved from the index into the tag.</li>
+</ol>
+
+<figure class="diagram">
+  <svg viewBox="0 0 660 200" width="660" role="img" aria-label="Two 32-bit address splits drawn to scale: direct-mapped tag 18, index 12, offset 2; 4-way tag 20, index 10, offset 2">
+<text x="36" y="24" class="b">Example 1 · direct-mapped (4096 sets)</text>
+<rect x="40" y="30" width="324" height="34" rx="3" class="box-hi"/>
+<text x="202" y="52" class="m" text-anchor="middle">tag</text>
+<text x="202" y="82" class="m dim" text-anchor="middle">18 bits</text>
+<rect x="364" y="30" width="216" height="34" rx="3" class="box-b"/>
+<text x="472" y="52" class="m" text-anchor="middle">index</text>
+<text x="472" y="82" class="m dim" text-anchor="middle">12 bits</text>
+<rect x="580" y="30" width="36" height="34" rx="3" class="box-g"/>
+<text x="598" y="52" class="m" text-anchor="middle">off</text>
+<text x="598" y="82" class="m dim" text-anchor="middle">2 bits</text>
+<text x="616" y="24" class="m dim" text-anchor="end">bit 31 … bit 0</text>
+<text x="36" y="119" class="b">Example 2 · 4-way (1024 sets)</text>
+<rect x="40" y="125" width="360" height="34" rx="3" class="box-hi"/>
+<text x="220" y="147" class="m" text-anchor="middle">tag</text>
+<text x="220" y="177" class="m dim" text-anchor="middle">20 bits</text>
+<rect x="400" y="125" width="180" height="34" rx="3" class="box-b"/>
+<text x="490" y="147" class="m" text-anchor="middle">index</text>
+<text x="490" y="177" class="m dim" text-anchor="middle">10 bits</text>
+<rect x="580" y="125" width="36" height="34" rx="3" class="box-g"/>
+<text x="598" y="147" class="m" text-anchor="middle">off</text>
+<text x="598" y="177" class="m dim" text-anchor="middle">2 bits</text>
+<text x="616" y="119" class="m dim" text-anchor="end">bit 31 … bit 0</text>
+</svg>
+  <figcaption>Drawn to scale, one cell width per bit. Going from 1 way to 4 ways halves the sets twice, so the index loses 2 bits and the tag gains them.</figcaption>
+</figure>
+
+<div class="callout tip"><b>Rule of thumb</b><p>Doubling the associativity halves the number of sets: <b>index −1 bit, tag +1 bit</b>. A fully associative cache has <b>0 index bits</b>: everything except the offset is tag.</p></div>
+
+<h2>3. How the lookup works in hardware</h2>
+<h3>Direct-mapped</h3>
+<figure class="diagram">
+  <svg viewBox="0 0 660 335" width="660" role="img" aria-label="Direct-mapped lookup: the index selects one row; its stored tag is compared with the address tag, ANDed with the valid bit to give Hit, and the row's data is output">
+    <rect x="40" y="16" width="260" height="30" class="box-hi"/><text x="170" y="36" class="m" text-anchor="middle">tag</text>
+    <rect x="300" y="16" width="160" height="30" class="box-b"/><text x="380" y="36" class="m" text-anchor="middle">index</text>
+    <rect x="460" y="16" width="80" height="30" class="box-g"/><text x="500" y="36" class="m" text-anchor="middle">offset</text>
+    <text x="550" y="28" class="m dim">offset: which</text><text x="550" y="42" class="m dim">byte in block</text>
+
+    <path class="w-hi" d="M380 46 V70 H110 V140 H128"/>
+    <polygon points="136,140 126,135 126,145" class="fill-hi"/>
+    <text x="130" y="64" class="m dim">index selects one row</text>
+
+    <text x="200" y="86" class="m" text-anchor="middle">V</text>
+    <text x="290" y="86" class="m" text-anchor="middle">Tag</text>
+    <text x="460" y="86" class="m" text-anchor="middle">Data (one block)</text>
+    <rect x="180" y="90" width="380" height="160" class="box"/>
+    <rect x="180" y="130" width="380" height="20" class="box-hi"/>
+    <path class="grid" d="M180 110 H560 M180 130 H560 M180 150 H560 M180 170 H560 M180 190 H560 M180 210 H560 M180 230 H560 M220 90 V250 M360 90 V250"/>
+    <text x="172" y="104" class="m dim" text-anchor="end">000</text>
+    <text x="172" y="124" class="m dim" text-anchor="end">001</text>
+    <text x="172" y="144" class="m hi" text-anchor="end">010</text>
+    <text x="172" y="164" class="m dim" text-anchor="end">011</text>
+    <text x="172" y="184" class="m dim" text-anchor="end">100</text>
+    <text x="172" y="204" class="m dim" text-anchor="end">101</text>
+    <text x="172" y="224" class="m dim" text-anchor="end">110</text>
+    <text x="172" y="244" class="m dim" text-anchor="end">111</text>
+    <text x="200" y="144" class="m" text-anchor="middle">1</text>
+    <text x="290" y="144" class="m" text-anchor="middle">stored tag</text>
+    <text x="460" y="144" class="m" text-anchor="middle">bytes of the block</text>
+
+    <path class="w" d="M60 46 V285 H274"/>
+    <text x="68" y="278" class="m dim">address tag</text>
+    <path class="w" d="M290 250 V269"/>
+    <circle cx="290" cy="285" r="16" class="box"/><text x="290" y="290" class="b" text-anchor="middle">=</text>
+    <path class="w" d="M306 285 H340 V288 H370"/>
+    <path class="w" d="M200 250 V318 H340 V304 H370"/>
+    <text x="208" y="314" class="m dim">valid</text>
+    <path class="box" d="M370 278 H390 A17 17 0 0 1 390 312 H370 Z"/>
+    <text x="375" y="299" class="m">AND</text>
+    <path class="w-g" d="M407 295 H470"/>
+    <text x="476" y="300" class="g">Hit</text>
+    <path class="w" d="M460 250 V270"/>
+    <text x="468" y="268" class="m">data out</text>
+  </svg>
+  <figcaption>Only one row can hold the block, so only <b>one comparator</b> is needed. Hit = (stored tag = address tag) AND valid.</figcaption>
+</figure>
+
+<h3>2-way set-associative</h3>
+<figure class="diagram">
+  <svg viewBox="0 0 660 325" width="660" role="img" aria-label="Two-way set-associative lookup: the index selects a set in both ways, two comparators check the tags in parallel, an OR gives Hit and a MUX picks the data from the matching way">
+    <rect x="40" y="16" width="260" height="30" class="box-hi"/><text x="170" y="36" class="m" text-anchor="middle">tag</text>
+    <rect x="300" y="16" width="160" height="30" class="box-b"/><text x="380" y="36" class="m" text-anchor="middle">index</text>
+    <rect x="460" y="16" width="80" height="30" class="box-g"/><text x="500" y="36" class="m" text-anchor="middle">offset</text>
+
+    <path class="w-hi" d="M380 46 V60 H100 V120 H126 M340 60 V120 H346"/>
+    <circle cx="340" cy="60" r="3.5" class="fill-hi"/>
+
+    <text x="220" y="80" class="b" text-anchor="middle">Way 0</text>
+    <text x="440" y="80" class="b" text-anchor="middle">Way 1</text>
+    <rect x="130" y="90" width="180" height="80" class="box"/>
+    <rect x="350" y="90" width="180" height="80" class="box"/>
+    <rect x="130" y="110" width="180" height="20" class="box-hi"/>
+    <rect x="350" y="110" width="180" height="20" class="box-hi"/>
+    <path class="grid" d="M130 110 H310 M130 130 H310 M130 150 H310 M160 90 V170 M230 90 V170 M350 110 H530 M350 130 H530 M350 150 H530 M380 90 V170 M450 90 V170"/>
+    <text x="92" y="104" class="m dim" text-anchor="end">set 0</text>
+    <text x="92" y="124" class="m hi" text-anchor="end">set 1</text>
+    <text x="92" y="144" class="m dim" text-anchor="end">set 2</text>
+    <text x="92" y="164" class="m dim" text-anchor="end">set 3</text>
+    <text x="145" y="124" class="m" text-anchor="middle">V</text><text x="195" y="124" class="m" text-anchor="middle">tag</text><text x="270" y="124" class="m" text-anchor="middle">data</text>
+    <text x="365" y="124" class="m" text-anchor="middle">V</text><text x="415" y="124" class="m" text-anchor="middle">tag</text><text x="490" y="124" class="m" text-anchor="middle">data</text>
+
+    <path class="w" d="M195 170 V191 M415 170 V191"/>
+    <circle cx="195" cy="205" r="14" class="box"/><text x="195" y="210" class="b" text-anchor="middle">=</text>
+    <circle cx="415" cy="205" r="14" class="box"/><text x="415" y="210" class="b" text-anchor="middle">=</text>
+    <path class="w" d="M44 46 V205 H181 M44 205 V230 H380 V205 H401"/>
+    <circle cx="44" cy="205" r="3.5" class="fill-ink"/>
+
+    <path class="w" d="M270 170 V240 H290 V250 M490 170 V240 H330 V250"/>
+    <path class="box" d="M270 250 H350 L335 280 H285 Z"/>
+    <text x="310" y="270" class="m" text-anchor="middle">MUX</text>
+    <path class="w-g" d="M310 280 V294"/>
+    <text x="318" y="296" class="m g">data out</text>
+
+    <path class="w" d="M195 219 V312 H540 V292 H562"/>
+    <path class="w" d="M415 219 V272 H562"/>
+    <path class="w" d="M415 262 H344"/>
+    <circle cx="415" cy="262" r="3.5" class="fill-ink"/>
+    <text x="424" y="256" class="m dim">select</text>
+    <path class="box" d="M555 262 Q570 281 555 300 Q590 300 605 281 Q590 262 555 262 Z"/>
+    <text x="568" y="285" class="m">OR</text>
+    <path class="w-g" d="M605 281 H640"/>
+    <text x="610" y="274" class="g">Hit</text>
+  </svg>
+  <figcaption>Both ways are checked <b>at the same time</b> with one comparator each (each compare also includes that slot's valid bit). The OR gives Hit; the matching way drives the MUX to pick the data. N ways need N comparators.</figcaption>
+</figure>
+
+<h3>The same logic as pseudocode</h3>
+<div class="code">
+  <div class="code-head"><span><b>python-like pseudocode</b> · cache lookup</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">offset = addr &amp; (block_size - <span class="num">1</span>)</td><td class="n">Keep only the low bits. <code>&amp;</code> is bitwise AND; <code>block_size − 1</code> is a mask of offset-many 1s.</td></tr>
+    <tr><td class="c">index  = (addr &gt;&gt; offset_bits) % num_sets</td><td class="n"><code>&gt;&gt;</code> shifts the offset bits away. <code>%</code> (remainder) keeps the index-many low bits that remain.</td></tr>
+    <tr><td class="c">tag    = addr &gt;&gt; (offset_bits + index_bits)</td><td class="n">Whatever is left at the top is the tag.</td></tr>
+    <tr><td class="c"><span class="kw">for</span> slot <span class="kw">in</span> cache[index]:</td><td class="n">Look at every way in the chosen set (hardware does this all at once).</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> slot.valid <span class="kw">and</span> slot.tag == tag:</td><td class="n">Real data <b>and</b> the right block?</td></tr>
+    <tr><td class="c">        <span class="kw">return</span> slot.data[offset]   <span class="com"># HIT</span></td><td class="n">Hit: hand back the wanted byte.</td></tr>
+    <tr><td class="c">block = main_memory.read_block(addr)  <span class="com"># MISS</span></td><td class="n">Miss: fetch the whole block from DRAM (slow).</td></tr>
+    <tr><td class="c">put block into a slot of cache[index]</td><td class="n">If the set is full, a <a href="m5-03-cache-policies.html" style="color:inherit">replacement policy</a> picks the victim.</td></tr>
+    <tr><td class="c"><span class="kw">return</span> block[offset]</td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h2>4. Worked example 3: tracing a direct-mapped cache</h2>
+<p>An 8-block direct-mapped cache (Patterson &amp; Hennessy). Addresses are given as <b>block numbers</b> (5 bits), so there is no offset. 8 sets → index = low <b>3 bits</b>; tag = the top <b>2 bits</b>. The cache starts empty (all valid bits 0).</p>
+<div class="scroll"><table class="tt">
+  <tr><th>#</th><th>Block</th><th>Binary</th><th>Tag</th><th>Index</th><th class="out">Result</th><th>Set 000</th><th>Set 010</th><th>Set 011</th><th>Set 110</th></tr>
+  <tr><td>1</td><td>22</td><td>10 110</td><td>10</td><td>110</td><td class="out">Miss</td><td>–</td><td>–</td><td>–</td><td>22</td></tr>
+  <tr><td>2</td><td>26</td><td>11 010</td><td>11</td><td>010</td><td class="out">Miss</td><td>–</td><td>26</td><td>–</td><td>22</td></tr>
+  <tr><td>3</td><td>22</td><td>10 110</td><td>10</td><td>110</td><td class="out one">Hit</td><td>–</td><td>26</td><td>–</td><td>22</td></tr>
+  <tr><td>4</td><td>26</td><td>11 010</td><td>11</td><td>010</td><td class="out one">Hit</td><td>–</td><td>26</td><td>–</td><td>22</td></tr>
+  <tr><td>5</td><td>16</td><td>10 000</td><td>10</td><td>000</td><td class="out">Miss</td><td>16</td><td>26</td><td>–</td><td>22</td></tr>
+  <tr><td>6</td><td>3</td><td>00 011</td><td>00</td><td>011</td><td class="out">Miss</td><td>16</td><td>26</td><td>3</td><td>22</td></tr>
+  <tr><td>7</td><td>16</td><td>10 000</td><td>10</td><td>000</td><td class="out one">Hit</td><td>16</td><td>26</td><td>3</td><td>22</td></tr>
+  <tr class="hl"><td>8</td><td>18</td><td>10 010</td><td>10</td><td>010</td><td class="out">Miss</td><td>16</td><td><b>18</b></td><td>3</td><td>22</td></tr>
+</table></div>
+<p><b>Result:</b> M, M, H, H, M, M, H, M → 3 hits out of 8, hit rate = 3/8 = <b>37.5%</b>. At step 8, block 18 has index 010, the same as 26, but a different tag (10 vs 11). So 18 <b>replaces</b> 26. If 26 is used again, that will be a conflict miss.</p>
+
+<h2>5. The three C's: why misses happen</h2>
+<div class="scroll"><table>
+  <tr><th>Type</th><th>Cause</th><th>Reduced by</th></tr>
+  <tr><td><b>Compulsory</b> (cold-start)</td><td>First ever access to a block. It cannot be in the cache yet.</td><td>Bigger blocks, prefetching</td></tr>
+  <tr><td><b>Capacity</b></td><td>The cache is simply too small for all the blocks in use, even if fully associative.</td><td>A bigger cache</td></tr>
+  <tr><td><b>Conflict</b> (collision)</td><td>Blocks fight over the same set while other slots are free.</td><td>Higher associativity</td></tr>
+</table></div>
+<p style="font-size:15px">In the trace above, all 5 misses are compulsory: each block was used for the first time.</p>
+
+<h2>6. The associativity trade-off</h2>
+<div class="vs">
+  <div>
+    <h3>Low associativity (direct-mapped)</h3>
+    <ul><li>One comparator: simple, cheap, <b>fast</b> hit check.</li><li>More <b>conflict misses</b>.</li><li>No replacement choice needed.</li></ul>
+  </div>
+  <div>
+    <h3>High associativity (N-way, fully)</h3>
+    <ul><li><b>Fewer conflict misses</b>.</li><li>N comparators + a MUX: more hardware, <b>slower</b> hit check, more power.</li><li>Needs a replacement policy (LRU, FIFO…).</li></ul>
+  </div>
+</div>
+<p>Real CPUs pick the middle: L1 caches are often 8-way; fully associative is used only for tiny caches such as the TLB.</p>
+
+<h2>7. How many bits does a cache really need?</h2>
+<p>Each slot stores more than the data: it also stores the tag and the valid bit.</p>
+<div class="formula">Total bits = number of slots × (valid + tag + data bits)<small>Other status bits (such as a dirty bit) are added the same way.</small></div>
+<p><b>Patterson &amp; Hennessy example:</b> direct-mapped, 16 KB of data, blocks of 4 words (1 word = 32 bits = 4 bytes), 32-bit addresses.</p>
+<ol class="steps">
+  <li>16 KB = 16,384 bytes = 4,096 words = 2<sup>12</sup> words.</li>
+  <li>Blocks = 2<sup>12</sup> ÷ 4 = <b>2<sup>10</sup> = 1,024 blocks</b> → index = 10 bits.</li>
+  <li>Offset = 2 bits (which word) + 2 bits (which byte) = 4 bits → tag = 32 − 10 − 4 = <b>18 bits</b>.</li>
+  <li>Per slot: 1 (valid) + 18 (tag) + 4 × 32 (data) = <b>147 bits</b>.</li>
+  <li>Total = 1,024 × 147 = 150,528 bits ≈ <b>18.4 KB</b>, about 1.15× the 16 KB of data alone.</li>
+</ol>
+<div class="callout fix"><b>Correction: 2¹⁰ blocks, not 2¹⁴</b><p>A draft of these notes said "2<sup>14</sup> blocks" for this example. 2<sup>14</sup> is the number of <b>bytes</b> (16 KB). With 4 bytes per word and 4 words per block, the cache has 2<sup>14</sup> ÷ 16 = <b>2<sup>10</sup> blocks</b>.</p></div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Index bits come from the number of <b>sets</b>, not the number of blocks (they are only equal when direct-mapped).</li>
+  <li>Offset bits come from the block size in <b>bytes</b> (if addresses count bytes). A "4-word block" is 16 bytes → 4 offset bits.</li>
+  <li>Forgetting the valid bit. Without it, junk left in the cache at power-on could look like a hit.</li>
+  <li>Fully associative has <b>no index</b>: tag = address bits − offset bits.</li>
+  <li>Direct-mapped caches need no replacement policy: there is only one place a block can go.</li>
+  <li>KB here means 1024 bytes (2<sup>10</sup>). 16 KB = 16,384 bytes, not 16,000.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>32-bit addresses, 64 KB cache, 16-byte blocks, direct-mapped. Find offset, index and tag bits.</summary><div class="a"><p>Blocks = 65,536 ÷ 16 = 4,096 = 2<sup>12</sup>. Offset = log₂16 = <b>4</b>, index = <b>12</b>, tag = 32 − 12 − 4 = <b>16</b>.</p></div></details>
+  <details class="q"><summary>Same cache, but 8-way set-associative?</summary><div class="a"><p>Sets = 4,096 ÷ 8 = 512 = 2<sup>9</sup>. Offset = <b>4</b>, index = <b>9</b>, tag = 32 − 9 − 4 = <b>19</b>.</p></div></details>
+  <details class="q"><summary>Same cache, fully associative?</summary><div class="a"><p>1 set → index = <b>0</b>. Offset = <b>4</b>, tag = 32 − 4 = <b>28</b>.</p></div></details>
+  <details class="q"><summary>In Worked example 1 (tag 18 | index 12 | offset 2), split the address 0x00001234.</summary><div class="a"><p>0x1234 = <code>0001 0010 0011 0100</code> (all higher bits are 0).</p><p>Offset = last 2 bits = <code>00</code> = <b>0</b>. Index = the next 12 bits = <code>0100 1000 1101</code> = <b>0x48D</b>. Tag = everything above = <b>0</b>.</p></div></details>
+  <details class="q"><summary>Add a 9th access, block 26, to the trace in Worked example 3. Hit or miss? Which C?</summary><div class="a"><p><b>Miss.</b> Set 010 now holds 18 (tag 10), but 26 has tag 11. This is a <b>conflict</b> miss: 26 was in the cache before and was pushed out only because 18 shares its set. An 8-slot fully associative cache would still hold 26, so there it would be a hit.</p></div></details>
+  <details class="q"><summary>Worked example 1 stores 32 bits of data per block. How many bits does the whole cache need?</summary><div class="a"><p>Per slot: 1 + 18 + 32 = 51 bits. Total = 4,096 × 51 = <b>208,896 bits ≈ 25.5 KB</b>.</p></div></details>
+  <details class="q"><summary>A fully associative cache is full and misses on a block it has seen before. What kind of miss is this?</summary><div class="a"><p><b>Capacity</b>. With full associativity there are no conflict misses. The block was pushed out only because there was no room.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=zocwH0g-qQM" target="_blank" rel="noopener"><i class="play"></i><span><b>Ep 075: Direct Mapped Caches</b><small>Intermation</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=OUEg5WRxslM" target="_blank" rel="noopener"><i class="play"></i><span><b>Offset, Index, Tag for Set Associative - Georgia Tech HPCA Part 3</b><small>Udacity</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=4_Z07m8tf6k" target="_blank" rel="noopener"><i class="play"></i><span><b>Lecture 18. Caches - Carnegie Mellon - Comp. Arch. 2015 - Onur Mutlu</b><small>Carnegie Mellon Computer Architecture</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

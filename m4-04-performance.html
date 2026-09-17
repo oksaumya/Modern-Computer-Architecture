@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CPU Performance</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 4 / Performance</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 4 · CPU Datapath &amp; Pipelining <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>Performance: CPI, IPC &amp; Amdahl's Law</h1>
+  <p class="idea">The only honest measure of speed is <b>how long a real program takes</b>. That time splits into three factors: <b>how many instructions</b> × <b>how many clock cycles each</b> × <b>how long one cycle is</b>. Amdahl's Law then tells you how much a speed-up to <em>one part</em> can help the whole.</p>
+  <div class="analogy"><b>Think of it like this:</b> a delivery route. Total time = number of stops × minutes spent at each stop × how fast you drive. Buying a faster van only speeds up the driving. If most of the day is spent at the stops, a faster van barely helps. That is Amdahl's Law.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Execution (CPU) time</dt><dd>Seconds the CPU spends running the program. Lower is better.</dd></div>
+  <div class="term"><dt>Performance</dt><dd>1 / execution time. Higher is better.</dd></div>
+  <div class="term"><dt>Speedup</dt><dd>old time / new time. "2× faster" means the new time is half the old.</dd></div>
+  <div class="term"><dt>IC (instruction count)</dt><dd>How many instructions the program runs.</dd></div>
+  <div class="term"><dt>CPI</dt><dd>Clock cycles per instruction, on average. Single-cycle = 1. A pipeline with stalls is a little above 1.</dd></div>
+  <div class="term"><dt>Clock cycle time (T)</dt><dd>Length of one clock tick. Clock rate = 1 / T. For example, 250 ps ↔ 4 GHz.</dd></div>
+  <div class="term"><dt>IPC</dt><dd>Instructions per cycle = 1 / CPI. Higher is better. Superscalar CPUs reach IPC &gt; 1.</dd></div>
+  <div class="term"><dt>MIPS (the metric)</dt><dd><b>M</b>illion <b>I</b>nstructions <b>P</b>er <b>S</b>econd. Not the same thing as the MIPS processor! Often misleading.</dd></div>
+</dl>
+
+<div class="callout tip"><b>Units cheat-sheet</b><p>1 ps = 10<sup>−12</sup> s · 1 ns = 10<sup>−9</sup> s · 1 GHz = 10<sup>9</sup> cycles per second. So a 250 ps cycle means 1 / (250 × 10<sup>−12</sup>) = 4 × 10<sup>9</sup> Hz = <b>4 GHz</b>.</p></div>
+
+<h2>1. Performance and speedup</h2>
+<div class="formula">Performance = 1 / Execution time<small>A faster computer takes less time.</small></div>
+<div class="formula">Speedup of X over Y = Time<sub>Y</sub> / Time<sub>X</sub> = Performance<sub>X</sub> / Performance<sub>Y</sub><small>"X is n times faster than Y" means n = Time<sub>Y</sub> / Time<sub>X</sub>.</small></div>
+<p><b>Example:</b> a program takes 10 s on A and 15 s on B. A is 15 / 10 = <b>1.5× faster</b> than B.</p>
+
+<h2>2. The CPU performance equation (the "iron law")</h2>
+<div class="formula">CPU time = IC × CPI × T = (IC × CPI) / clock rate<small>seconds/program = instructions/program × cycles/instruction × seconds/cycle. The units cancel like fractions.</small></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 190" width="640" role="img" aria-label="CPU time is the product of instruction count, CPI and clock cycle time, each influenced by different design layers">
+    <rect x="10" y="30" width="110" height="60" rx="8" class="box-hi"/>
+    <text x="65" y="56" class="b" text-anchor="middle">CPU time</text>
+    <text x="65" y="76" class="m" text-anchor="middle">s / program</text>
+    <text x="134" y="66" class="b">=</text>
+    <rect x="152" y="30" width="130" height="60" rx="8" class="box-b"/>
+    <text x="217" y="56" class="b" text-anchor="middle">IC</text>
+    <text x="217" y="76" class="m" text-anchor="middle">instr / program</text>
+    <text x="294" y="66" class="b">×</text>
+    <rect x="310" y="30" width="140" height="60" rx="8" class="box-g"/>
+    <text x="380" y="56" class="b" text-anchor="middle">CPI</text>
+    <text x="380" y="76" class="m" text-anchor="middle">cycles / instr</text>
+    <text x="462" y="66" class="b">×</text>
+    <rect x="478" y="30" width="150" height="60" rx="8" class="box"/>
+    <text x="553" y="56" class="b" text-anchor="middle">T</text>
+    <text x="553" y="76" class="m" text-anchor="middle">s / cycle</text>
+    <text x="217" y="118" class="m dim" text-anchor="middle">algorithm</text>
+    <text x="217" y="136" class="m dim" text-anchor="middle">language, compiler</text>
+    <text x="217" y="154" class="m dim" text-anchor="middle">ISA</text>
+    <text x="380" y="118" class="m dim" text-anchor="middle">compiler, ISA</text>
+    <text x="380" y="136" class="m dim" text-anchor="middle">organization</text>
+    <text x="380" y="154" class="m dim" text-anchor="middle">(pipeline, stalls)</text>
+    <text x="553" y="118" class="m dim" text-anchor="middle">organization</text>
+    <text x="553" y="136" class="m dim" text-anchor="middle">technology</text>
+    <text x="553" y="154" class="m dim" text-anchor="middle">(transistors)</text>
+    <text x="320" y="182" class="m" text-anchor="middle">what mainly affects each factor</text>
+    <text x="320" y="18" class="m hi" text-anchor="middle">improve any one factor without hurting the others → faster</text>
+  </svg>
+  <figcaption>The three factors often trade off. A deeper pipeline shortens T but can raise CPI (more stalls). A CISC ISA lowers IC but raises CPI and T.</figcaption>
+</figure>
+
+<h3>Worked example (P&amp;H): same ISA, two computers</h3>
+<div class="stepper" data-stepper>
+  <div class="stage"><p><b>Given:</b> computer A has cycle time 250 ps and CPI 2.0. Computer B has cycle time 500 ps and CPI 1.2. Same program, so same IC. Which is faster, and by how much?</p></div>
+  <div class="stage"><p><b>Time per instruction:</b> A = 2.0 × 250 = <b>500 ps</b>. B = 1.2 × 500 = <b>600 ps</b>.</p></div>
+  <div class="stage"><p><b>Whole program:</b> A = IC × 500 ps, B = IC × 600 ps. IC cancels out when we divide.</p></div>
+  <div class="stage"><p><b>Speedup:</b> Time<sub>B</sub> / Time<sub>A</sub> = 600 / 500 = <b>1.2</b>. A is 1.2× faster, even though its CPI is worse.</p></div>
+</div>
+
+<h3>Worked example (P&amp;H): designing a faster clock</h3>
+<ol class="steps">
+  <li>A program runs in 10 s on computer A, which has a 2 GHz clock. So A uses 10 s × 2 × 10<sup>9</sup> = <b>20 × 10<sup>9</sup> cycles</b>.</li>
+  <li>We want computer B to take 6 s. But B's design makes the program need 1.2× as many cycles: 1.2 × 20 × 10<sup>9</sup> = <b>24 × 10<sup>9</sup> cycles</b>.</li>
+  <li>Clock rate<sub>B</sub> = cycles / time = 24 × 10<sup>9</sup> / 6 s = <b>4 × 10<sup>9</sup> Hz = 4 GHz</b>.</li>
+</ol>
+
+<h2>3. Average CPI when instructions differ</h2>
+<div class="formula">CPI = Σ ( CPI<sub>i</sub> × fraction<sub>i</sub> )<small>A weighted average: each instruction class's CPI times the share of instructions in that class.</small></div>
+<div class="scroll"><table>
+  <tr><th>Class</th><th>Share of instructions</th><th>CPI of class</th><th>Contribution</th></tr>
+  <tr><td>A</td><td>50%</td><td>1</td><td>0.5 × 1 = 0.5</td></tr>
+  <tr><td>B</td><td>30%</td><td>2</td><td>0.3 × 2 = 0.6</td></tr>
+  <tr><td>C</td><td>20%</td><td>3</td><td>0.2 × 3 = 0.6</td></tr>
+  <tr class="hl"><td colspan="3"><b>Average CPI</b></td><td><b>1.7</b></td></tr>
+</table></div>
+
+<h3>Worked example (P&amp;H): fewer instructions is not always faster</h3>
+<p>Classes A, B, C have CPI 1, 2 and 3. Two compilers produce two different instruction sequences for the same program:</p>
+<div class="scroll"><table>
+  <tr><th>Sequence</th><th>A</th><th>B</th><th>C</th><th>IC</th><th>Total cycles</th><th>CPI</th></tr>
+  <tr><td>1</td><td>2</td><td>1</td><td>2</td><td>5</td><td>2·1 + 1·2 + 2·3 = <b>10</b></td><td>10 / 5 = 2.0</td></tr>
+  <tr class="hl"><td>2</td><td>4</td><td>1</td><td>1</td><td>6</td><td>4·1 + 1·2 + 1·3 = <b>9</b></td><td>9 / 6 = 1.5</td></tr>
+</table></div>
+<p>Sequence 2 runs <b>more</b> instructions but needs fewer cycles, so it is faster. <b>No single factor (IC or CPI) tells you the answer alone.</b></p>
+
+<h2>4. IPC: the flip side of CPI</h2>
+<div class="formula">IPC = 1 / CPI<small>How many instructions finish per clock cycle, on average.</small></div>
+<div class="scroll"><table>
+  <tr><th>Design</th><th>CPI</th><th>IPC</th></tr>
+  <tr><td>Single-cycle</td><td>1</td><td>1</td></tr>
+  <tr><td>5-stage pipeline with stalls (from <a href="m4-03-hazards-forwarding.html">hazards</a>)</td><td>1.19</td><td>1 / 1.19 ≈ 0.84</td></tr>
+  <tr><td>Superscalar (several instructions per cycle)</td><td>0.4</td><td>2.5</td></tr>
+</table></div>
+<p>Modern chip makers often quote an "IPC uplift", e.g. "+15% IPC": the new chip does 15% more work per cycle at the same clock rate.</p>
+
+<h2>5. The MIPS metric, and why it misleads</h2>
+<div class="formula">MIPS = IC / (Execution time × 10<sup>6</sup>) = Clock rate / (CPI × 10<sup>6</sup>)<small>For example, a 4 GHz clock with CPI 2 gives 4 × 10<sup>9</sup> / (2 × 10<sup>6</sup>) = 2000 MIPS.</small></div>
+<p>Classes A, B, C have CPI 1, 2 and 3, and the clock is 4 GHz. Two compilers produce (in billions of instructions):</p>
+<div class="scroll"><table>
+  <tr><th>Compiler</th><th>A</th><th>B</th><th>C</th><th>IC</th><th>Cycles</th><th>Time</th><th>MIPS</th></tr>
+  <tr><td>1</td><td>5</td><td>1</td><td>1</td><td>7 × 10<sup>9</sup></td><td>10 × 10<sup>9</sup></td><td class="one">2.5 s ✓ faster</td><td>7000 / 2.5 = 2800</td></tr>
+  <tr><td>2</td><td>10</td><td>1</td><td>1</td><td>12 × 10<sup>9</sup></td><td>15 × 10<sup>9</sup></td><td>3.75 s</td><td>12000 / 3.75 = <b>3200</b></td></tr>
+</table></div>
+<div class="callout trap"><b>MIPS rewards doing more, simpler work</b><p>Compiler 2 has the <b>higher MIPS</b> but is <b>slower</b>. MIPS also can't compare different ISAs (one x86 instruction may do the work of several MIPS instructions), and it changes from program to program. Only execution time is reliable.</p></div>
+
+<h2>6. Amdahl's Law</h2>
+<p>You speed up <b>part</b> of a program. The part you didn't touch still takes the same time, so it limits the total gain.</p>
+<div class="formula">Speedup<sub>overall</sub> = 1 / ( (1 − f) + f / s )<small>f = fraction of the <b>original time</b> that is improved · s = how many times faster that part becomes.</small></div>
+<div class="formula">Limit as s → ∞: Speedup<sub>max</sub> = 1 / (1 − f)<small>Even an infinitely fast improvement can't remove the untouched part.</small></div>
+<ol class="flow arrows">
+  <li><b>Old time = 1</b>Split it into (1 − f), the untouched part, and f, the improved part.</li>
+  <li><b>New time</b>(1 − f) stays the same. f shrinks to f / s.</li>
+  <li><b>Speedup</b>old / new = 1 / ((1 − f) + f / s).</li>
+</ol>
+
+<h3>Worked example (P&amp;H): speeding up multiply</h3>
+<p>A program runs for 100 s. Multiplication takes 80 s of that (f = 0.8). Drawn to scale:</p>
+<figure class="diagram">
+  <svg viewBox="0 0 640 250" width="640" role="img" aria-label="Bars drawn to scale: original 100 s; multiply 4 times faster gives 40 s; 16 times faster gives 25 s; infinitely fast gives 20 s">
+    <!-- scale: 5 px per second, bars start at x=20 -->
+    <text x="20" y="22" class="b">Original: 20 + 80 = 100 s</text>
+    <rect x="20" y="30" width="98" height="26" rx="4" class="box"/><text x="69" y="48" class="m" text-anchor="middle">other 20 s</text>
+    <rect x="120" y="30" width="400" height="26" rx="4" class="box-hi"/><text x="320" y="48" class="m" text-anchor="middle">multiply 80 s</text>
+    <text x="528" y="48" class="m">1×</text>
+
+    <text x="20" y="82" class="b">Multiply 4× faster: 20 + 20 = 40 s</text>
+    <rect x="20" y="90" width="98" height="26" rx="4" class="box"/>
+    <rect x="120" y="90" width="98" height="26" rx="4" class="box-hi"/><text x="169" y="108" class="m" text-anchor="middle">20 s</text>
+    <text x="228" y="108" class="m hi">100 / 40 = 2.5×</text>
+
+    <text x="20" y="142" class="b">Multiply 16× faster: 20 + 5 = 25 s</text>
+    <rect x="20" y="150" width="98" height="26" rx="4" class="box"/>
+    <rect x="120" y="150" width="23" height="26" rx="4" class="box-hi"/>
+    <text x="153" y="168" class="m hi">100 / 25 = 4×</text>
+
+    <text x="20" y="202" class="b">Multiply infinitely fast: 20 + 0 = 20 s</text>
+    <rect x="20" y="210" width="98" height="26" rx="4" class="box"/>
+    <text x="128" y="228" class="m hi">100 / 20 = 5×, the ceiling (never reached)</text>
+    <path class="w" d="M20 240 V244 H520 V240"/>
+    <text x="520" y="22" class="m dim" text-anchor="end">bar length = seconds</text>
+  </svg>
+  <figcaption>The outlined "other 20 s" bar never shrinks. So the program can never be 5× faster: that would need the whole run to take 100 / 5 = 20 s, leaving <b>0 s</b> for multiply, which is impossible.</figcaption>
+</figure>
+<ol class="steps">
+  <li><b>Goal 4×:</b> new time = 100 / 4 = 25 s. Multiply must take 25 − 20 = 5 s, so it must be 80 / 5 = <b>16× faster</b>.</li>
+  <li><b>Goal 5×:</b> new time = 20 s, which leaves 0 s for multiply. <b>Impossible.</b></li>
+  <li><b>Check with the formula:</b> f = 0.8, s = 4 gives 1 / (0.2 + 0.8 / 4) = 1 / (0.2 + 0.2) = <b>2.5×</b> ✓.</li>
+</ol>
+
+<h3>Amdahl's Law for multicore</h3>
+<p>For parallel programs, <b>f</b> is the part that can run in parallel and <b>s</b> is the number of cores.</p>
+<div class="scroll"><table>
+  <tr><th>f</th><th>s</th><th>Working</th><th>Overall speedup</th></tr>
+  <tr><td>0.8</td><td>4</td><td>1 / (0.2 + 0.8 / 4) = 1 / 0.4</td><td><b>2.5×</b></td></tr>
+  <tr><td>0.5</td><td>∞</td><td>1 / (1 − 0.5)</td><td>at most <b>2×</b></td></tr>
+  <tr><td>0.95</td><td>8 cores</td><td>1 / (0.05 + 0.95 / 8) = 1 / (0.05 + 0.11875) = 1 / 0.16875</td><td><b>≈ 5.93×</b></td></tr>
+</table></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 660 350" width="660" role="img" aria-label="Amdahl's Law: speedup versus number of cores from 1 to 1024 for parallel fractions 0.5, 0.75, 0.9 and 0.95; the curves flatten at 2, 4, 10 and 20">
+      <g class="grid"><path d="M60 300 H520 M60 235 H520 M60 170 H520 M60 105 H520 M60 40 H520 M60 300 V40 M106 300 V40 M152 300 V40 M198 300 V40 M244 300 V40 M290 300 V40 M336 300 V40 M382 300 V40 M428 300 V40 M474 300 V40 M520 300 V40"/></g>
+      <text x="52" y="304" class="m dim" text-anchor="end">0</text>
+      <text x="52" y="239" class="m dim" text-anchor="end">5</text>
+      <text x="52" y="174" class="m dim" text-anchor="end">10</text>
+      <text x="52" y="109" class="m dim" text-anchor="end">15</text>
+      <text x="52" y="44" class="m dim" text-anchor="end">20</text>
+      <text x="60" y="318" class="m dim" text-anchor="middle">1</text>
+      <text x="106" y="318" class="m dim" text-anchor="middle">2</text>
+      <text x="152" y="318" class="m dim" text-anchor="middle">4</text>
+      <text x="198" y="318" class="m dim" text-anchor="middle">8</text>
+      <text x="244" y="318" class="m dim" text-anchor="middle">16</text>
+      <text x="290" y="318" class="m dim" text-anchor="middle">32</text>
+      <text x="336" y="318" class="m dim" text-anchor="middle">64</text>
+      <text x="382" y="318" class="m dim" text-anchor="middle">128</text>
+      <text x="428" y="318" class="m dim" text-anchor="middle">256</text>
+      <text x="474" y="318" class="m dim" text-anchor="middle">512</text>
+      <text x="520" y="318" class="m dim" text-anchor="middle">1024</text>
+      <text x="290" y="342" class="m" text-anchor="middle">number of cores, s (each step doubles)</text>
+      <text x="16" y="170" class="m" text-anchor="middle" transform="rotate(-90 16 170)">overall speedup</text>
+      <polyline points="60.0,287.0 71.5,285.9 83.0,284.8 94.5,283.7 106.0,282.7 117.5,281.7 129.0,280.8 140.5,280.0 152.0,279.2 163.5,278.5 175.0,277.9 186.5,277.4 198.0,276.9 209.5,276.5 221.0,276.1 232.5,275.8 244.0,275.5 255.5,275.3 267.0,275.1 278.5,274.9 290.0,274.8 301.5,274.7 313.0,274.6 324.5,274.5 336.0,274.4 347.5,274.3 359.0,274.3 370.5,274.2 382.0,274.2 393.5,274.2 405.0,274.1 416.5,274.1 428.0,274.1 439.5,274.1 451.0,274.1 462.5,274.1 474.0,274.1 485.5,274.0 497.0,274.0 508.5,274.0 520.0,274.0" class="w" stroke-dasharray="6 4"/>
+      <text x="526" y="278" class="m">f = 0.5 → max 2</text>
+      <polyline points="60.0,287.0 71.5,285.2 83.0,283.3 94.5,281.3 106.0,279.2 117.5,277.0 129.0,274.8 140.5,272.5 152.0,270.3 163.5,268.1 175.0,266.0 186.5,264.0 198.0,262.2 209.5,260.5 221.0,258.9 232.5,257.5 244.0,256.2 255.5,255.1 267.0,254.1 278.5,253.2 290.0,252.5 301.5,251.8 313.0,251.2 324.5,250.7 336.0,250.3 347.5,250.0 359.0,249.7 370.5,249.4 382.0,249.2 393.5,249.0 405.0,248.8 416.5,248.7 428.0,248.6 439.5,248.5 451.0,248.4 462.5,248.4 474.0,248.3 485.5,248.3 497.0,248.2 508.5,248.2 520.0,248.2" class="w"/>
+      <text x="526" y="252" class="m">f = 0.75 → max 4</text>
+      <polyline points="60.0,287.0 71.5,284.8 83.0,282.3 94.5,279.5 106.0,276.4 117.5,272.8 129.0,268.9 140.5,264.6 152.0,260.0 163.5,255.0 175.0,249.8 186.5,244.4 198.0,238.8 209.5,233.2 221.0,227.6 232.5,222.1 244.0,216.8 255.5,211.7 267.0,207.0 278.5,202.6 290.0,198.5 301.5,194.9 313.0,191.6 324.5,188.6 336.0,186.0 347.5,183.7 359.0,181.8 370.5,180.0 382.0,178.5 393.5,177.3 405.0,176.2 416.5,175.2 428.0,174.4 439.5,173.7 451.0,173.2 462.5,172.7 474.0,172.2 485.5,171.9 497.0,171.6 508.5,171.3 520.0,171.1" class="w-g"/>
+      <text x="526" y="175" class="m">f = 0.9 → max 10</text>
+      <polyline points="60.0,287.0 71.5,284.7 83.0,282.0 94.5,278.9 106.0,275.2 117.5,271.1 129.0,266.3 140.5,260.9 152.0,254.8 163.5,247.9 175.0,240.3 186.5,232.0 198.0,223.0 209.5,213.3 221.0,203.0 232.5,192.2 244.0,181.1 255.5,169.9 267.0,158.7 278.5,147.6 290.0,136.9 301.5,126.6 313.0,116.9 324.5,107.8 336.0,99.5 347.5,91.9 359.0,85.1 370.5,79.0 382.0,73.6 393.5,68.9 405.0,64.7 416.5,61.1 428.0,58.0 439.5,55.3 451.0,53.0 462.5,51.0 474.0,49.3 485.5,47.9 497.0,46.6 508.5,45.6 520.0,44.7" class="w-hi"/>
+      <text x="526" y="49" class="m">f = 0.95 → max 20</text>
+      <circle cx="198.0" cy="223.0" r="4.5" class="fill-ink"><title>f = 0.95, 8 cores: speedup 5.93</title></circle>
+      <circle cx="198.0" cy="238.8" r="4.5" class="fill-ink"><title>f = 0.9, 8 cores: speedup 4.71</title></circle>
+      <circle cx="198.0" cy="262.2" r="4.5" class="fill-ink"><title>f = 0.75, 8 cores: speedup 2.91</title></circle>
+      <circle cx="198.0" cy="276.9" r="4.5" class="fill-ink"><title>f = 0.5, 8 cores: speedup 1.78</title></circle>
+      <path class="grid" d="M150 82 L195 217"/>
+      <text x="70" y="76" class="m b">8 cores, f = 0.95 → 5.93×</text>
+  </svg>
+  <figcaption>Drawn to scale from the formula. The x-axis doubles at each step (1 to 1024 cores). Dots mark 8 cores; hover a dot to see its value. Even with 95% parallel code, 1024 cores give only 19.6×. The 5% serial part sets the ceiling of 20×.</figcaption>
+</figure>
+<div class="scroll"><table>
+  <tr><th>Cores →</th><th>2</th><th>4</th><th>8</th><th>16</th><th>64</th><th>1024</th><th>Limit</th></tr>
+  <tr><td>f = 0.5</td><td>1.33</td><td>1.60</td><td>1.78</td><td>1.88</td><td>1.97</td><td>2.00</td><td>2</td></tr>
+  <tr><td>f = 0.75</td><td>1.60</td><td>2.29</td><td>2.91</td><td>3.37</td><td>3.82</td><td>3.99</td><td>4</td></tr>
+  <tr><td>f = 0.9</td><td>1.82</td><td>3.08</td><td>4.71</td><td>6.40</td><td>8.77</td><td>9.91</td><td>10</td></tr>
+  <tr class="hl"><td>f = 0.95</td><td>1.90</td><td>3.48</td><td>5.93</td><td>9.14</td><td>15.42</td><td>19.64</td><td>20</td></tr>
+</table></div>
+
+<div class="callout tip"><b>Takeaway: make the common case fast</b><p>Spend your effort on the part that takes the <b>most time</b>. Improving a small part a lot gives less than improving a big part a little. See <a href="m6-01-power-wall-multicore.html">Power wall &amp; multicore</a> for why this matters for today's many-core chips.</p></div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>Speedup = old / new</b>, not new / old. The answer should be greater than 1 if things got faster.</li>
+  <li>Don't compare computers using CPI alone or clock rate alone. Multiply <b>all three</b> factors.</li>
+  <li>In Amdahl's Law, <b>f is a fraction of time</b>, not of code lines or of instructions.</li>
+  <li>With s → ∞ the answer is 1 / (1 − f), not ∞.</li>
+  <li>Watch the units: convert ps/ns and GHz before multiplying.</li>
+  <li>The MIPS metric (millions of instructions per second) is not the MIPS processor, and higher MIPS doesn't mean faster.</li>
+  <li>Weighted CPI uses the share of <b>instructions</b> in each class, not the share of time.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>A program has IC = 2 × 10<sup>9</sup>, CPI = 1.5 and a 2.5 GHz clock. What is the CPU time?</summary><div class="a"><p>Time = IC × CPI / rate = 2 × 10<sup>9</sup> × 1.5 / (2.5 × 10<sup>9</sup>) = <b>1.2 s</b>.</p></div></details>
+  <details class="q"><summary>A new compiler lowers CPI to 1.2, but its instructions need a 10% longer clock period. IC stays the same. Is it faster, and by how much?</summary><div class="a"><p>New T = 1.1 / 2.5 GHz = 0.44 ns. New time = 2 × 10<sup>9</sup> × 1.2 × 0.44 × 10<sup>−9</sup> = <b>1.056 s</b>. Speedup = 1.2 / 1.056 ≈ <b>1.14×</b>, so yes, it is faster.</p></div></details>
+  <details class="q"><summary>What is the MIPS rating of a 4 GHz CPU with average CPI 2?</summary><div class="a"><p>4 × 10<sup>9</sup> / (2 × 10<sup>6</sup>) = <b>2000 MIPS</b>.</p></div></details>
+  <details class="q"><summary>Floating-point work takes 40% of a program's time. It is made 10× faster. What is the overall speedup? What is the most possible?</summary><div class="a"><p>1 / (0.6 + 0.4 / 10) = 1 / 0.64 ≈ <b>1.56×</b>. Maximum = 1 / 0.6 ≈ <b>1.67×</b>.</p></div></details>
+  <details class="q"><summary>Option 1: make 60% of the time 2× faster. Option 2: make 30% of the time 10× faster. Which is better?</summary><div class="a"><p>Option 1: 1 / (0.4 + 0.3) = 1 / 0.7 ≈ <b>1.43×</b>. Option 2: 1 / (0.7 + 0.03) = 1 / 0.73 ≈ <b>1.37×</b>. <b>Option 1 wins</b>, because it speeds up the common case.</p></div></details>
+  <details class="q"><summary>A program is 90% parallel. How many cores are needed for a 4× speedup?</summary><div class="a"><p>4 = 1 / (0.1 + 0.9 / s) → 0.1 + 0.9 / s = 0.25 → 0.9 / s = 0.15 → <b>s = 6 cores</b>.</p></div></details>
+  <details class="q"><summary>Instruction classes: 50% with CPI 1, 30% with CPI 2, 20% with CPI 3. IC = 10<sup>6</sup> and T = 1 ns. What are the CPU time and the IPC?</summary><div class="a"><p>CPI = 0.5 + 0.6 + 0.6 = 1.7. Time = 10<sup>6</sup> × 1.7 × 10<sup>−9</sup> = <b>1.7 ms</b>. IPC = 1 / 1.7 ≈ <b>0.59</b>.</p></div></details>
+  <details class="q"><summary>Can you make a program 5× faster by improving a part that takes 80% of its time?</summary><div class="a"><p><b>No.</b> The best possible is 1 / (1 − 0.8) = 5×, and that needs the improved part to take zero time. Any real improvement gives less than 5×.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=jafpmMOw194" target="_blank" rel="noopener"><i class="play"></i><span><b>1 1 5 CPU Performance Equation</b><small>Prof. Dr. Ben H. Juurlink</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=5ayaVunXFUY" target="_blank" rel="noopener"><i class="play"></i><span><b>CPU Performance Parameters in COA: Average CPI, MIPS, and Execution Time</b><small>Engineering Funda</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=2dYV_lADfFI" target="_blank" rel="noopener"><i class="play"></i><span><b>Amdahl's Law in COA: Basics, Proof, and CPU Performance Explained</b><small>Engineering Funda</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

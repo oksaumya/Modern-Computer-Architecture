@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AMAT &amp; Multi-level Caches</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+<style>.ann td.n code{background:color-mix(in srgb,var(--code-ink) 14%,transparent);color:var(--code-ink)}</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 5 / AMAT</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 5 · Memory Hierarchy &amp; Cache <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>AMAT &amp; multi-level caches</h1>
+  <p class="idea"><strong>AMAT</strong> (Average Memory Access Time) is one number that tells you how fast a memory hierarchy is <em>on average</em>. You always pay the cache's own time. On a miss, you also pay the time of the next level. Adding a second cache level makes misses much cheaper.</p>
+  <div class="analogy"><b>Think of it like this:</b> you always check your pocket for your keys (1 second). One time in ten they aren't there, so you check your bag (10 seconds). One time in five they aren't in the bag either, so you search the house (100 seconds). Your average search is 1 + 0.1 × (10 + 0.2 × 100) = 4 seconds. Without the bag it would be 1 + 0.1 × 100 = 11 seconds.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Hit time</dt><dd>Time to check a level and get the data when it is there. Paid on <b>every</b> access to that level.</dd></div>
+  <div class="term"><dt>Miss rate (MR)</dt><dd>Fraction of accesses to a level that miss. 5% = 0.05.</dd></div>
+  <div class="term"><dt>Miss penalty</dt><dd>Extra time a miss costs: the time spent in the slower levels below.</dd></div>
+  <div class="term"><dt>Local miss rate</dt><dd>Misses at a level ÷ accesses that <b>reached</b> that level.</dd></div>
+  <div class="term"><dt>Global miss rate</dt><dd>Misses at a level ÷ <b>all</b> accesses made by the CPU.</dd></div>
+  <div class="term"><dt>CPI</dt><dd>Average clock cycles per instruction. See <a href="m4-04-performance.html">Performance</a>.</dd></div>
+  <div class="term"><dt>Memory stall cycles</dt><dd>Clock cycles the CPU spends waiting for memory after misses.</dd></div>
+</dl>
+
+<h2>1. The AMAT formula (one level)</h2>
+<div class="formula">AMAT = hit time + miss rate × miss penalty<small>You always pay the hit time. A fraction "miss rate" of the time you also pay the penalty.</small></div>
+<h3>Example 1</h3>
+<ol class="steps">
+  <li>Cache hit time = 1 ns, miss rate = 5%, miss penalty = 20 ns.</li>
+  <li>AMAT = 1 + 0.05 × 20 = 1 + 1 = <b>2 ns</b>.</li>
+  <li>Even a 5% miss rate <b>doubles</b> the average time compared with a perfect cache (1 ns).</li>
+</ol>
+
+<ol class="flow arrows">
+  <li><b>1. List the levels</b>time and miss rate of each</li>
+  <li><b>2. Start at the bottom</b>main memory always "hits"</li>
+  <li><b>3. Work upwards</b>penalty of a level = AMAT of the level below</li>
+  <li><b>4. Check units</b>ns vs clock cycles, % → decimal</li>
+</ol>
+
+<h2>2. Multi-level caches</h2>
+<p>With two cache levels, a miss in L1 does not go straight to DRAM. It goes to L2 first. So the <b>miss penalty of L1 is the AMAT of L2</b>.</p>
+<div class="formula">AMAT = T<sub>L1</sub> + MR<sub>L1</sub> × ( T<sub>L2</sub> + MR<sub>L2</sub> × T<sub>mem</sub> )<small>MR<sub>L2</sub> here is the <b>local</b> miss rate of L2. The bracket is L1's miss penalty.</small></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 660 172" width="660" role="img" aria-label="Access flow: every access checks L1 (1 ns); 10 percent go on to L2 (10 ns); 20 percent of those, 2 percent of all, go on to DRAM (100 ns)">
+    <rect x="10" y="50" width="80" height="60" rx="8" class="box"/><text x="50" y="85" class="b" text-anchor="middle">CPU</text>
+    <rect x="140" y="50" width="140" height="60" rx="8" class="box-g"/>
+    <text x="210" y="72" class="b" text-anchor="middle">L1 cache</text><text x="210" y="88" class="m" text-anchor="middle">1 ns</text><text x="210" y="102" class="m" text-anchor="middle">MR 10%</text>
+    <rect x="320" y="50" width="160" height="60" rx="8" class="box-b"/>
+    <text x="400" y="72" class="b" text-anchor="middle">L2 cache</text><text x="400" y="88" class="m" text-anchor="middle">10 ns</text><text x="400" y="102" class="m" text-anchor="middle">local MR 20%</text>
+    <rect x="520" y="50" width="120" height="60" rx="8" class="box-hi"/>
+    <text x="580" y="72" class="b" text-anchor="middle">DRAM</text><text x="580" y="88" class="m" text-anchor="middle">100 ns</text><text x="580" y="102" class="m" text-anchor="middle">always hits</text>
+    <path class="w" d="M90 80 H132 M280 80 H312 M480 80 H512"/>
+    <polygon points="140,80 130,75 130,85" class="fill-ink"/><polygon points="320,80 310,75 310,85" class="fill-ink"/><polygon points="520,80 510,75 510,85" class="fill-ink"/>
+    <text x="115" y="40" class="m" text-anchor="middle">100%</text>
+    <text x="300" y="40" class="m hi" text-anchor="middle">10%</text>
+    <text x="500" y="40" class="m hi" text-anchor="middle">20%</text>
+    <text x="210" y="134" class="m dim" text-anchor="middle">every access</text>
+    <text x="400" y="134" class="m dim" text-anchor="middle">10% of accesses</text>
+    <text x="580" y="134" class="m dim" text-anchor="middle">2% of accesses</text>
+    <text x="330" y="162" class="m b" text-anchor="middle">AMAT = 1 + 0.10 × 10 + 0.02 × 100 = 4 ns</text>
+  </svg>
+  <figcaption>Each level is visited only by the accesses that missed the level above it.</figcaption>
+</figure>
+
+<h3>Example 2</h3>
+<ol class="steps">
+  <li>L1: 1 ns, miss rate 10%. L2: 10 ns, local miss rate 20%. Main memory: 100 ns.</li>
+  <li>L1's miss penalty = L2's AMAT = 10 + 0.2 × 100 = 10 + 20 = <b>30 ns</b>.</li>
+  <li>AMAT = 1 + 0.1 × 30 = 1 + 3 = <b>4 ns</b>.</li>
+  <li>Without L2: AMAT = 1 + 0.1 × 100 = 1 + 10 = <b>11 ns</b>. L2 makes memory access almost <b>3× faster</b> (11 ÷ 4 = 2.75).</li>
+</ol>
+
+<figure class="diagram">
+  <svg viewBox="0 0 660 250" width="660" role="img" aria-label="Stacked bars to scale: with L2, AMAT is 1 + 1 + 2 = 4 ns; without L2, AMAT is 1 + 10 = 11 ns">
+<g class="grid"><path d="M170 20 V150"/><path d="M210 20 V150"/><path d="M250 20 V150"/><path d="M290 20 V150"/><path d="M330 20 V150"/><path d="M370 20 V150"/><path d="M410 20 V150"/><path d="M450 20 V150"/><path d="M490 20 V150"/><path d="M530 20 V150"/><path d="M570 20 V150"/><path d="M610 20 V150"/></g>
+<text x="170" y="168" class="m dim" text-anchor="middle">0</text>
+<text x="210" y="168" class="m dim" text-anchor="middle">1</text>
+<text x="250" y="168" class="m dim" text-anchor="middle">2</text>
+<text x="290" y="168" class="m dim" text-anchor="middle">3</text>
+<text x="330" y="168" class="m dim" text-anchor="middle">4</text>
+<text x="370" y="168" class="m dim" text-anchor="middle">5</text>
+<text x="410" y="168" class="m dim" text-anchor="middle">6</text>
+<text x="450" y="168" class="m dim" text-anchor="middle">7</text>
+<text x="490" y="168" class="m dim" text-anchor="middle">8</text>
+<text x="530" y="168" class="m dim" text-anchor="middle">9</text>
+<text x="570" y="168" class="m dim" text-anchor="middle">10</text>
+<text x="610" y="168" class="m dim" text-anchor="middle">11</text>
+<text x="390" y="186" class="m dim" text-anchor="middle">nanoseconds (to scale)</text>
+<text x="160" y="57" text-anchor="end" class="b">L1 + L2 + DRAM</text>
+<rect x="170" y="35" width="40" height="34" class="box-g"/>
+<rect x="210" y="35" width="40" height="34" class="box-b"/>
+<rect x="250" y="35" width="80" height="34" class="box-hi"/>
+<text x="338" y="57" class="hi">= 4 ns</text>
+<text x="160" y="117" text-anchor="end" class="b">L1 + DRAM only</text>
+<rect x="170" y="95" width="40" height="34" class="box-g"/>
+<rect x="210" y="95" width="400" height="34" class="box-hi"/>
+<text x="618" y="117" class="hi">= 11 ns</text>
+<rect x="40" y="201" width="14" height="14" class="box-g"/><text x="60" y="212">L1 time: 1</text>
+<rect x="170" y="201" width="14" height="14" class="box-b"/><text x="190" y="212">L2 part: 0.1 × 10 = 1</text>
+<rect x="40" y="225" width="14" height="14" class="box-hi"/><text x="60" y="236">DRAM part: 0.1 × 0.2 × 100 = 2 with L2, or 0.1 × 100 = 10 without L2</text>
+</svg>
+  <figcaption>Where the average time goes, drawn to scale. Without L2, the 10% of accesses that go all the way to DRAM cost 10 ns on average, far more than the 1 ns L1 itself.</figcaption>
+</figure>
+
+<h2>3. Local vs global miss rate</h2>
+<div class="vs">
+  <div>
+    <h3>Local miss rate of L2</h3>
+    <div class="formula" style="margin-top:0">L2 misses ÷ L2 accesses</div>
+    <p style="font-size:15px">L2 only sees the "hard" accesses that L1 already missed, so its local miss rate often looks high (20% here, sometimes 50%+).</p>
+  </div>
+  <div>
+    <h3>Global miss rate of L2</h3>
+    <div class="formula" style="margin-top:0">L2 misses ÷ all CPU accesses<br>= MR<sub>L1</sub> × MR<sub>L2, local</sub></div>
+    <p style="font-size:15px">Example 2: 0.1 × 0.2 = <b>0.02 = 2%</b>. Only 2% of all accesses reach DRAM.</p>
+  </div>
+</div>
+<div class="formula">AMAT = T<sub>L1</sub> + MR<sub>L1</sub> × T<sub>L2</sub> + (global MR<sub>L2</sub>) × T<sub>mem</sub><small>The same formula with the bracket multiplied out: 1 + 0.1 × 10 + 0.02 × 100 = 4 ns ✓</small></div>
+<div class="callout tip"><b>Which one to quote?</b><p>A high <b>local</b> miss rate for L2 is not a sign of a bad L2. Judge the whole system by the <b>global</b> miss rate (how often the CPU reaches DRAM) or, best, by the AMAT itself.</p></div>
+
+<h3>The formula as a tiny program</h3>
+<div class="code">
+  <div class="code-head"><span><b>python</b> · amat.py</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">def</span> amat(levels, t_mem):</td><td class="n">A function. <code>levels</code> is a list of (time, local miss rate) pairs from L1 downward; <code>t_mem</code> is the main-memory time.</td></tr>
+    <tr><td class="c">    total = t_mem</td><td class="n">Start at the bottom: main memory always hits.</td></tr>
+    <tr><td class="c">    <span class="kw">for</span> t, mr <span class="kw">in</span> reversed(levels):</td><td class="n">Walk upwards: last cache level first, L1 last.</td></tr>
+    <tr><td class="c">        total = t + mr * total</td><td class="n">This level's AMAT = its time + miss rate × (AMAT of everything below).</td></tr>
+    <tr><td class="c">    <span class="kw">return</span> total</td><td class="n">After the loop, <code>total</code> is the AMAT seen by the CPU.</td></tr>
+    <tr><td class="c">amat([(<span class="num">1</span>, <span class="num">0.1</span>), (<span class="num">10</span>, <span class="num">0.2</span>)], <span class="num">100</span>)</td><td class="n">Example 2 → 10 + 0.2 × 100 = 30, then 1 + 0.1 × 30 = <b>4.0</b></td></tr>
+    <tr><td class="c">amat([(<span class="num">1</span>, <span class="num">0.1</span>)], <span class="num">100</span>)</td><td class="n">No L2 → <b>11.0</b></td></tr>
+  </table>
+</div>
+
+<h2>4. From AMAT to CPI</h2>
+<p>Misses slow down whole programs. Measure the damage as <b>extra clock cycles per instruction</b>:</p>
+<div class="formula">CPI = base CPI + memory stall cycles per instruction<small>stall cycles per instruction = misses per instruction × miss penalty (in cycles)</small></div>
+<div class="formula">misses per instruction = miss rate × memory accesses per instruction<small>Every instruction is fetched (1 access); loads and stores add a data access.</small></div>
+
+<h3>Example 3: adding an L2 cache</h3>
+<p>Base CPI = 1.0 (if every access hit). L1 miss rate = 2% per instruction. Going to main memory costs 100 cycles. An added L2 costs 25 cycles to check, and the global miss rate (reaching main memory) drops to 0.5%.</p>
+<ol class="steps">
+  <li><b>L1 only:</b> CPI = 1 + 0.02 × 100 = 1 + 2 = <b>3.0</b>.</li>
+  <li><b>With L2:</b> every L1 miss pays 25 cycles, and 0.5% of instructions also pay 100 cycles.<br>CPI = 1 + 0.02 × 25 + 0.005 × 100 = 1 + 0.5 + 0.5 = <b>2.0</b>.</li>
+  <li><b>Speedup</b> = 3.0 ÷ 2.0 = <b>1.5×</b>.</li>
+</ol>
+<figure class="diagram">
+  <svg viewBox="0 0 660 210" width="660" role="img" aria-label="Stacked bars to scale: CPI is 1 + 2 = 3.0 with one cache level, and 1 + 0.5 + 0.5 = 2.0 with an L2 cache">
+<g class="grid"><path d="M150 20 V150"/><path d="M225 20 V150"/><path d="M300 20 V150"/><path d="M375 20 V150"/><path d="M450 20 V150"/><path d="M525 20 V150"/><path d="M600 20 V150"/></g>
+<text x="150" y="168" class="m dim" text-anchor="middle">0.0</text>
+<text x="225" y="168" class="m dim" text-anchor="middle">0.5</text>
+<text x="300" y="168" class="m dim" text-anchor="middle">1.0</text>
+<text x="375" y="168" class="m dim" text-anchor="middle">1.5</text>
+<text x="450" y="168" class="m dim" text-anchor="middle">2.0</text>
+<text x="525" y="168" class="m dim" text-anchor="middle">2.5</text>
+<text x="600" y="168" class="m dim" text-anchor="middle">3.0</text>
+<text x="375" y="186" class="m dim" text-anchor="middle">CPI (to scale)</text>
+<text x="140" y="57" text-anchor="end" class="b">L1 only</text>
+<rect x="150" y="35" width="150" height="34" class="box-g"/>
+<text x="225" y="57" class="m" text-anchor="middle">base 1.0</text>
+<rect x="300" y="35" width="300" height="34" class="box-hi"/>
+<text x="450" y="57" class="m" text-anchor="middle">L1-miss stalls 2.0</text>
+<text x="608" y="57" class="hi">= 3.0</text>
+<text x="140" y="117" text-anchor="end" class="b">L1 + L2</text>
+<rect x="150" y="95" width="150" height="34" class="box-g"/>
+<text x="225" y="117" class="m" text-anchor="middle">base 1.0</text>
+<rect x="300" y="95" width="75" height="34" class="box-b"/>
+<text x="338" y="117" class="m" text-anchor="middle">L2 0.5</text>
+<rect x="375" y="95" width="75" height="34" class="box-hi"/>
+<text x="412" y="117" class="m" text-anchor="middle">mem 0.5</text>
+<text x="458" y="117" class="hi">= 2.0</text>
+</svg>
+  <figcaption>CPI broken into base work and memory stalls, drawn to scale. L2 cuts the stall time from 2.0 to 1.0 cycles per instruction.</figcaption>
+</figure>
+<p style="font-size:15px">Numbers are simplified from the Patterson &amp; Hennessy example (which works in 0.25 ns clock cycles: 400-cycle and 20-cycle penalties, CPI 9.0 → 3.4, speedup ≈ 2.6). The method is identical.</p>
+
+<h3>Example 4: instruction and data misses</h3>
+<p>Patterson &amp; Hennessy: base CPI = 2, instruction miss rate = 2%, data miss rate = 4%, miss penalty = 100 cycles, and <b>36%</b> of instructions are loads or stores (so they make a data access).</p>
+<ol class="steps">
+  <li>Instruction stalls = 1 × 0.02 × 100 = <b>2.00</b> cycles per instruction (every instruction is fetched).</li>
+  <li>Data stalls = 0.36 × 0.04 × 100 = <b>1.44</b> cycles per instruction (only 36% touch data).</li>
+  <li>CPI = 2 + 2.00 + 1.44 = <b>5.44</b>. A perfect cache would give CPI 2, so the real cache makes the CPU 5.44 ÷ 2 = <b>2.72×</b> slower.</li>
+</ol>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Writing AMAT = MR × penalty and forgetting the hit time. You <b>always</b> pay the hit time.</li>
+  <li>Writing AMAT = (1 − MR) × hit + MR × penalty. That is only right if "penalty" already includes the time spent checking the cache. Use the standard form unless the question says otherwise.</li>
+  <li>Multiplying by the <b>global</b> L2 miss rate inside the bracket. The nested formula uses the <b>local</b> rate.</li>
+  <li>Percent vs decimal: 5% is 0.05, not 5.</li>
+  <li>Mixing ns and clock cycles in one sum. Convert first.</li>
+  <li>Forgetting that only a fraction of instructions (loads/stores) make data accesses.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>Hit time 0.5 ns, miss rate 2%, miss penalty 100 ns. Find the AMAT.</summary><div class="a"><p>0.5 + 0.02 × 100 = 0.5 + 2 = <b>2.5 ns</b>.</p></div></details>
+  <details class="q"><summary>Hit time 1 ns, miss penalty 20 ns. What miss rate gives an AMAT of 1.5 ns?</summary><div class="a"><p>1.5 = 1 + MR × 20 → MR = 0.5 ÷ 20 = <b>0.025 = 2.5%</b>.</p></div></details>
+  <details class="q"><summary>Cache A: 1 ns, MR 5%. Cache B: 1.5 ns, MR 2%. Penalty 50 ns. Which is faster on average?</summary><div class="a"><p>A: 1 + 0.05 × 50 = <b>3.5 ns</b>. B: 1.5 + 0.02 × 50 = <b>2.5 ns</b>. <b>B wins</b>, even though its hit time is slower.</p></div></details>
+  <details class="q"><summary>Three levels: L1 1 ns (MR 5%), L2 5 ns (local MR 30%), L3 20 ns (local MR 20%), memory 100 ns. Find AMAT and the global miss rates.</summary><div class="a">
+    <p>From the bottom: L3 = 20 + 0.2 × 100 = 40. L2 = 5 + 0.3 × 40 = 17. L1: AMAT = 1 + 0.05 × 17 = <b>1.85 ns</b>.</p>
+    <p>Global MR: L2 = 0.05 × 0.3 = <b>1.5%</b>; L3 = 0.05 × 0.3 × 0.2 = <b>0.3%</b>.</p>
+  </div></details>
+  <details class="q"><summary>1,000 memory references: L1 misses 40 times, L2 misses 20 times. Find L1's miss rate, and L2's local and global miss rates. Then find AMAT if L1 = 1 cycle, L2 = 10 cycles, memory = 200 cycles.</summary><div class="a">
+    <p>L1 MR = 40 / 1000 = <b>4%</b>. L2 local = 20 / 40 = <b>50%</b>. L2 global = 20 / 1000 = <b>2%</b>.</p>
+    <p>AMAT = 1 + 0.04 × (10 + 0.5 × 200) = 1 + 0.04 × 110 = <b>5.4 cycles</b>.</p>
+  </div></details>
+  <details class="q"><summary>Base CPI 1.5. Each instruction makes 1.3 memory accesses on average. Miss rate 3%, penalty 60 cycles. Find the CPI.</summary><div class="a"><p>Stalls = 1.3 × 0.03 × 60 = 2.34. CPI = 1.5 + 2.34 = <b>3.84</b>.</p></div></details>
+  <details class="q"><summary>L2 has a local miss rate of 50%. Is L2 useless?</summary><div class="a"><p><b>No.</b> L2 only sees the accesses that L1 missed. If L1's miss rate is 4%, the global rate is only 2%, and L2 still halves the trips to slow DRAM.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=Y1esjWBTf7Q" target="_blank" rel="noopener"><i class="play"></i><span><b>3. Average Memory Access Time (AMAT) - Computer Organization - Gate</b><small>PacketPrep</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=nrj78Vbik_U" target="_blank" rel="noopener"><i class="play"></i><span><b>Multilevel Cache Performance - Georgia Tech - HPCA: Part 4</b><small>Udacity</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=ajHZwCPV1js" target="_blank" rel="noopener"><i class="play"></i><span><b>Multilevel Cache Organization Problems| Average Memory Access Time | GATE CSE/IT Model Question|</b><small>SaiTechiez</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

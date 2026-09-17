@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>C to MIPS</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 3 / C to MIPS</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>C to MIPS: arithmetic, arrays, if-else and loops</h1>
+  <p class="idea">A compiler turns each line of a high-level language (like C) into a few simple MIPS instructions. There are only a handful of patterns to learn: <b>maths → register ops</b>, <b>array element → shift, add, load</b>, <b>if → branch on the opposite condition</b>, <b>loop → branch at the top, jump back at the bottom</b>.</p>
+  <div class="analogy"><b>Think of it like this:</b> a recipe says "if the dough is sticky, add flour; otherwise, knead". A very literal helper can only do "go to step N" and "if X, go to step N". So you rewrite the recipe: "Step 1: if the dough is <em>not</em> sticky, go to step 3. Step 2: add flour, go to step 4. Step 3: knead. Step 4: …". That rewrite is exactly what translating C into MIPS is.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Variable</dt><dd>A named box that holds a value, e.g. <code>i</code>. In MIPS we keep it in a register.</dd></div>
+  <div class="term"><dt>Label</dt><dd>A name followed by a colon, like <code>Loop:</code>. It marks an address that branches and jumps can go to.</dd></div>
+  <div class="term"><dt>Branch</dt><dd>A <b>conditional</b> go-to: <code>beq</code> (go if equal) or <code>bne</code> (go if not equal).</dd></div>
+  <div class="term"><dt>Jump</dt><dd>An <b>unconditional</b> go-to: <code>j Label</code> always goes.</dd></div>
+  <div class="term"><dt>Fall through</dt><dd>When a branch is not taken, the CPU simply runs the next line.</dd></div>
+  <div class="term"><dt>Base address</dt><dd>The memory address of an array's first element, <code>A[0]</code>.</dd></div>
+  <div class="term"><dt>Offset</dt><dd>How many bytes past the base address to look. For <code>A[i]</code> it is 4 × i.</dd></div>
+  <div class="term"><dt>Syscall</dt><dd>A request to the system (MARS) to do I/O, e.g. print a number. The request number goes in <code>$v0</code>.</dd></div>
+</dl>
+
+<h2>0. C in 5 minutes (no coding knowledge needed)</h2>
+<p>C is a programming language. You don't need to write C. You only need to <b>read</b> these few pieces, so you can translate them.</p>
+<div class="scroll"><table>
+  <tr><th>C code</th><th>Plain English</th><th>MIPS idea</th></tr>
+  <tr><td><code>int f;</code></td><td>"Make a box called <code>f</code> that holds a whole number (an <b>int</b>eger)." In MIPS an int is 32 bits.</td><td>Pick a register for f, e.g. <code>$s0</code></td></tr>
+  <tr><td><code>f = g + h;</code></td><td>"Work out g + h and put the answer into f." A single <code>=</code> means <b>store into</b>. The <code>;</code> just ends the line.</td><td><code>add $s0, $s1, $s2</code></td></tr>
+  <tr><td><code>i == j</code></td><td>"Is i equal to j?" Double <code>==</code> means <b>compare</b>; it gives yes or no.</td><td><code>beq</code> / <code>bne</code></td></tr>
+  <tr><td><code>i != j</code>, <code>i &lt; j</code></td><td>"Is i not equal to j?" / "Is i less than j?"</td><td><code>bne</code> / <code>slt</code></td></tr>
+  <tr><td><code>i += 1;</code> or <code>i++</code></td><td>"Add 1 to i." (Short for <code>i = i + 1</code>.)</td><td><code>addi $s3, $s3, 1</code></td></tr>
+  <tr><td><code>if (cond) X; else Y;</code></td><td>"If cond is true, do X. Otherwise, do Y." Only one of them runs.</td><td>branch + jump</td></tr>
+  <tr><td><code>while (cond) X;</code></td><td>"Check cond. If true, do X and check again. Stop when it becomes false." (Maybe zero times.)</td><td>loop with branch + jump back</td></tr>
+  <tr><td><code>for (i = 0; i &lt; n; i++) X;</code></td><td>"Start i at 0. Repeat while i is less than n: do X, then add 1 to i."</td><td>a while loop</td></tr>
+  <tr><td><code>A[i]</code></td><td>"Element number i of the list (array) A." Counting starts at 0: <code>A[0]</code> is the first.</td><td><code>sll</code>, <code>add</code>, <code>lw</code></td></tr>
+  <tr><td><code>int sum(int a, int b) { return a + b; }</code></td><td>"A reusable mini-program called sum. It takes two ints a and b, and hands back (<b>returns</b>) a + b." The <code>{ }</code> group lines together.</td><td><code>jal</code> / <code>jr $ra</code> (<a href="m3-05-functions-stack.html">next page</a>)</td></tr>
+</table></div>
+
+<h3>Registers we will use</h3>
+<p>By convention, C variables go in the <b>saved registers</b> <code>$s0</code>–<code>$s7</code>, and scratch results go in the <b>temporaries</b> <code>$t0</code>–<code>$t9</code>. <code>$zero</code> always holds 0. Full table: <a href="m3-03-mips-registers-formats.html">MIPS registers &amp; formats</a>.</p>
+
+<h2>1. Arithmetic</h2>
+<p><b>C:</b> <code>f = (g + h) - (i + j);</code> → "add g and h; add i and j; subtract the second from the first; store the result in f."<br>Variables f, g, h, i, j are in <code>$s0, $s1, $s2, $s3, $s4</code>.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · arithmetic</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">add</span> $t0, $s1, $s2</td><td class="n">$t0 = g + h. MIPS adds only two things at a time, so keep the part-result in a temporary.</td></tr>
+    <tr><td class="c"><span class="kw">add</span> $t1, $s3, $s4</td><td class="n">$t1 = i + j</td></tr>
+    <tr><td class="c"><span class="kw">sub</span> $s0, $t0, $t1</td><td class="n">f = $t0 − $t1. The first register after the name is always the destination.</td></tr>
+  </table>
+</div>
+<p>Check with g = 10, h = 7, i = 4, j = 2: (10 + 7) − (4 + 2) = <b>11</b>. MARS prints 11.</p>
+<p>Adding a constant uses <code>addi</code>: <code>f = g + 5;</code> → <code>addi $s0, $s1, 5</code>. There is no <code>subi</code>; use a negative constant: <code>addi $s0, $s1, -5</code>.</p>
+
+<h2>2. Arrays</h2>
+<h3>Constant index: <code>A[8]</code></h3>
+<p>Each int is 4 bytes, so <code>A[8]</code> is <b>8 × 4 = 32 bytes</b> after the start. The base address of A is in <code>$s3</code>.</p>
+<p><b>C:</b> <code>g = h + A[8];</code> → "take element 8 of A, add h, store in g". (g in <code>$s1</code>, h in <code>$s2</code>.)</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · g = h + A[8]</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">lw</span>  $t0, <span class="num">32</span>($s3)</td><td class="n">Load word: $t0 = memory[$s3 + 32] = A[8]. Maths can't use memory directly, so load it first.</td></tr>
+    <tr><td class="c"><span class="kw">add</span> $s1, $s2, $t0</td><td class="n">g = h + A[8]</td></tr>
+  </table>
+</div>
+<p><b>C:</b> <code>A[12] = h + A[8];</code> → "work out h + A[8] and store it into element 12".</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · A[12] = h + A[8]</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">lw</span>  $t0, <span class="num">32</span>($s3)</td><td class="n">$t0 = A[8]</td></tr>
+    <tr><td class="c"><span class="kw">add</span> $t0, $s2, $t0</td><td class="n">$t0 = h + A[8]</td></tr>
+    <tr><td class="c"><span class="kw">sw</span>  $t0, <span class="num">48</span>($s3)</td><td class="n">Store word: memory[$s3 + 48] = $t0. 12 × 4 = 48, so this is A[12].</td></tr>
+  </table>
+</div>
+
+<h3>Variable index: <code>A[i]</code></h3>
+<p>Now the offset is 4 × i, which is only known at run time. Compute the address in three steps. Here i is in <code>$s1</code> and the base of A is in <code>$s6</code>.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · $t0 = A[i]</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">sll</span> $t1, $s1, <span class="num">2</span></td><td class="n">Shift left by 2 = multiply by 4. $t1 = 4 × i (the offset in bytes).</td></tr>
+    <tr><td class="c"><span class="kw">add</span> $t1, $t1, $s6</td><td class="n">$t1 = base + 4 × i = the address of A[i].</td></tr>
+    <tr><td class="c"><span class="kw">lw</span>  $t0, <span class="num">0</span>($t1)</td><td class="n">$t0 = memory[that address] = A[i].</td></tr>
+  </table>
+</div>
+<div class="callout tip"><b>Why shift instead of multiply?</b><p>Shifting a binary number left by 1 doubles it; by 2 multiplies by 4. For example, 3 = <code>0011</code> → <code>1100</code> = 12. A shift is just wiring, so it is much cheaper than a multiplier.</p></div>
+<div class="callout trap"><b>Common array bug</b><p>Writing <code>lw $t0, $s1($s6)</code> is illegal: the offset must be a constant. And forgetting the <code>sll</code> reads byte i instead of element i.</p></div>
+
+<h2>3. if / else</h2>
+<p><b>C:</b> <code>if (i == j) f = g + h; else f = g - h;</code> → "If i equals j, set f to g + h. Otherwise, set f to g − h." (f..j in <code>$s0..$s4</code>.)</p>
+<figure class="diagram">
+  <svg viewBox="0 0 600 290" width="600" role="img" aria-label="Flowchart for if-else: test i equals j; yes path computes g plus h then jumps to Exit; no path is where bne jumps and computes g minus h; both reach Exit">
+    <polygon points="300,20 390,60 300,100 210,60" class="box-hi"/>
+    <text x="300" y="65" class="m b" text-anchor="middle">i == j ?</text>
+    <path class="w-g" d="M210 60 H160 V132"/>
+    <polygon points="160,140 155,128 165,128" class="fill-ink"/>
+    <text x="150" y="50" class="g" text-anchor="middle">yes: fall through</text>
+    <path class="w-hi" d="M390 60 H440 V132"/>
+    <polygon points="440,140 435,128 445,128" class="fill-hi"/>
+    <text x="460" y="50" class="hi" text-anchor="middle">no: bne jumps to Else</text>
+    <rect x="70" y="140" width="180" height="48" rx="8" class="box-g"/>
+    <text x="160" y="160" class="m" text-anchor="middle">f = g + h</text>
+    <text x="160" y="178" class="m dim" text-anchor="middle">add $s0,$s1,$s2</text>
+    <rect x="350" y="140" width="180" height="48" rx="8" class="box-b"/>
+    <text x="360" y="132" class="m b">Else:</text>
+    <text x="440" y="160" class="m" text-anchor="middle">f = g − h</text>
+    <text x="440" y="178" class="m dim" text-anchor="middle">sub $s0,$s1,$s2</text>
+    <path class="w" d="M160 188 V218 H440 M440 188 V218 M300 218 V238"/>
+    <polygon points="300,246 295,234 305,234" class="fill-ink"/>
+    <text x="150" y="210" class="m dim" text-anchor="end">j Exit</text>
+    <rect x="230" y="246" width="140" height="36" rx="8" class="box"/>
+    <text x="300" y="269" class="m b" text-anchor="middle">Exit: …</text>
+  </svg>
+  <figcaption>The "then" part comes first and must jump over the "else" part with <code>j Exit</code>.</figcaption>
+</figure>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · if / else</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">      <span class="kw">bne</span> $s3, $s4, Else</td><td class="n">If i ≠ j, the "then" part must be skipped: go to Else. (Test the <b>opposite</b> of <code>i == j</code>.)</td></tr>
+    <tr><td class="c">      <span class="kw">add</span> $s0, $s1, $s2</td><td class="n">Then-part: f = g + h. We only get here when i == j.</td></tr>
+    <tr><td class="c">      <span class="kw">j</span>   Exit</td><td class="n">Skip the else-part. Without this, both parts would run.</td></tr>
+    <tr><td class="c">Else: <span class="kw">sub</span> $s0, $s1, $s2</td><td class="n">Else-part: f = g − h.</td></tr>
+    <tr><td class="c">Exit: <span class="com"># …next statement</span></td><td class="n">Both paths meet here. <code>#</code> starts a comment in MIPS.</td></tr>
+  </table>
+</div>
+<div class="callout tip"><b>Rule: branch on the opposite condition</b><p>The code under the <code>if</code> sits right after the branch, so we want to <b>fall through</b> when the condition is true, and <b>branch away</b> when it is false. So <code>==</code> becomes <code>bne</code>, and <code>!=</code> becomes <code>beq</code>. An <code>if</code> with no <code>else</code> needs no <code>j</code>: branch straight to Exit.</p></div>
+
+<h2>4. Less-than and friends: <code>slt</code></h2>
+<p>MIPS has only two real branches (<code>beq</code>, <code>bne</code>). For &lt;, &gt;, ≤, ≥ we first use <b><code>slt</code></b> ("set on less than"):</p>
+<div class="formula">slt $t0, a, b &nbsp;→&nbsp; $t0 = 1 if a &lt; b, else 0<small><code>slti $t0, a, 10</code> does the same with a constant. Then test $t0 against $zero with beq/bne.</small></div>
+<div class="scroll"><table>
+  <tr><th>To jump to L when…</th><th>MIPS</th><th>Why</th></tr>
+  <tr><td><code>a &lt; b</code></td><td><code>slt $t0, a, b</code><br><code>bne $t0, $zero, L</code></td><td>$t0 is 1 exactly when a &lt; b</td></tr>
+  <tr><td><code>a &gt;= b</code></td><td><code>slt $t0, a, b</code><br><code>beq $t0, $zero, L</code></td><td>"not less than" = "greater or equal"</td></tr>
+  <tr><td><code>a &gt; b</code></td><td><code>slt $t0, b, a</code><br><code>bne $t0, $zero, L</code></td><td>a &gt; b is the same as b &lt; a (swap)</td></tr>
+  <tr><td><code>a &lt;= b</code></td><td><code>slt $t0, b, a</code><br><code>beq $t0, $zero, L</code></td><td>"not (b &lt; a)"</td></tr>
+</table></div>
+<p><b>Example:</b> <code>if (g &lt; h) f = h; else f = g;</code> ("f becomes the bigger of g and h"). We must skip the then-part when g ≥ h:</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · if (g &lt; h)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">      <span class="kw">slt</span>  $t0, $s1, $s2</td><td class="n">$t0 = 1 if g &lt; h</td></tr>
+    <tr><td class="c">      <span class="kw">beq</span>  $t0, $zero, Else</td><td class="n">If $t0 is 0 (g ≥ h, the opposite), go to Else.</td></tr>
+    <tr><td class="c">      <span class="kw">add</span>  $s0, $s2, $zero</td><td class="n">f = h (adding 0 just copies)</td></tr>
+    <tr><td class="c">      <span class="kw">j</span>    Exit</td><td class="n"></td></tr>
+    <tr><td class="c">Else: <span class="kw">add</span>  $s0, $s1, $zero</td><td class="n">f = g</td></tr>
+    <tr><td class="c">Exit:</td><td class="n"></td></tr>
+  </table>
+</div>
+<p>MARS also accepts <b>pseudo-instructions</b> <code>blt</code>, <code>bge</code>, <code>bgt</code>, <code>ble</code>. They are not real MIPS instructions: the assembler expands each into <code>slt</code> + <code>beq</code>/<code>bne</code> using <code>$at</code>. For example, <code>blt $t0, $t1, L</code> becomes <code>slt $at, $t0, $t1</code> + <code>bne $at, $zero, L</code>.</p>
+
+<h2>5. while loop</h2>
+<p><b>C:</b> <code>while (save[i] == k) i += 1;</code> → "As long as element i of the array <code>save</code> equals k, add 1 to i." It finds the first element that is <b>not</b> k.<br>i is in <code>$s3</code>, k in <code>$s5</code>, and the base of <code>save</code> in <code>$s6</code>.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 600 250" width="600" role="img" aria-label="While loop flowchart: load save of i, test equals k; if yes add 1 to i and jump back to Loop; if no bne goes to Exit">
+    <rect x="180" y="20" width="240" height="44" rx="8" class="box-b"/>
+    <text x="300" y="47" class="m" text-anchor="middle">Loop: $t0 = save[i]</text>
+    <path class="w" d="M300 64 V77"/>
+    <polygon points="300,85 295,73 305,73" class="fill-ink"/>
+    <polygon points="300,85 400,120 300,155 200,120" class="box-hi"/>
+    <text x="300" y="125" class="m b" text-anchor="middle">save[i] == k ?</text>
+    <path class="w-g" d="M300 155 V172"/>
+    <polygon points="300,180 295,168 305,168" class="fill-ink"/>
+    <text x="310" y="172" class="g">yes</text>
+    <rect x="180" y="180" width="240" height="40" rx="8" class="box-g"/>
+    <text x="300" y="205" class="m" text-anchor="middle">i = i + 1  (addi)</text>
+    <path class="w" d="M180 200 H120 V42 H172"/>
+    <polygon points="180,42 168,37 168,47" class="fill-ink"/>
+    <text x="112" y="125" class="m b" text-anchor="end">j Loop</text>
+    <path class="w-hi" d="M400 120 H515 V192"/>
+    <polygon points="515,200 510,188 520,188" class="fill-hi"/>
+    <text x="410" y="110" class="hi">no: bne Exit</text>
+    <rect x="450" y="200" width="130" height="40" rx="8" class="box"/>
+    <text x="515" y="225" class="m b" text-anchor="middle">Exit: …</text>
+  </svg>
+  <figcaption>Test at the top, <code>j Loop</code> at the bottom. The loop ends when the test fails.</figcaption>
+</figure>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · while (save[i] == k) i += 1;</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">Loop: <span class="kw">sll</span>  $t1, $s3, <span class="num">2</span></td><td class="n">$t1 = 4 × i</td></tr>
+    <tr><td class="c">      <span class="kw">add</span>  $t1, $t1, $s6</td><td class="n">$t1 = address of save[i]</td></tr>
+    <tr><td class="c">      <span class="kw">lw</span>   $t0, <span class="num">0</span>($t1)</td><td class="n">$t0 = save[i]</td></tr>
+    <tr><td class="c">      <span class="kw">bne</span>  $t0, $s5, Exit</td><td class="n">Opposite of <code>==</code>: if save[i] ≠ k, leave the loop.</td></tr>
+    <tr><td class="c">      <span class="kw">addi</span> $s3, $s3, <span class="num">1</span></td><td class="n">Loop body: i = i + 1</td></tr>
+    <tr><td class="c">      <span class="kw">j</span>    Loop</td><td class="n">Go back and test again.</td></tr>
+    <tr><td class="c">Exit:</td><td class="n">Continue with the rest of the program.</td></tr>
+  </table>
+</div>
+<h3>Trace: save = {7, 7, 7, 3, 7}, k = 7, i starts at 0</h3>
+<div class="stepper" data-stepper>
+  <div class="stage"><p><b>Round 1:</b> i = 0 → $t1 = 0 + base → save[0] = 7. Is 7 ≠ 7? No, so don't branch. i becomes <b>1</b>. <code>j Loop</code>.</p></div>
+  <div class="stage"><p><b>Round 2:</b> i = 1 → $t1 = base + 4 → save[1] = 7. Equal, so i becomes <b>2</b>. <code>j Loop</code>.</p></div>
+  <div class="stage"><p><b>Round 3:</b> i = 2 → $t1 = base + 8 → save[2] = 7. Equal, so i becomes <b>3</b>. <code>j Loop</code>.</p></div>
+  <div class="stage"><p><b>Round 4:</b> i = 3 → $t1 = base + 12 → save[3] = 3. Is 3 ≠ 7? <b>Yes</b>, so <code>bne</code> jumps to Exit.</p></div>
+  <div class="stage"><p><b>Done:</b> <code>$s3</code> = <b>3</b>, the index of the first element that is not 7. The loop body ran 3 times; the test ran 4 times. (Tested in MARS.)</p></div>
+</div>
+
+<h2>6. for loop</h2>
+<p><b>C:</b> <code>for (i = 0; i &lt; n; i++) sum = sum + A[i];</code><br>Plain English: "Start i at 0. While i is less than n: add element i of A to sum, then add 1 to i." So it adds up the first n elements.</p>
+<p>A <code>for</code> loop is just a <code>while</code> loop with its three parts spread out:</p>
+<div class="vs">
+  <div><h3>for</h3><p><code>for (<b>init</b>; <b>test</b>; <b>step</b>) body;</code></p></div>
+  <div><h3>same thing as while</h3><p><code><b>init</b>;<br>while (<b>test</b>) { body; <b>step</b>; }</code></p></div>
+</div>
+<ol class="flow arrows">
+  <li><b>init</b><code>li $t0, 0</code> (i = 0), before the label</li>
+  <li><b>Loop: test</b><code>slt</code> + <code>beq … done</code> (leave when i ≥ n)</li>
+  <li><b>body</b><code>sll · add · lw · add</code></li>
+  <li><b>step</b><code>addi $t0, $t0, 1</code></li>
+  <li><b>back</b><code>j Loop</code></li>
+</ol>
+<p>The full, runnable version is the array-sum program below.</p>
+
+<h2>7. Lab 3A: complete MARS programs</h2>
+<p>A MARS program has two parts. <code>.data</code> holds your values (arrays, text). <code>.text</code> holds the instructions. Output and input use <b>syscall</b>: put the service number in <code>$v0</code>, put the argument in <code>$a0</code>, then write <code>syscall</code>.</p>
+<div class="scroll"><table>
+  <tr><th><code>$v0</code></th><th>Service</th><th>Argument / result</th></tr>
+  <tr><td>1</td><td>print int</td><td>the int in <code>$a0</code></td></tr>
+  <tr><td>4</td><td>print string</td><td>address of the text in <code>$a0</code></td></tr>
+  <tr><td>5</td><td>read int</td><td>the typed number comes back in <code>$v0</code></td></tr>
+  <tr><td>10</td><td>exit</td><td>stop the program</td></tr>
+</table></div>
+<p>A few MARS <b>pseudo-instructions</b> make programs easier to write: <code>li $t0, 5</code> (load immediate: $t0 = 5), <code>la $a0, msg</code> (load the address of label msg), <code>move $a0, $s2</code> (copy $s2 into $a0).</p>
+
+<h3>Program 1: array sum</h3>
+<p>C idea: <code>sum = 0; for (i = 0; i &lt; n; i++) sum = sum + arr[i]; print sum;</code></p>
+<ol class="flow arrows">
+  <li><b>Setup</b>base, n, sum = 0, i = 0</li>
+  <li><b>Test</b>i &lt; n? If not, go to done</li>
+  <li><b>Body</b>sum += arr[i]</li>
+  <li><b>Step</b>i++ and jump back</li>
+  <li><b>done</b>print "Sum = " and sum, exit</li>
+</ol>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · array_sum.asm</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n">Start of the data section.</td></tr>
+    <tr><td class="c">arr:    .word <span class="num">5</span>, <span class="num">12</span>, <span class="num">-3</span>, <span class="num">8</span>, <span class="num">20</span></td><td class="n">An array of five 32-bit ints. <code>arr</code> labels the address of arr[0].</td></tr>
+    <tr><td class="c">n:      .word <span class="num">5</span></td><td class="n">The number of elements.</td></tr>
+    <tr><td class="c">msg:    .asciiz <span class="str">"Sum = "</span></td><td class="n">Text ending with a 0 byte (that is what the z means).</td></tr>
+    <tr><td class="c">        .text</td><td class="n">Start of the code section.</td></tr>
+    <tr><td class="c">        .globl main</td><td class="n">Make the label <code>main</code> visible as the start point.</td></tr>
+    <tr><td class="c">main:   <span class="kw">la</span>   $s0, arr</td><td class="n">$s0 = base address of arr</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $s1, n</td><td class="n">$s1 = n = 5 (load the word stored at label n)</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $s2, <span class="num">0</span></td><td class="n">sum = 0</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t0, <span class="num">0</span></td><td class="n">i = 0</td></tr>
+    <tr><td class="c">loop:   <span class="kw">slt</span>  $t1, $t0, $s1</td><td class="n">$t1 = 1 if i &lt; n</td></tr>
+    <tr><td class="c">        <span class="kw">beq</span>  $t1, $zero, done</td><td class="n">If not (i ≥ n), leave the loop.</td></tr>
+    <tr><td class="c">        <span class="kw">sll</span>  $t2, $t0, <span class="num">2</span></td><td class="n">$t2 = 4 × i</td></tr>
+    <tr><td class="c">        <span class="kw">add</span>  $t2, $t2, $s0</td><td class="n">$t2 = address of arr[i]</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t3, <span class="num">0</span>($t2)</td><td class="n">$t3 = arr[i]</td></tr>
+    <tr><td class="c">        <span class="kw">add</span>  $s2, $s2, $t3</td><td class="n">sum = sum + arr[i]</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t0, $t0, <span class="num">1</span></td><td class="n">i = i + 1</td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n">Back to the test.</td></tr>
+    <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">4</span></td><td class="n">Service 4 = print string</td></tr>
+    <tr><td class="c">        <span class="kw">la</span>   $a0, msg</td><td class="n">…the text at msg</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>Sum = </code></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Service 1 = print int</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $s2</td><td class="n">…the value of sum</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>42</code></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">Service 10 = exit</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Program ends.</td></tr>
+  </table>
+</div>
+<p><b>Output:</b> <code>Sum = 42</code> (5 + 12 − 3 + 8 + 20 = 42).</p>
+
+<h3>Program 2: find the maximum</h3>
+<p>C idea: <code>max = arr[0]; for (i = 1; i &lt; n; i++) { if (max &lt; arr[i]) max = arr[i]; } print max;</code><br>Plain English: "Guess that the first element is the biggest. Look at every other element; if it is bigger than the current guess, it becomes the new guess."</p>
+<ol class="flow arrows">
+  <li><b>Setup</b>max = arr[0], i = 1</li>
+  <li><b>Test</b>i &lt; n? If not, go to done</li>
+  <li><b>Load</b>$t3 = arr[i]</li>
+  <li><b>Compare</b>max &lt; arr[i]? If not, go to skip</li>
+  <li><b>Update</b>max = arr[i]</li>
+  <li><b>skip</b>i++ and jump back</li>
+  <li><b>done</b>print max, exit</li>
+</ol>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · find_max.asm</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n"></td></tr>
+    <tr><td class="c">arr:    .word <span class="num">5</span>, <span class="num">12</span>, <span class="num">-3</span>, <span class="num">27</span>, <span class="num">20</span>, <span class="num">9</span></td><td class="n">Six values; the biggest (27) is in the middle.</td></tr>
+    <tr><td class="c">n:      .word <span class="num">6</span></td><td class="n"></td></tr>
+    <tr><td class="c">msg:    .asciiz <span class="str">"Max = "</span></td><td class="n"></td></tr>
+    <tr><td class="c">        .text</td><td class="n"></td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">la</span>   $s0, arr</td><td class="n">$s0 = base address</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $s1, n</td><td class="n">$s1 = n</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $s2, <span class="num">0</span>($s0)</td><td class="n">max = arr[0]</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t0, <span class="num">1</span></td><td class="n">i = 1 (arr[0] is already counted)</td></tr>
+    <tr><td class="c">loop:   <span class="kw">slt</span>  $t1, $t0, $s1</td><td class="n">i &lt; n ?</td></tr>
+    <tr><td class="c">        <span class="kw">beq</span>  $t1, $zero, done</td><td class="n">No → finished.</td></tr>
+    <tr><td class="c">        <span class="kw">sll</span>  $t2, $t0, <span class="num">2</span></td><td class="n">$t2 = 4 × i</td></tr>
+    <tr><td class="c">        <span class="kw">add</span>  $t2, $t2, $s0</td><td class="n">$t2 = address of arr[i]</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t3, <span class="num">0</span>($t2)</td><td class="n">$t3 = arr[i]</td></tr>
+    <tr><td class="c">        <span class="kw">slt</span>  $t4, $s2, $t3</td><td class="n">$t4 = 1 if max &lt; arr[i]</td></tr>
+    <tr><td class="c">        <span class="kw">beq</span>  $t4, $zero, skip</td><td class="n">Not bigger → don't update (opposite condition).</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $s2, $t3</td><td class="n">max = arr[i]</td></tr>
+    <tr><td class="c">skip:   <span class="kw">addi</span> $t0, $t0, <span class="num">1</span></td><td class="n">i = i + 1</td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n"></td></tr>
+    <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">4</span></td><td class="n">print string "Max = "</td></tr>
+    <tr><td class="c">        <span class="kw">la</span>   $a0, msg</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">print int max</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $s2</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">exit</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<p><b>Output:</b> <code>Max = 27</code>. <code>slt</code> compares <b>signed</b> numbers, so −3 is correctly treated as smaller.</p>
+<div class="callout tip"><b>Want the user to type the numbers?</b><p>Use service 5: <code>li $v0, 5</code> then <code>syscall</code>. The typed int arrives in <code>$v0</code>; copy it with <code>move $s1, $v0</code> before the next syscall overwrites <code>$v0</code>.</p></div>
+
+<h2>8. MARS how-to</h2>
+<ol class="flow arrows">
+  <li><b>Edit</b>File → New, type the program, save as <code>.asm</code></li>
+  <li><b>Assemble (F3)</b>Converts to machine code. Errors show in the Messages pane.</li>
+  <li><b>Run (F5)</b>Runs to the end. Output appears in Run I/O.</li>
+  <li><b>Step (F7)</b>Runs one instruction. The next one is highlighted. (F8 steps back; F12 resets.)</li>
+  <li><b>Watch</b>Registers pane and Data Segment pane</li>
+</ol>
+<ul>
+  <li><b>Registers pane</b> (right side): all 32 registers plus PC, HI and LO. The one that just changed is highlighted. Watch <code>$t0</code> (i) and <code>$s2</code> (sum) climb as you step.</li>
+  <li><b>Text Segment</b> (Execute tab, top): each instruction's address, machine code (hex), the real ("Basic") instruction, and your source line.</li>
+  <li><b>Data Segment</b> (Execute tab, bottom): memory from <code>0x10010000</code>. Your <code>arr</code> values appear there, 4 bytes each. Untick "Hexadecimal Values" to see them in decimal.</li>
+  <li>Set a <b>breakpoint</b> by ticking the "Bkpt" box next to a line; F5 then stops there.</li>
+</ul>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Branching on the <b>same</b> condition as the C code. Use the opposite, so the "then" code can fall through.</li>
+  <li>Forgetting <code>j Exit</code> after the then-part, so the else-part runs too.</li>
+  <li>Array index without <code>×4</code>: <code>A[8]</code> is <code>32($s3)</code>, not <code>8($s3)</code>.</li>
+  <li>Mixing up <code>lw</code> and <code>sw</code>: <code>lw</code> reads memory into a register; <code>sw</code> writes a register into memory. Both write the register first.</li>
+  <li>Forgetting the loop's <code>j Loop</code>, or putting the <code>i++</code> before the body in a <code>for</code> loop.</li>
+  <li>Using <code>=</code> vs <code>==</code> wrongly when reading C: <code>=</code> stores, <code>==</code> compares.</li>
+  <li>Loading into <code>$v0</code> for a syscall and then losing a value you still needed there.</li>
+  <li><code>blt</code>/<code>bgt</code>/<code>li</code>/<code>la</code>/<code>move</code> are pseudo-instructions. In an exam asking for "real MIPS instructions", expand them.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>Translate <code>f = g - (h + 5);</code> with f, g, h in <code>$s0, $s1, $s2</code>.</summary><div class="a"><p><code>addi $t0, $s2, 5</code> ($t0 = h + 5)<br><code>sub $s0, $s1, $t0</code> (f = g − $t0)</p></div></details>
+  <details class="q"><summary>Translate <code>A[3] = A[2] + h;</code> (A base in <code>$s3</code>, h in <code>$s2</code>).</summary><div class="a"><p><code>lw $t0, 8($s3)</code> (A[2] is at 2×4 = 8)<br><code>add $t0, $t0, $s2</code><br><code>sw $t0, 12($s3)</code> (A[3] is at 12)</p></div></details>
+  <details class="q"><summary>Translate <code>if (i != j) f = f + 1;</code> (no else). f in <code>$s0</code>, i, j in <code>$s3, $s4</code>.</summary><div class="a"><p>Opposite of <code>!=</code> is <code>==</code>:<br><code>beq $s3, $s4, Exit</code><br><code>addi $s0, $s0, 1</code><br><code>Exit:</code><br>No <code>j</code> is needed because there is no else-part.</p></div></details>
+  <details class="q"><summary>Translate <code>if (a &gt;= b) x = 1;</code> with a, b, x in <code>$s0, $s1, $s2</code>.</summary><div class="a"><p>Skip when a &lt; b:<br><code>slt $t0, $s0, $s1</code> ($t0 = 1 if a &lt; b)<br><code>bne $t0, $zero, Exit</code><br><code>addi $s2, $zero, 1</code><br><code>Exit:</code></p></div></details>
+  <details class="q"><summary>Translate <code>while (i &lt; 10) i = i + 2;</code> with i in <code>$s0</code>.</summary><div class="a"><p><code>Loop: slti $t0, $s0, 10</code><br><code>      beq  $t0, $zero, Exit</code> (leave when i ≥ 10)<br><code>      addi $s0, $s0, 2</code><br><code>      j    Loop</code><br><code>Exit:</code></p></div></details>
+  <details class="q"><summary>In the while-loop trace, how many times does the test run if save = {7, 7, 7, 7, 3} and k = 7?</summary><div class="a"><p>It passes for i = 0, 1, 2, 3 and fails at i = 4. So the test runs <b>5 times</b>, the body 4 times, and i ends at <b>4</b>.</p></div></details>
+  <details class="q"><summary>Rewrite <code>for (i = 0; i &lt; n; i++) A[i] = 0;</code> in MIPS. i in <code>$t0</code>, n in <code>$s1</code>, base in <code>$s0</code>.</summary><div class="a"><p><code>      li   $t0, 0</code><br><code>Loop: slt  $t1, $t0, $s1</code><br><code>      beq  $t1, $zero, Done</code><br><code>      sll  $t2, $t0, 2</code><br><code>      add  $t2, $t2, $s0</code><br><code>      sw   $zero, 0($t2)</code> (store 0 into A[i])<br><code>      addi $t0, $t0, 1</code><br><code>      j    Loop</code><br><code>Done:</code></p></div></details>
+  <details class="q"><summary>What does <code>blt $t0, $t1, L</code> become in real instructions?</summary><div class="a"><p><code>slt $at, $t0, $t1</code> then <code>bne $at, $zero, L</code>. (MARS's Text Segment shows exactly this.)</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=u5Foo6mmW0I" target="_blank" rel="noopener"><i class="play"></i><span><b>MIPS Tutorial 1 Intro and Mars</b><small>Amell Peralta</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=HiH8qncLw_A" target="_blank" rel="noopener"><i class="play"></i><span><b>MIPS Tutorial 23 If statements Branching Instructions</b><small>Amell Peralta</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=0aexcR9CNcE" target="_blank" rel="noopener"><i class="play"></i><span><b>MIPS Tutorial 26 While Loop in MIPS</b><small>Amell Peralta</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=BfHcogmKM20" target="_blank" rel="noopener"><i class="play"></i><span><b>MIPS Tutorial 27 Arrays</b><small>Amell Peralta</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

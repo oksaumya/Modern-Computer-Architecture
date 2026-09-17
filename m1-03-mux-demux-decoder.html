@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MUX, DEMUX &amp; Decoders</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 1 / MUX, DEMUX &amp; decoders</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 1 · Digital Foundations <span class="tag class">From class notes · L03 &amp; Lab 0011</span></div>
+  <h1>MUX, DEMUX &amp; decoders: the CPU's switches</h1>
+  <p class="idea">A <b>multiplexer (MUX)</b> picks one of many inputs and sends it to a single output. A <b>demultiplexer (DEMUX)</b> does the reverse: it sends one input to one of many outputs. A <b>decoder</b> turns a binary code into "switch on exactly one line". A CPU uses these three blocks everywhere to choose where data comes from and where it goes.</p>
+  <div class="analogy"><b>Think of it like this:</b> a railway switch. Many tracks join into one (MUX), or one track splits into many (DEMUX). A lever, called the <em>select</em> input, decides which track is connected. A decoder is like a hotel key card system: you type a room number, and exactly one door unlocks.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Data input</dt><dd>A signal we want to pass along, such as I0, I1, I2 or I3.</dd></div>
+  <div class="term"><dt>Select line (S)</dt><dd>A control input that decides which data input or output is used. n select lines can choose between 2ⁿ options.</dd></div>
+  <div class="term"><dt>2ⁿ:1 MUX</dt><dd>A MUX with 2ⁿ data inputs, n select lines and 1 output. For example, a 4:1 MUX has 4 inputs and 2 selects.</dd></div>
+  <div class="term"><dt>One-hot</dt><dd>A group of wires where exactly one wire is 1 and all the others are 0, such as <code>0100</code>.</dd></div>
+  <div class="term"><dt>Minterm</dt><dd>An AND term that is 1 for exactly one row of a truth table. For example, A'·B is 1 only when A = 0 and B = 1.</dd></div>
+  <div class="term"><dt>Enable (EN)</dt><dd>An on/off input. When EN = 0, every output stays 0.</dd></div>
+  <div class="term"><dt>Latch</dt><dd>An accidental memory element. It holds its old value instead of following its inputs. In a MUX, a latch is a bug.</dd></div>
+</dl>
+<p>Why learn these blocks? The course calls them <b>building blocks</b>. About five core block types cover most of a CPU. Building with blocks gives you <b>abstraction</b> (you can ignore the gates inside), <b>reuse</b>, <b>easier testing</b> and <b>scale</b>.</p>
+
+<h2>1. The 2:1 multiplexer</h2>
+<p>It has two data inputs, A (also called I0) and B (I1), and one select line S. <strong>When S = 0, the output is A. When S = 1, the output is B.</strong></p>
+
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt">
+      <tr><th>S</th><th class="out">Y</th></tr>
+      <tr><td>0</td><td class="out">A</td></tr>
+      <tr class="hl"><td>1</td><td class="out">B</td></tr>
+    </table></div>
+    <p style="font-size:15px;margin-top:10px">This is a short-form truth table. The output column names an input instead of listing 0 or 1.</p>
+  </div>
+  <div>
+    <div class="formula" style="margin-top:0">Y = S'·A + S·B<small>S' means NOT S. When S = 0, S' = 1, so the A term passes and the B term is blocked.</small></div>
+    <p style="font-size:15px">Parts: <b>1 NOT, 2 AND, 1 OR</b>. Each AND gate acts like a gate that opens only when its select condition is true.</p>
+  </div>
+</div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 225" width="640" role="img" aria-label="2 to 1 MUX gate diagram: S goes through a NOT gate to one AND gate with A, S goes directly to a second AND gate with B, and an OR gate combines them into Y">
+    <text x="14" y="44" class="b">A (I0)</text>
+    <text x="14" y="154" class="b">B (I1)</text>
+    <text x="14" y="209" class="b">S</text>
+    <path class="w" d="M64 40 H250"/>
+    <path class="w" d="M64 150 H250"/>
+    <path class="w" d="M30 205 H100 V170 H250"/>
+    <path class="w" d="M100 170 V100 H140"/>
+    <circle cx="100" cy="170" r="3.5" class="fill-ink"/>
+    <!-- NOT gate -->
+    <polygon points="140,86 140,114 170,100" class="box"/>
+    <circle cx="176" cy="100" r="5" class="box"/>
+    <path class="w" d="M181 100 H220 V60 H250"/>
+    <text x="188" y="92" class="m dim">S'</text>
+    <!-- AND gates -->
+    <path class="box" d="M250 25 H280 A25 25 0 0 1 280 75 H250 Z"/>
+    <text x="256" y="54" class="m">AND</text>
+    <path class="box" d="M250 135 H280 A25 25 0 0 1 280 185 H250 Z"/>
+    <text x="256" y="164" class="m">AND</text>
+    <!-- OR gate -->
+    <path class="w" d="M305 50 H320 V95 H349"/>
+    <path class="w" d="M305 160 H320 V115 H349"/>
+    <text x="324" y="44" class="m dim">S'·A</text>
+    <text x="324" y="180" class="m dim">S·B</text>
+    <path class="box" d="M340 80 Q360 105 340 130 Q385 130 400 105 Q385 80 340 80 Z"/>
+    <text x="354" y="109" class="m">OR</text>
+    <path class="w-hi" d="M400 105 H460"/>
+    <text x="468" y="109" class="hi">Y = S'·A + S·B</text>
+  </svg>
+  <figcaption>2:1 MUX from gates. The NOT gate makes S', so exactly one AND gate is "open" at a time. A dot marks where a wire splits.</figcaption>
+</figure>
+
+<h3>The Verilog, two ways</h3>
+<p>New to Verilog? Read <a href="m1-00-verilog-basics.html">Verilog for absolute beginners</a> first. Remember: Verilog <em>describes wiring</em>. It is not a list of steps.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · mux2x1.v (gate-level)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> mux2x1 (</td><td class="n">Start a circuit block (a "chip") named <code>mux2x1</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> a, b, sel,</td><td class="n">Three input pins: the two data inputs and the select line.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> y</td><td class="n">One output pin.</td></tr>
+    <tr><td class="c">);</td><td class="n">End of the pin list.</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> sel_n, a0, a1;</td><td class="n">Three internal wires: S', and the outputs of the two AND gates.</td></tr>
+    <tr><td class="c">  <span class="kw">not</span> u0 (sel_n, sel);   <span class="com">// S'</span></td><td class="n">Place a built-in NOT gate named <code>u0</code>. In a built-in gate the <b>output comes first</b>: sel_n = NOT sel.</td></tr>
+    <tr><td class="c">  <span class="kw">and</span> u1 (a0, a, sel_n); <span class="com">// S'·I0</span></td><td class="n">AND gate u1: a0 = a AND S'. It lets <code>a</code> through only when sel = 0.</td></tr>
+    <tr><td class="c">  <span class="kw">and</span> u2 (a1, b, sel);   <span class="com">// S·I1</span></td><td class="n">AND gate u2: a1 = b AND sel. It lets <code>b</code> through only when sel = 1.</td></tr>
+    <tr><td class="c">  <span class="kw">or</span>  u3 (y, a0, a1);    <span class="com">// sum</span></td><td class="n">OR gate u3: y = a0 OR a1. "Sum" here means the OR in "sum of products".</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">End of the block.</td></tr>
+  </table>
+</div>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · mux2x1.v (one-line version)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> mux2x1 (</td><td class="n">Same chip, same pins.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> a, b, sel,</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> y</td><td class="n"></td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y = sel ? b : a;</td><td class="n"><code>? :</code> reads as "if sel is 1, then b, otherwise a". It is a 2:1 MUX in eight characters. The synthesis tool builds the gates for you.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h2>2. The 4:1 multiplexer</h2>
+<p>Four data inputs need <b>two</b> select lines, S1 and S0, because 2 bits can count 00, 01, 10, 11. Read S1 S0 as a binary number: it is the <b>index</b> of the input that gets through.</p>
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt">
+      <tr><th>S1</th><th>S0</th><th class="out">Y</th></tr>
+      <tr><td>0</td><td>0</td><td class="out">I0</td></tr>
+      <tr><td>0</td><td>1</td><td class="out">I1</td></tr>
+      <tr><td>1</td><td>0</td><td class="out">I2</td></tr>
+      <tr><td>1</td><td>1</td><td class="out">I3</td></tr>
+    </table></div>
+  </div>
+  <div>
+    <div class="formula" style="margin-top:0;text-align:left">Y = S1'S0'·I0 + S1'S0·I1<br>&nbsp;&nbsp;+ S1S0'·I2 + S1S0·I3<small>Each AND term is a minterm of the selects, and it is 1 for exactly one select value.</small></div>
+    <p style="font-size:15px"><b>Rule:</b> a MUX with 2ⁿ inputs needs <b>n</b> select lines. For example, 8:1 needs 3 and 16:1 needs 4.</p>
+  </div>
+</div>
+
+<h3>Cascading: a 4:1 MUX from three 2:1 MUXes</h3>
+<p>Picture a knockout tournament. In round one, S0 picks a winner from each pair (I0 or I1, and I2 or I3). In the final, S1 picks between the two winners.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 470 275" width="470" role="img" aria-label="Two first-level 2 to 1 MUXes controlled by S0 feed a second-level 2 to 1 MUX controlled by S1, which outputs Y">
+    <text x="40" y="49" class="m">I0</text>
+    <text x="40" y="89" class="m">I1</text>
+    <text x="40" y="169" class="m">I2</text>
+    <text x="40" y="209" class="m">I3</text>
+    <path class="w" d="M64 45 H120 M64 85 H120 M64 165 H120 M64 205 H120"/>
+    <polygon points="120,20 170,35 170,95 120,110" class="box-b"/>
+    <text x="133" y="69" class="m">2:1</text>
+    <polygon points="120,140 170,155 170,215 120,230" class="box-b"/>
+    <text x="133" y="189" class="m">2:1</text>
+    <path class="w" d="M145 102.5 V120 M145 222.5 V240"/>
+    <text x="136" y="134" class="m hi">S0</text>
+    <text x="136" y="254" class="m hi">S0</text>
+    <path class="w" d="M170 65 H230 V95 H300"/>
+    <path class="w" d="M170 185 H230 V135 H300"/>
+    <text x="176" y="58" class="m dim">I0 or I1</text>
+    <text x="176" y="202" class="m dim">I2 or I3</text>
+    <polygon points="300,70 350,85 350,145 300,160" class="box-hi"/>
+    <text x="313" y="119" class="m">2:1</text>
+    <path class="w" d="M325 152.5 V172"/>
+    <text x="316" y="187" class="m hi">S1</text>
+    <path class="w-hi" d="M350 115 H410"/>
+    <text x="418" y="119" class="hi">Y</text>
+  </svg>
+  <figcaption>Both first-level MUXes share the same S0 wire. S1 decides which half wins. Example: S1 S0 = 10. S0 = 0 picks I0 and I2, then S1 = 1 picks I2.</figcaption>
+</figure>
+<p>The same idea scales up. An <b>8:1 MUX = two 4:1 MUXes + one 2:1 MUX</b>. The two 4:1 MUXes share S1 S0, and the final 2:1 MUX uses S2.</p>
+
+<h3>The 4:1 MUX in Verilog (behavioural style)</h3>
+<p>"Behavioural" means you describe <em>what</em> the circuit does, and the tool works out the gates.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · mux4_1.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> mux4_1 (</td><td class="n">A chip named <code>mux4_1</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">input wire</span> i0, i1, i2, i3,</td><td class="n">Four data inputs.</td></tr>
+    <tr><td class="c">  <span class="kw">input wire</span> s0, s1,</td><td class="n">Two select lines.</td></tr>
+    <tr><td class="c">  <span class="kw">output reg</span> y</td><td class="n">The output is a <code>reg</code>, not a wire, because it gets its value inside an <code>always</code> block. Rule: <b>anything assigned inside <code>always</code> must be <code>reg</code></b>. Here it still becomes plain gates, not memory.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(*) <span class="kw">begin</span></td><td class="n"><code>always @(*)</code> means "re-check this whenever any input changes". That describes combinational logic. <code>begin</code> opens the block.</td></tr>
+    <tr><td class="c">    <span class="kw">case</span> ({s1, s0})</td><td class="n"><code>{s1, s0}</code> glues the two selects into a 2-bit number, with s1 on the left. <code>case</code> compares that number with each option below.</td></tr>
+    <tr><td class="c">      <span class="num">2'b00</span>: y = i0;</td><td class="n"><code>2'b00</code> means "a 2-bit binary value 00". If the selects are 00, y takes i0.</td></tr>
+    <tr><td class="c">      <span class="num">2'b01</span>: y = i1;</td><td class="n">For 01, y takes i1.</td></tr>
+    <tr><td class="c">      <span class="num">2'b10</span>: y = i2;</td><td class="n">For 10, y takes i2.</td></tr>
+    <tr><td class="c">      <span class="kw">default</span>: y = i3;</td><td class="n">Any other value (here only 11) gives i3. The <code>default</code> line guarantees y <b>always</b> gets a value, which prevents a latch (see below).</td></tr>
+    <tr><td class="c">    <span class="kw">endcase</span></td><td class="n">End of the case list.</td></tr>
+  <tr><td class="c">  <span class="kw">end</span></td><td class="n">End of the always block.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h3>Its testbench, line by line</h3>
+<p>A <b>testbench</b> is a pretend lab bench written in Verilog. It sets inputs, waits, and records what the circuit does. You run it in a simulator; it is never built as hardware.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · mux4_1_tb.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> mux4_1_tb;</td><td class="n">A testbench module. It has <b>no pins</b>, because it is the whole world around the circuit.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span> i0, i1, i2, i3, s0, s1;</td><td class="n">The inputs we will drive. They are <code>reg</code> because we set them inside an <code>initial</code> block.</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> y;</td><td class="n">A wire to watch the circuit's output.</td></tr>
+    <tr><td class="c">  <span class="kw">integer</span> k;</td><td class="n">A counting variable, for testbenches only. It is not hardware.</td></tr>
+    <tr><td class="c">  mux4_1 dut (.i0(i0), .i1(i1), .i2(i2),</td><td class="n">Place one copy of the MUX. <code>dut</code> means "device under test". <code>.i0(i0)</code> plugs our i0 into its i0 pin.</td></tr>
+    <tr><td class="c">    .i3(i3), .s0(s0), .s1(s1), .y(y));</td><td class="n">The remaining pins are connected the same way.</td></tr>
+    <tr><td class="c">  <span class="kw">initial begin</span></td><td class="n"><code>initial</code> runs once, starting at time 0. Unlike the rest of Verilog, the lines inside run in order.</td></tr>
+    <tr><td class="c">    <span class="kw">$dumpfile</span>(<span class="str">"mux4_1_tb.vcd"</span>);</td><td class="n">Name the waveform file (VCD) that GTKWave will open.</td></tr>
+    <tr><td class="c">    <span class="kw">$dumpvars</span>(<span class="num">0</span>, mux4_1_tb);</td><td class="n">Record every signal in this testbench. Without this line, the VCD file stays empty.</td></tr>
+    <tr><td class="c">    i0=<span class="num">0</span>; i1=<span class="num">1</span>; i2=<span class="num">0</span>; i3=<span class="num">1</span>;</td><td class="n">Give the inputs a pattern (0, 1, 0, 1) so each choice shows a visible change in y.</td></tr>
+    <tr><td class="c">    <span class="kw">for</span> (k = <span class="num">0</span>; k &lt; <span class="num">4</span>; k = k + <span class="num">1</span>) <span class="kw">begin</span></td><td class="n">A loop: start k at 0; repeat while k is less than 4; add 1 to k after each round. So k = 0, 1, 2, 3.</td></tr>
+    <tr><td class="c">      {s1, s0} = k; #<span class="num">10</span>;</td><td class="n">Split k into two bits (for example, k = 2 gives s1 = 1, s0 = 0). <code>#10</code> waits 10 time units so the change shows up in the waveform.</td></tr>
+    <tr><td class="c">    <span class="kw">end</span></td><td class="n">End of the loop.</td></tr>
+    <tr><td class="c">    <span class="kw">$finish</span>;</td><td class="n">Stop the simulation.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<p>Expected waveform: y = 0, 1, 0, 1 for k = 0, 1, 2, 3 (it copies i0, i1, i2, i3 in turn).</p>
+<pre class="plain code" style="border-radius:var(--radius)"><span class="com"># compile, run, then view the waveform</span>
+iverilog -o mux.vvp mux4_1.v mux4_1_tb.v
+vvp mux.vvp
+gtkwave mux4_1_tb.vcd</pre>
+
+<div class="callout trap"><b>The missing-default latch trap (the most common Lab 0011 bug)</b>
+<p>Suppose you leave out the <code>default</code> line and list only three cases:</p>
+<pre class="plain code" style="border-radius:8px;margin:8px 0"><span class="kw">always</span> @(*) <span class="kw">begin</span>
+  <span class="kw">case</span> ({s1, s0})
+    <span class="num">2'b00</span>: y = i0;
+    <span class="num">2'b01</span>: y = i1;
+    <span class="num">2'b10</span>: y = i2;
+    <span class="com">// no line for 11, and no default!</span>
+  <span class="kw">endcase</span>
+<span class="kw">end</span></pre>
+<p>When the selects are 11, nothing tells y what to be, so Verilog makes y <b>keep its old value</b>. Keeping a value needs memory, so the tool builds a <b>latch</b> instead of a MUX. Now the output depends on the past, which is a real hardware bug. <b>Fix:</b> always include <code>default</code>, or set <code>y</code> to a value before the <code>case</code>, as the DEMUX code below does.</p></div>
+
+<h2>3. MUX as a "universal function" block</h2>
+<p>A 2ⁿ:1 MUX can build <b>any</b> function of n variables. Connect the variables to the select lines, then wire each data input to the value you want in that row of the truth table. The MUX simply looks up the answer. This is exactly how an <b>FPGA LUT</b> (look-up table) works. An FPGA is a chip you can rewire with code.</p>
+
+<h3>Example 1: XOR with a 4:1 MUX</h3>
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt">
+      <tr><th>A (S1)</th><th>B (S0)</th><th class="out">A⊕B</th><th>wire to</th></tr>
+      <tr><td>0</td><td>0</td><td class="out zero">0</td><td>I0 = 0</td></tr>
+      <tr><td>0</td><td>1</td><td class="out one">1</td><td>I1 = 1</td></tr>
+      <tr><td>1</td><td>0</td><td class="out one">1</td><td>I2 = 1</td></tr>
+      <tr><td>1</td><td>1</td><td class="out zero">0</td><td>I3 = 0</td></tr>
+    </table></div>
+  </div>
+  <div><p>Put <b>S1 = A, S0 = B</b>, and wire the inputs to the constants <b>I0..I3 = 0, 1, 1, 0</b>. That is the XOR column copied straight in.</p><p style="margin:0">No gates needed, just the MUX and some wires tied to 0 or 1.</p></div>
+</div>
+
+<h3>Example 2 (exit ticket): F(A,B,C) = Σm(1,3,5,6) with a 4:1 MUX</h3>
+<p>Σm(1,3,5,6) means "F is 1 on rows 1, 3, 5 and 6" (see <a href="m1-02-logic-minimization.html">minterms</a>). There are three variables but only two selects. <b>The trick:</b> use A and B as selects, then describe F in each pair of rows using the leftover variable C.</p>
+<ol class="steps">
+  <li><b>AB = 00</b> covers rows 0 and 1 (C = 0, 1). F = 0, 1. F equals C, so <b>I0 = C</b>.</li>
+  <li><b>AB = 01</b> covers rows 2 and 3. F = 0, 1. Again F = C, so <b>I1 = C</b>.</li>
+  <li><b>AB = 10</b> covers rows 4 and 5. F = 0, 1, so <b>I2 = C</b>.</li>
+  <li><b>AB = 11</b> covers rows 6 and 7. F = 1, 0. F is the opposite of C, so <b>I3 = C'</b>.</li>
+</ol>
+<div class="formula">S1 = A, S0 = B · I0 = C, I1 = C, I2 = C, I3 = C'<small>Each data input is one of four things: 0, 1, C or C'. Look at the pair of rows and decide which one.</small></div>
+<div class="scroll"><table class="tt">
+  <tr><th>A B</th><th>F when C = 0</th><th>F when C = 1</th><th class="out">data input</th></tr>
+  <tr><td>00</td><td>0</td><td>1</td><td class="out">C</td></tr>
+  <tr><td>01</td><td>0</td><td>1</td><td class="out">C</td></tr>
+  <tr><td>10</td><td>0</td><td>1</td><td class="out">C</td></tr>
+  <tr class="hl"><td>11</td><td>1</td><td>0</td><td class="out">C'</td></tr>
+</table></div>
+
+<h2>4. The demultiplexer (DEMUX)</h2>
+<p>A DEMUX is "a MUX run backwards". It has one data input D and n select lines, and it sends D to <b>one</b> of 2ⁿ outputs. <strong>Every output that is not selected is 0.</strong> The course calls them "1:2" and "1:4" DEMUXes.</p>
+<div class="scroll"><table class="tt">
+  <tr><th>A B (select)</th><th class="out">Y0</th><th>Y1</th><th>Y2</th><th>Y3</th></tr>
+  <tr><td>00</td><td class="out one">D</td><td class="zero">0</td><td class="zero">0</td><td class="zero">0</td></tr>
+  <tr><td>01</td><td class="out zero">0</td><td class="one">D</td><td class="zero">0</td><td class="zero">0</td></tr>
+  <tr><td>10</td><td class="out zero">0</td><td class="zero">0</td><td class="one">D</td><td class="zero">0</td></tr>
+  <tr><td>11</td><td class="out zero">0</td><td class="zero">0</td><td class="zero">0</td><td class="one">D</td></tr>
+</table></div>
+<div class="formula">Y0 = A'B'·D &nbsp; Y1 = A'B·D &nbsp; Y2 = AB'·D &nbsp; Y3 = AB·D<small>Each output is D ANDed with one minterm of the selects.</small></div>
+<p><b>Where DEMUXes are used:</b> writing data into one chosen register, network switches (sending a packet out of one port), and chip selects (waking up one memory chip).</p>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · demux1_2.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> demux1_2 (</td><td class="n">A 1-to-2 DEMUX.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> i, sel,</td><td class="n">One data input <code>i</code> and one select line.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> y0, y1</td><td class="n">Two outputs.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y0 = ~sel &amp; i;</td><td class="n"><code>~</code> is NOT. y0 = S'·I, so y0 copies i only when sel = 0.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> y1 =  sel &amp; i;</td><td class="n">y1 = S·I, so y1 copies i only when sel = 1.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · demux1_4.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> demux1_4 (</td><td class="n">A 1-to-4 DEMUX.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> d,</td><td class="n">The data bit to route.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> [<span class="num">1</span>:<span class="num">0</span>] sel,</td><td class="n">A 2-bit select bus: sel[1] and sel[0].</td></tr>
+    <tr><td class="c">  <span class="kw">output reg</span>  [<span class="num">3</span>:<span class="num">0</span>] y</td><td class="n">A 4-bit output bus. It is <code>reg</code> because it is set inside <code>always</code>.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(*) <span class="kw">begin</span></td><td class="n">Combinational logic: re-check whenever an input changes.</td></tr>
+    <tr><td class="c">    y = <span class="num">4'b0000</span>; <span class="com">// clear all outputs first</span></td><td class="n">Start with every output at 0. This guarantees unselected outputs are 0 and <b>prevents a latch</b>.</td></tr>
+    <tr><td class="c">    <span class="kw">case</span> (sel)</td><td class="n">Compare sel with each option.</td></tr>
+    <tr><td class="c">      <span class="num">2'b00</span>: y[<span class="num">0</span>] = d;</td><td class="n">For select 00, only output bit 0 gets d.</td></tr>
+    <tr><td class="c">      <span class="num">2'b01</span>: y[<span class="num">1</span>] = d;</td><td class="n">For 01, only bit 1 gets d.</td></tr>
+    <tr><td class="c">      <span class="num">2'b10</span>: y[<span class="num">2</span>] = d;</td><td class="n">For 10, only bit 2 gets d.</td></tr>
+    <tr><td class="c">      <span class="kw">default</span>: y[<span class="num">3</span>] = d;</td><td class="n">Otherwise (11), bit 3 gets d.</td></tr>
+    <tr><td class="c">    <span class="kw">endcase</span></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="callout tip"><b>Why can the later line "win"?</b><p>Inside an <code>always</code> block, if a signal is set twice, the last setting is the one that counts. So <code>y = 0000</code> sets a safe starting value, and the <code>case</code> then changes just one bit.</p></div>
+
+<h2>5. Decoders</h2>
+<p>An <b>n-to-2ⁿ decoder</b> takes an n-bit code and switches on exactly one of its 2ⁿ outputs. The outputs are <b>one-hot</b>, and <b>each output is one minterm</b> of the inputs.</p>
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt">
+      <tr><th>A1 A0</th><th class="out">D0</th><th>D1</th><th>D2</th><th>D3</th></tr>
+      <tr><td>00</td><td class="out one">1</td><td class="zero">0</td><td class="zero">0</td><td class="zero">0</td></tr>
+      <tr><td>01</td><td class="out zero">0</td><td class="one">1</td><td class="zero">0</td><td class="zero">0</td></tr>
+      <tr class="hl"><td>10</td><td class="out zero">0</td><td class="zero">0</td><td class="one">1</td><td class="zero">0</td></tr>
+      <tr><td>11</td><td class="out zero">0</td><td class="zero">0</td><td class="zero">0</td><td class="one">1</td></tr>
+    </table></div>
+  </div>
+  <div>
+    <p><b>Key link:</b> "A decoder is a DEMUX whose data input is a constant 1." Look at the DEMUX table and replace D with 1. You get this table.</p>
+    <p style="margin:0"><b>Cost:</b> a 3-to-8 decoder needs <b>8 AND gates</b> (one per minterm) and <b>3 NOT gates</b>. Outputs double with every extra input bit, so the cost grows exponentially.</p>
+  </div>
+</div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 560 240" width="560" role="img" aria-label="2 to 4 decoder with inputs A1 = 1 and A0 = 0; only output D2 is 1">
+    <text x="4" y="84" class="b">A1 = 1</text>
+    <text x="4" y="134" class="b">A0 = 0</text>
+    <path class="w" d="M64 80 H160 M64 130 H160"/>
+    <rect x="160" y="20" width="140" height="160" rx="8" class="box-b"/>
+    <text x="178" y="46" class="b">2-to-4</text>
+    <text x="178" y="64" class="b">decoder</text>
+    <path class="w" d="M230 180 V205"/>
+    <text x="206" y="222" class="m">EN = 1</text>
+    <path class="w" d="M300 55 H380 M300 90 H380 M300 160 H380"/>
+    <path class="w-hi" d="M300 125 H380"/>
+    <text x="276" y="59" class="m">D0</text>
+    <text x="276" y="94" class="m">D1</text>
+    <text x="276" y="129" class="m">D2</text>
+    <text x="276" y="164" class="m">D3</text>
+    <text x="388" y="59" class="m dim">0  = A1'·A0'</text>
+    <text x="388" y="94" class="m dim">0  = A1'·A0</text>
+    <text x="388" y="129" class="m hi">1  = A1·A0'</text>
+    <text x="388" y="164" class="m dim">0  = A1·A0</text>
+  </svg>
+  <figcaption>Input code 10 (binary for 2) turns on only D2. Each output is the minterm written beside it. If EN = 0, all outputs are 0.</figcaption>
+</figure>
+
+<div class="callout tip"><b>Any function = decoder + OR gate</b><p>Each decoder output is one minterm, so just OR together the outputs for the rows where F = 1. For the exit-ticket function, F = Σm(1,3,5,6) = <b>D1 + D3 + D5 + D6</b>, using a 3-to-8 decoder and one 4-input OR gate.</p></div>
+
+<p>The lab does not include decoder code. Here is a short 2-to-4 decoder with enable, written in the same style, so you can see the minterms in Verilog:</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · decoder2_4.v (extra, not from the lab)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> decoder2_4 (</td><td class="n">A 2-to-4 decoder.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> [<span class="num">1</span>:<span class="num">0</span>] a,</td><td class="n">The 2-bit code: a[1] is A1, a[0] is A0.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> en,</td><td class="n">Enable. When it is 0, every output is 0.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> [<span class="num">3</span>:<span class="num">0</span>] d</td><td class="n">Four one-hot outputs.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> d[<span class="num">0</span>] = en &amp; ~a[<span class="num">1</span>] &amp; ~a[<span class="num">0</span>];</td><td class="n">D0 = EN·A1'·A0', which is 1 only for code 00.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> d[<span class="num">1</span>] = en &amp; ~a[<span class="num">1</span>] &amp;  a[<span class="num">0</span>];</td><td class="n">D1 = EN·A1'·A0, for code 01.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> d[<span class="num">2</span>] = en &amp;  a[<span class="num">1</span>] &amp; ~a[<span class="num">0</span>];</td><td class="n">D2 = EN·A1·A0', for code 10.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> d[<span class="num">3</span>] = en &amp;  a[<span class="num">1</span>] &amp;  a[<span class="num">0</span>];</td><td class="n">D3 = EN·A1·A0, for code 11.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h2>6. MUX vs DEMUX vs decoder</h2>
+<div class="scroll"><table>
+  <tr><th></th><th>MUX</th><th>DEMUX</th><th>Decoder</th></tr>
+  <tr><td>Inputs</td><td>2ⁿ data + n select</td><td>1 data + n select</td><td>n code bits (+ enable)</td></tr>
+  <tr><td>Outputs</td><td>1</td><td>2ⁿ</td><td>2ⁿ, one-hot</td></tr>
+  <tr><td>What it does</td><td>Selects one input</td><td>Routes data to one output</td><td>Activates one line</td></tr>
+  <tr><td>In short</td><td><b>many → one</b></td><td><b>one → many</b></td><td><b>code → one-hot</b></td></tr>
+  <tr><td>Typical use</td><td>Choosing an ALU operand or the next PC</td><td>Writing to one register</td><td>Memory address decoding, choosing a register</td></tr>
+</table></div>
+<div class="callout tip"><b>Quick check</b><p>"Select one of 8 sensor readings" needs an <b>8:1 MUX</b> (with 3 select lines), not a decoder. You are picking one value from many, which is a MUX's job. A decoder only produces one-hot lines; it does not carry data.</p></div>
+
+<h2>7. Where they live in a CPU</h2>
+<p>You will meet these in Module 2's datapath. Two MUXes appear in almost every CPU:</p>
+<figure class="diagram">
+  <svg viewBox="0 0 540 285" width="540" role="img" aria-label="Top: a 3 to 1 MUX picks PC plus 4, branch target or jump target as the next PC, controlled by PCSrc. Bottom: a 2 to 1 MUX picks a register value or an immediate as the second ALU input, controlled by ALUSrc">
+    <rect x="20" y="20" width="160" height="28" rx="6" class="box"/><text x="32" y="39">PC + 4</text>
+    <rect x="20" y="55" width="160" height="28" rx="6" class="box"/><text x="32" y="74">Branch target</text>
+    <rect x="20" y="90" width="160" height="28" rx="6" class="box"/><text x="32" y="109">Jump target</text>
+    <path class="w" d="M180 34 H260 M180 69 H260 M180 104 H260"/>
+    <polygon points="260,15 300,35 300,105 260,125" class="box-hi"/>
+    <text x="266" y="74" class="m">3:1</text>
+    <path class="w" d="M280 115 V132"/>
+    <text x="256" y="148" class="m hi">PCSrc</text>
+    <path class="w-hi" d="M300 70 H380"/>
+    <rect x="380" y="50" width="120" height="40" rx="6" class="box-b"/><text x="398" y="75" class="b">PC register</text>
+    <text x="380" y="110" class="dim">= next instruction</text>
+    <rect x="20" y="170" width="160" height="28" rx="6" class="box"/><text x="32" y="189">Register value</text>
+    <rect x="20" y="210" width="160" height="28" rx="6" class="box"/><text x="32" y="229">Immediate (constant)</text>
+    <path class="w" d="M180 184 H260 M180 224 H260"/>
+    <polygon points="260,160 300,175 300,235 260,250" class="box-hi"/>
+    <text x="266" y="209" class="m">2:1</text>
+    <path class="w" d="M280 242.5 V258"/>
+    <text x="254" y="274" class="m hi">ALUSrc</text>
+    <path class="w-hi" d="M300 205 H380"/>
+    <rect x="380" y="180" width="120" height="50" rx="6" class="box-b"/><text x="424" y="210" class="b">ALU</text>
+  </svg>
+  <figcaption>Top: the next-PC MUX (normal step, branch or jump). Bottom: the ALU operand MUX (register or constant). A third use is memory routing: decoders choose which memory chip or register is active.</figcaption>
+</figure>
+<p>The <b>ALU</b> (arithmetic logic unit) is the CPU's calculator. The <b>PC</b> (program counter) holds the address of the next instruction. The select signals (PCSrc, ALUSrc) come from the CPU's control unit.</p>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>Mixing up MUX and DEMUX</b> (many → one vs one → many), or <b>DEMUX and decoder</b> (a decoder has no data input; its "data" is a constant 1).</li>
+  <li><b>Wrong number of select lines.</b> 2ⁿ inputs need n selects, so an 8:1 MUX needs <b>3</b>, not 8 and not 4.</li>
+  <li><b>Missing <code>default</code> in a <code>case</code></b> creates a latch instead of a MUX. This is the most common bug.</li>
+  <li><b><code>y</code> declared as a <code>wire</code> but assigned inside <code>always</code>.</b> That is a compile error; it must be <code>reg</code>.</li>
+  <li><b><code>{s1,s0}</code> is not <code>{s0,s1}</code>.</b> The left bit is the MSB. Swapping them swaps I1 and I2.</li>
+  <li>In gate primitives such as <code>and u1 (a0, a, sel_n);</code>, the <b>output is listed first</b>.</li>
+  <li>For a 3-variable function on a 4:1 MUX, the data inputs can be <b>0, 1, C or C'</b>. Don't forget the C' case.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>How many select lines does a 16:1 MUX need? And a 1:8 DEMUX?</summary><div class="a"><p>16 = 2⁴, so a 16:1 MUX needs <b>4</b>. 8 = 2³, so a 1:8 DEMUX needs <b>3</b>.</p></div></details>
+  <details class="q"><summary>A 4:1 MUX has I0..I3 = 1, 0, 0, 1 and S1 S0 = 11. What is Y?</summary><div class="a"><p>11 in binary is 3, so Y = I3 = <b>1</b>.</p></div></details>
+  <details class="q"><summary>Build a 4:1 MUX from 2:1 MUXes. How many do you need, and how are the selects wired?</summary><div class="a"><p><b>Three.</b> Two first-level MUXes pick (I0 or I1) and (I2 or I3), both controlled by <b>S0</b>. A third MUX, controlled by <b>S1</b>, picks between their outputs.</p></div></details>
+  <details class="q"><summary>Build an 8:1 MUX from 4:1 MUXes (take-home).</summary><div class="a"><p>Use two 4:1 MUXes: one for I0–I3 and one for I4–I7, both with selects S1 S0. Then a 2:1 MUX with select <b>S2</b> picks between them. Check with select 101 (= 5): S1 S0 = 01 picks I1 and I5, then S2 = 1 picks <b>I5</b> ✓.</p></div></details>
+  <details class="q"><summary>Implement F(A,B,C) = Σm(1,3,5,6) with a 4:1 MUX, using A and B as the selects.</summary><div class="a"><p>Look at each pair of rows: AB = 00 gives F = 0,1 (so C); 01 gives 0,1 (C); 10 gives 0,1 (C); 11 gives 1,0 (C').</p><p><b>I0 = C, I1 = C, I2 = C, I3 = C'</b>.</p></div></details>
+  <details class="q"><summary>Implement F(A,B) = A + B (OR) with a 4:1 MUX.</summary><div class="a"><p>S1 = A, S0 = B. The OR column for rows 00, 01, 10, 11 is 0, 1, 1, 1, so <b>I0..I3 = 0, 1, 1, 1</b>.</p></div></details>
+  <details class="q"><summary>How many AND gates does a 3-to-8 decoder need? Why?</summary><div class="a"><p><b>8</b>, one for each minterm (each output). It also needs 3 NOT gates to make A', B' and C'.</p></div></details>
+  <details class="q"><summary>A 1:4 DEMUX has D = 1 and select AB = 01. What are Y0..Y3? And if D = 0?</summary><div class="a"><p>With D = 1: Y0..Y3 = <b>0, 1, 0, 0</b>. With D = 0, all outputs are <b>0</b>, because the selected output copies D and the others are always 0.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=FKvnmxte98A" target="_blank" rel="noopener"><i class="play"></i><span><b>Introduction to Multiplexers | MUX Basic</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=_nd77x1ooGQ" target="_blank" rel="noopener"><i class="play"></i><span><b>MUX Tree Basic | 4X1 MUX using 2X1 MUX | Easy Explanation</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=vOFeSu6Zr94" target="_blank" rel="noopener"><i class="play"></i><span><b>Implementation of Boolean Function using Multiplexers</b><small>Neso Academy</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=feBvhLFQEDk" target="_blank" rel="noopener"><i class="play"></i><span><b>Introduction to Encoders and Decoders</b><small>Neso Academy</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

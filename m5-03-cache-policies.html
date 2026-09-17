@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cache Policies</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+<style>.ann td.n code{background:color-mix(in srgb,var(--code-ink) 14%,transparent);color:var(--code-ink)}</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 5 / Cache policies</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 5 · Memory Hierarchy &amp; Cache <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>Replacement &amp; write policies</h1>
+  <p class="idea">A cache needs rules. A <strong>replacement policy</strong> decides which block to throw out when the set is full. A <strong>write policy</strong> decides when a change made in the cache is copied to main memory.</p>
+  <div class="analogy"><b>Think of it like this:</b> your desk holds only three books. When a fourth arrives, one must go back to the shelf. You can return the one you <em>haven't touched for longest</em> (LRU) or the one that <em>arrived first</em> (FIFO). And if you write notes in a book, you can copy them into the library's master copy every time (write-through), or only when you return the book (write-back).</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Eviction / victim</dt><dd>Throwing a block out of the cache to make room. The block thrown out is the victim.</dd></div>
+  <div class="term"><dt>LRU</dt><dd>Least Recently Used: evict the block whose last use is oldest.</dd></div>
+  <div class="term"><dt>FIFO</dt><dd>First In, First Out: evict the block that entered the cache first, however often it has been used.</dd></div>
+  <div class="term"><dt>Optimal (Bélády)</dt><dd>Evict the block whose next use is furthest in the future. Needs knowledge of the future, so it is used only as a yardstick.</dd></div>
+  <div class="term"><dt>Dirty bit</dt><dd>A 1-bit flag per slot. 1 means "changed in the cache, not yet copied to memory".</dd></div>
+  <div class="term"><dt>Stale</dt><dd>Out of date. Main memory is stale when the newest value exists only in the cache.</dd></div>
+  <div class="term"><dt>DMA</dt><dd>Direct Memory Access: a device (disk, network card) that reads and writes main memory without going through the CPU.</dd></div>
+  <div class="term"><dt>Prefetch</dt><dd>Loading a block into the cache <em>before</em> it is asked for, based on a guess.</dd></div>
+</dl>
+
+<h2>1. When is a replacement policy needed?</h2>
+<ul>
+  <li><b>Direct-mapped:</b> never. Each block has exactly one possible slot, so the old block in that slot must go. There is no choice to make.</li>
+  <li><b>Set-associative or fully associative:</b> when a miss happens and every way in the set is full, something must choose the victim.</li>
+</ul>
+<div class="scroll"><table>
+  <tr><th>Policy</th><th>Evicts…</th><th>Good</th><th>Bad</th></tr>
+  <tr><td><b>LRU</b></td><td>the least recently used block</td><td>Follows temporal locality; usually the best practical choice</td><td>Must track the order of use: more bits and logic</td></tr>
+  <tr><td><b>FIFO</b></td><td>the oldest block to arrive</td><td>Very simple: just a queue</td><td>May evict a block that is used all the time</td></tr>
+  <tr><td><b>Random</b></td><td>any block, picked at random</td><td>Almost no hardware</td><td>Ignores locality</td></tr>
+  <tr><td><b>Optimal</b></td><td>the block used furthest in the future</td><td>Fewest possible misses</td><td>Impossible in real hardware (needs the future)</td></tr>
+</table></div>
+
+<h2>2. Worked example: LRU vs FIFO</h2>
+<p>A fully associative cache with <b>3 slots</b>, starting empty. Access sequence: <b>A B C A D B E A</b>. A new block goes into the empty slot or into the victim's slot.</p>
+
+<h3>LRU</h3>
+<div class="scroll"><table class="tt">
+  <tr><th>Step</th><th>Access</th><th>Slot 1</th><th>Slot 2</th><th>Slot 3</th><th class="out">Result</th><th>Evicted</th><th>Use order (oldest → newest)</th></tr>
+  <tr><td>1</td><td>A</td><td>A</td><td>–</td><td>–</td><td class="out">Miss</td><td>–</td><td>A</td></tr>
+  <tr><td>2</td><td>B</td><td>A</td><td>B</td><td>–</td><td class="out">Miss</td><td>–</td><td>A B</td></tr>
+  <tr><td>3</td><td>C</td><td>A</td><td>B</td><td>C</td><td class="out">Miss</td><td>–</td><td>A B C</td></tr>
+  <tr class="hl"><td>4</td><td>A</td><td>A</td><td>B</td><td>C</td><td class="out one">Hit</td><td>–</td><td>B C A</td></tr>
+  <tr><td>5</td><td>D</td><td>A</td><td><b>D</b></td><td>C</td><td class="out">Miss</td><td>B</td><td>C A D</td></tr>
+  <tr><td>6</td><td>B</td><td>A</td><td>D</td><td><b>B</b></td><td class="out">Miss</td><td>C</td><td>A D B</td></tr>
+  <tr><td>7</td><td>E</td><td><b>E</b></td><td>D</td><td>B</td><td class="out">Miss</td><td>A</td><td>D B E</td></tr>
+  <tr><td>8</td><td>A</td><td>E</td><td><b>A</b></td><td>B</td><td class="out">Miss</td><td>D</td><td>B E A</td></tr>
+</table></div>
+<p><b>LRU: 7 misses, 1 hit.</b> At step 4, using A moves it to the "newest" end, so at step 5 the least recent block is B, and B is evicted, even though it is needed next.</p>
+
+<h3>FIFO</h3>
+<div class="scroll"><table class="tt">
+  <tr><th>Step</th><th>Access</th><th>Slot 1</th><th>Slot 2</th><th>Slot 3</th><th class="out">Result</th><th>Evicted</th><th>Arrival queue (first → last)</th></tr>
+  <tr><td>1</td><td>A</td><td>A</td><td>–</td><td>–</td><td class="out">Miss</td><td>–</td><td>A</td></tr>
+  <tr><td>2</td><td>B</td><td>A</td><td>B</td><td>–</td><td class="out">Miss</td><td>–</td><td>A B</td></tr>
+  <tr><td>3</td><td>C</td><td>A</td><td>B</td><td>C</td><td class="out">Miss</td><td>–</td><td>A B C</td></tr>
+  <tr class="hl"><td>4</td><td>A</td><td>A</td><td>B</td><td>C</td><td class="out one">Hit</td><td>–</td><td>A B C <small>(no change)</small></td></tr>
+  <tr><td>5</td><td>D</td><td><b>D</b></td><td>B</td><td>C</td><td class="out">Miss</td><td>A</td><td>B C D</td></tr>
+  <tr class="hl"><td>6</td><td>B</td><td>D</td><td>B</td><td>C</td><td class="out one">Hit</td><td>–</td><td>B C D</td></tr>
+  <tr><td>7</td><td>E</td><td>D</td><td><b>E</b></td><td>C</td><td class="out">Miss</td><td>B</td><td>C D E</td></tr>
+  <tr><td>8</td><td>A</td><td>D</td><td>E</td><td><b>A</b></td><td class="out">Miss</td><td>C</td><td>D E A</td></tr>
+</table></div>
+<p><b>FIFO: 6 misses, 2 hits.</b> A hit does <em>not</em> change the FIFO queue. At step 5, A arrived first, so A goes, and B survives for step 6.</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 660 190" width="660" role="img" aria-label="Misses out of 8 accesses, to scale: optimal 5, FIFO 6, LRU 7">
+<g class="grid"><path d="M130 14 V140"/><path d="M190 14 V140"/><path d="M250 14 V140"/><path d="M310 14 V140"/><path d="M370 14 V140"/><path d="M430 14 V140"/><path d="M490 14 V140"/><path d="M550 14 V140"/><path d="M610 14 V140"/></g>
+<text x="130" y="158" class="m dim" text-anchor="middle">0</text>
+<text x="190" y="158" class="m dim" text-anchor="middle">1</text>
+<text x="250" y="158" class="m dim" text-anchor="middle">2</text>
+<text x="310" y="158" class="m dim" text-anchor="middle">3</text>
+<text x="370" y="158" class="m dim" text-anchor="middle">4</text>
+<text x="430" y="158" class="m dim" text-anchor="middle">5</text>
+<text x="490" y="158" class="m dim" text-anchor="middle">6</text>
+<text x="550" y="158" class="m dim" text-anchor="middle">7</text>
+<text x="610" y="158" class="m dim" text-anchor="middle">8</text>
+<text x="370" y="178" class="m dim" text-anchor="middle">misses out of 8 accesses</text>
+<text x="120" y="41" text-anchor="end" class="b">LRU</text>
+<rect x="130" y="22" width="420" height="28" class="box-hi"/>
+<text x="558" y="41" class="hi">7</text>
+<text x="120" y="81" text-anchor="end" class="b">FIFO</text>
+<rect x="130" y="62" width="360" height="28" class="box-b"/>
+<text x="498" y="81" class="hi">6</text>
+<text x="120" y="121" text-anchor="end" class="b">Optimal</text>
+<rect x="130" y="102" width="300" height="28" class="box-g"/>
+<text x="438" y="121" class="hi">5</text>
+</svg>
+  <figcaption>Misses for A B C A D B E A with 3 slots, drawn to scale. Optimal: miss on A, B, C; at D evict C (never used again); B hits; at E evict D (never used again); A hits → 5 misses.</figcaption>
+</figure>
+
+<div class="callout tip"><b>So is FIFO better than LRU?</b><p>Not in general. On this short sequence FIFO happened to win. On real programs, which have strong temporal locality, LRU usually has fewer misses. The practice section has a sequence where LRU wins 5 misses to 7. Always trace the sequence you are given.</p></div>
+
+<div class="code">
+  <div class="code-head"><span><b>python-like pseudocode</b> · one access</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">if</span> block <span class="kw">in</span> cache:</td><td class="n">Is the block already in one of the slots?</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> policy == <span class="str">"LRU"</span>:</td><td class="n">Only LRU cares about hits.</td></tr>
+    <tr><td class="c">        order.move_to_newest(block)</td><td class="n">Mark it as just used.</td></tr>
+    <tr><td class="c">    <span class="kw">return</span> <span class="str">"hit"</span></td><td class="n">FIFO does nothing on a hit.</td></tr>
+    <tr><td class="c"><span class="kw">if</span> cache.is_full():</td><td class="n">Miss, and no free slot.</td></tr>
+    <tr><td class="c">    victim = order.oldest()</td><td class="n">For LRU, "oldest" means least recently <em>used</em>. For FIFO, it means earliest <em>arrived</em>.</td></tr>
+    <tr><td class="c">    cache.remove(victim)</td><td class="n">Evict it (write it back first if its dirty bit is 1; see below).</td></tr>
+    <tr><td class="c">cache.add(block); order.add_newest(block)</td><td class="n">Load the new block and record it as the newest.</td></tr>
+    <tr><td class="c"><span class="kw">return</span> <span class="str">"miss"</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h2>3. LRU in hardware: 1 bit for a 2-way set</h2>
+<p>With 2 ways, "which one is least recent?" has only two answers, so <b>one bit per set</b> is enough. On every access, set the bit to point at the <em>other</em> way.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 660 150" width="660" role="img" aria-label="A 2-way set with an LRU bit: after using A in way 0 the bit points to way 1; after using B it points to way 0; on a miss for C, way 0 is evicted and the bit points to way 1">
+    <text x="20" y="20" class="b">1. Use A (way 0)</text>
+    <rect x="20" y="32" width="80" height="34" class="box-g"/><text x="60" y="54" class="m" text-anchor="middle">A</text>
+    <rect x="110" y="32" width="80" height="34" class="box-r"/><text x="150" y="54" class="m" text-anchor="middle">B</text>
+    <text x="60" y="84" class="m dim" text-anchor="middle">way 0</text><text x="150" y="84" class="m dim" text-anchor="middle">way 1</text>
+    <text x="20" y="112" class="m b">LRU bit = 1</text><text x="20" y="130" class="m dim">next victim: way 1</text>
+
+    <path class="w-hi" d="M200 49 H226"/><polygon points="234,49 224,44 224,54" class="fill-hi"/>
+
+    <text x="245" y="20" class="b">2. Use B (way 1)</text>
+    <rect x="245" y="32" width="80" height="34" class="box-r"/><text x="285" y="54" class="m" text-anchor="middle">A</text>
+    <rect x="335" y="32" width="80" height="34" class="box-g"/><text x="375" y="54" class="m" text-anchor="middle">B</text>
+    <text x="285" y="84" class="m dim" text-anchor="middle">way 0</text><text x="375" y="84" class="m dim" text-anchor="middle">way 1</text>
+    <text x="245" y="112" class="m b">LRU bit = 0</text><text x="245" y="130" class="m dim">next victim: way 0</text>
+
+    <path class="w-hi" d="M425 49 H451"/><polygon points="459,49 449,44 449,54" class="fill-hi"/>
+
+    <text x="470" y="20" class="b">3. Miss on C</text>
+    <rect x="470" y="32" width="80" height="34" class="box-g"/><text x="510" y="54" class="m" text-anchor="middle">C</text>
+    <rect x="560" y="32" width="80" height="34" class="box-r"/><text x="600" y="54" class="m" text-anchor="middle">B</text>
+    <text x="510" y="84" class="m dim" text-anchor="middle">way 0</text><text x="600" y="84" class="m dim" text-anchor="middle">way 1</text>
+    <text x="470" y="112" class="m b">A evicted · bit = 1</text><text x="470" y="130" class="m dim">next victim: way 1</text>
+  </svg>
+  <figcaption>Green = just used; red = least recently used (the next victim). The single bit always names the red way.</figcaption>
+</figure>
+<p>With more ways the cost grows. Exact LRU must remember a full ordering: N ways have N! possible orders, so it needs log₂(N!) bits per set (4-way: log₂24 ≈ 4.6 → <b>5 bits</b>; 8-way: <b>16 bits</b>). That is why big caches and virtual memory use cheaper <b>LRU approximations</b> (for example, a "recently used" bit that is cleared now and then).</p>
+
+<h2>4. Write policies: write-through vs write-back</h2>
+<p>When the CPU <em>writes</em> to a block that is in the cache, main memory now holds an old copy. When should memory be updated?</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 660 300" width="660" role="img" aria-label="Sequence diagram. Write-through: each of three writes goes to the cache and then to memory. Write-back: three writes go only to the cache and set the dirty bit; memory is stale until eviction copies the block once">
+    <text x="150" y="16" class="b" text-anchor="middle">Write-through</text>
+    <rect x="10" y="26" width="60" height="24" rx="5" class="box"/><text x="40" y="43" class="m" text-anchor="middle">CPU</text>
+    <rect x="115" y="26" width="70" height="24" rx="5" class="box-hi"/><text x="150" y="43" class="m" text-anchor="middle">Cache</text>
+    <rect x="220" y="26" width="80" height="24" rx="5" class="box-b"/><text x="260" y="43" class="m" text-anchor="middle">Memory</text>
+    <path class="grid" d="M40 50 V250 M150 50 V250 M260 50 V250"/>
+
+    <path class="w" d="M40 80 H142 M40 125 H142 M40 170 H142"/>
+    <polygon points="150,80 140,75 140,85" class="fill-ink"/><polygon points="150,125 140,120 140,130" class="fill-ink"/><polygon points="150,170 140,165 140,175" class="fill-ink"/>
+    <text x="95" y="74" class="m" text-anchor="middle">x = 1</text><text x="95" y="119" class="m" text-anchor="middle">x = 2</text><text x="95" y="164" class="m" text-anchor="middle">x = 3</text>
+    <path class="w-hi" d="M150 98 H252 M150 143 H252 M150 188 H252"/>
+    <polygon points="260,98 250,93 250,103" class="fill-hi"/><polygon points="260,143 250,138 250,148" class="fill-hi"/><polygon points="260,188 250,183 250,193" class="fill-hi"/>
+    <text x="205" y="92" class="m hi" text-anchor="middle">copy</text><text x="205" y="137" class="m hi" text-anchor="middle">copy</text><text x="205" y="182" class="m hi" text-anchor="middle">copy</text>
+    <text x="150" y="272" class="g" text-anchor="middle">Memory always up to date</text>
+    <text x="150" y="290" class="dim" text-anchor="middle">but 3 slow memory writes</text>
+
+    <path class="grid" d="M325 10 V295"/>
+
+    <text x="490" y="16" class="b" text-anchor="middle">Write-back</text>
+    <rect x="350" y="26" width="60" height="24" rx="5" class="box"/><text x="380" y="43" class="m" text-anchor="middle">CPU</text>
+    <rect x="455" y="26" width="70" height="24" rx="5" class="box-hi"/><text x="490" y="43" class="m" text-anchor="middle">Cache</text>
+    <rect x="560" y="26" width="80" height="24" rx="5" class="box-b"/><text x="600" y="43" class="m" text-anchor="middle">Memory</text>
+    <path class="grid" d="M380 50 V250 M490 50 V250 M600 50 V250"/>
+
+    <path class="w" d="M380 80 H482 M380 125 H482 M380 170 H482"/>
+    <polygon points="490,80 480,75 480,85" class="fill-ink"/><polygon points="490,125 480,120 480,130" class="fill-ink"/><polygon points="490,170 480,165 480,175" class="fill-ink"/>
+    <text x="435" y="74" class="m" text-anchor="middle">x = 1</text><text x="435" y="119" class="m" text-anchor="middle">x = 2</text><text x="435" y="164" class="m" text-anchor="middle">x = 3</text>
+    <text x="498" y="96" class="m dim">dirty = 1</text>
+    <rect x="595" y="74" width="10" height="148" class="box-r"/>
+    <text x="624" y="148" class="m r" text-anchor="middle" transform="rotate(-90 624 148)">stale</text>
+    <path class="w-hi" d="M490 228 H586"/>
+    <polygon points="594,228 584,223 584,233" class="fill-hi"/>
+    <text x="540" y="221" class="m hi" text-anchor="middle">evict: copy</text>
+    <text x="490" y="272" class="g" text-anchor="middle">Only 1 slow write, at eviction</text>
+    <text x="490" y="290" class="dim" text-anchor="middle">memory is stale until then</text>
+  </svg>
+  <figcaption>Three writes to the same variable x. Write-through pays for a memory write every time. Write-back writes memory once, when the dirty block is evicted.</figcaption>
+</figure>
+
+<div class="scroll"><table>
+  <tr><th></th><th>Write-through</th><th>Write-back (write-behind)</th></tr>
+  <tr><td>On each write</td><td>Update cache <b>and</b> main memory together</td><td>Update the cache only; set dirty bit = 1</td></tr>
+  <tr><td>Main memory updated</td><td>Immediately</td><td>Later, when the block is evicted (only if dirty = 1)</td></tr>
+  <tr><td>Speed</td><td>Slow: every write waits for DRAM</td><td>Fast: repeated writes cost nothing extra</td></tr>
+  <tr><td>Consistency</td><td>Always consistent</td><td>Memory is stale for a while</td></tr>
+  <tr><td>Extra hardware</td><td>None</td><td>A dirty bit per slot</td></tr>
+  <tr><td>Risk</td><td>—</td><td>Another core or a DMA device may read the old value from memory</td></tr>
+</table></div>
+
+<div class="code">
+  <div class="code-head"><span><b>python-like pseudocode</b> · the two write policies</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">def</span> write_through(addr, value):</td><td class="n"><code>def</code> defines a named procedure (a function).</td></tr>
+    <tr><td class="c">    cache.write(addr, value)</td><td class="n">Update the fast copy …</td></tr>
+    <tr><td class="c">    memory.write(addr, value)</td><td class="n">… and the slow copy, right now.</td></tr>
+    <tr><td class="c"><span class="kw">def</span> write_back(addr, value):</td><td class="n"></td></tr>
+    <tr><td class="c">    cache.write(addr, value)</td><td class="n">Update only the fast copy.</td></tr>
+    <tr><td class="c">    cache.slot(addr).dirty = <span class="num">1</span></td><td class="n">Remember that memory is now out of date.</td></tr>
+    <tr><td class="c"><span class="kw">def</span> evict(slot):</td><td class="n">Runs when the slot is chosen as a victim.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> slot.dirty == <span class="num">1</span>:</td><td class="n">Only changed blocks need copying.</td></tr>
+    <tr><td class="c">        memory.write_block(slot)</td><td class="n">Copy the whole block back to main memory.</td></tr>
+    <tr><td class="c">    slot.valid = <span class="num">0</span></td><td class="n">The slot is now free. A clean block (dirty = 0) is simply dropped.</td></tr>
+  </table>
+</div>
+
+<div class="callout tip"><b>Why the stale copy matters</b><p>On a multicore chip, each core has its own cache. If core 0 uses write-back, core 1 or a DMA device reading main memory can see the old value. Module 6 covers how caches keep each other consistent: see <a href="m6-02-mesi-cache-coherence.html">cache coherence &amp; MESI</a>.</p></div>
+
+<h2>5. Write buffer and read policies</h2>
+<dl class="terms">
+  <div class="term"><dt>Write buffer</dt><dd>A small queue that holds blocks waiting to be written to memory. The CPU drops the write into the buffer and carries on, instead of waiting for DRAM.</dd></div>
+  <div class="term"><dt>Demand fetch</dt><dd>Load a block only when it is asked for and missed. Simple, but every first access is a miss.</dd></div>
+  <div class="term"><dt>Prefetch</dt><dd>Guess what is needed next (for example, block <i>n</i>+1 after block <i>n</i>) and load it early. Uses spatial locality. A wrong guess wastes work and may evict a useful block.</dd></div>
+</dl>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>FIFO ignores hits.</b> A hit does not move a block in the FIFO queue. It does in LRU.</li>
+  <li>Direct-mapped caches have <b>no</b> replacement choice. Don't apply LRU to them.</li>
+  <li>Count the <b>first few misses</b> too (the cache starts empty). They are compulsory misses.</li>
+  <li>"LRU is always better than FIFO" is false. It depends on the sequence; trace it.</li>
+  <li>Write-back copies a block to memory only if its <b>dirty bit is 1</b>. A clean block is just dropped.</li>
+  <li>Write-through is always consistent but slow; write-back is fast but temporarily stale. Don't swap them.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>3 slots, sequence A B C A B D A D B C. Count the misses for LRU and for FIFO.</summary><div class="a">
+    <p><b>LRU:</b> A, B, C miss; A, B hit; D misses and evicts C (least recent); A, D, B hit; C misses and evicts A. <b>5 misses.</b></p>
+    <p><b>FIFO:</b> A, B, C miss; A, B hit; D evicts A; A evicts B; D hits; B evicts C; C evicts D. <b>7 misses.</b></p>
+    <p>Here LRU wins, because A and B are used often but FIFO evicts them anyway.</p>
+  </div></details>
+  <details class="q"><summary>2 slots, sequence A B A C B A. Count LRU and FIFO misses.</summary><div class="a">
+    <p><b>LRU:</b> M, M, H, M (evict B), M (evict A), M (evict C) → <b>5 misses</b>.</p>
+    <p><b>FIFO:</b> M, M, H, M (evict A), H, M (evict B) → <b>4 misses</b>.</p>
+  </div></details>
+  <details class="q"><summary>Which replacement policy does a direct-mapped cache use?</summary><div class="a"><p><b>None is needed.</b> Each block can live in only one slot, so the block already there is always the victim.</p></div></details>
+  <details class="q"><summary>How many bits per set does exact LRU need for a 4-way set?</summary><div class="a"><p>4 ways can be ordered in 4! = 24 ways. log₂24 ≈ 4.58, so <b>5 bits</b>.</p></div></details>
+  <details class="q"><summary>A loop writes to the same cached block 1,000 times, then the block is evicted. How many main-memory writes happen under each write policy?</summary><div class="a"><p>Write-through: <b>1,000</b> (one per write). Write-back: <b>1</b> (at eviction, because the dirty bit is 1).</p></div></details>
+  <details class="q"><summary>A block is evicted and its dirty bit is 0. What happens?</summary><div class="a"><p>Nothing is copied. The block was never changed, so memory already has the same data. The slot is simply reused.</p></div></details>
+  <details class="q"><summary>Why can write-back cause wrong results when a network card uses DMA?</summary><div class="a"><p>The card reads <b>main memory</b> directly. Under write-back, the newest data may still be only in the CPU cache, so the card sends <b>stale</b> data. The OS must flush (write back) such blocks first.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=e8ZrvrNdp9o" target="_blank" rel="noopener"><i class="play"></i><span><b>L-3.15: FIFO Cache Replacement Policy with example | Computer Organisation and Architecture</b><small>Gate Smashers</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=7mcy_xMNGF4" target="_blank" rel="noopener"><i class="play"></i><span><b>L-3.16: LRU(least recently used ) Cache Replacement Policy | Computer Organisation and Architecture</b><small>Gate Smashers</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=Y7q2ECeFWE8" target="_blank" rel="noopener"><i class="play"></i><span><b>Ep 077: Cache Write Policies, Flag Bits, and Split Caches</b><small>Intermation</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=xU0ICkgTLTo" target="_blank" rel="noopener"><i class="play"></i><span><b>Write Back Cache Example - Georgia Tech HPCA Part 3</b><small>Udacity</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FSMs: Moore vs Mealy</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 2 / FSMs</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 2 · Sequential Logic &amp; Memory <span class="tag class">From class notes · L06/L07 &amp; FSM exercise</span></div>
+  <h1>Finite state machines: Moore vs Mealy</h1>
+  <p class="idea">A finite state machine (FSM) is a circuit that is always in <strong>exactly one</strong> of a fixed list of situations, called <em>states</em>. On each clock edge it looks at its inputs and decides which state to move to next.</p>
+  <div class="analogy"><b>Think of it like this:</b> a board game. Your token sits on exactly one square (the state). Each turn you roll the dice (the input), and the rules say which square you move to (the transition). Some squares say "collect a prize" (the output).</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>State</dt><dd>What the machine "remembers" about the past, e.g. "I have seen 1, 0 so far".</dd></div>
+  <div class="term"><dt>Transition</dt><dd>A move from one state to another, chosen by the current state and the input.</dd></div>
+  <div class="term"><dt>Output</dt><dd>The signal the FSM produces, e.g. "sequence found" or "light is red".</dd></div>
+  <div class="term"><dt>State diagram</dt><dd>A drawing: circles are states, arrows are transitions labelled with their conditions.</dd></div>
+  <div class="term"><dt>State table</dt><dd>The same information as the diagram, written as a table: current state + input → next state + output.</dd></div>
+  <div class="term"><dt>State encoding</dt><dd>Giving each state a binary number so it can be stored in flip-flops.</dd></div>
+  <div class="term"><dt>Reset state</dt><dd>The state the machine starts in (S0) when reset is 1.</dd></div>
+</dl>
+
+<h2>1. What an FSM is</h2>
+<p>Every FSM has <strong>three ingredients</strong>:</p>
+<ol>
+  <li><b>States</b>: a finite list. The machine is in exactly one at a time.</li>
+  <li><b>Transitions</b>: rules that use the current state + inputs to pick the next state.</li>
+  <li><b>Outputs</b>: signals the machine produces.</li>
+</ol>
+<p>FSMs are everywhere: traffic lights, vending machines, elevators, washing machines, game AI (patrol → chase → attack), TCP network connections, USB handshakes and regex search engines. Even the CPU's own Fetch → Decode → Execute → Writeback loop is an FSM.</p>
+
+<h2>2. Moore vs Mealy</h2>
+<p>There are two styles. The only difference is <strong>what the output depends on</strong>.</p>
+<div class="scroll"><table>
+  <tr><th></th><th>Moore</th><th>Mealy</th></tr>
+  <tr><td>Output depends on</td><td>the <b>state only</b></td><td>the <b>state + the input</b></td></tr>
+  <tr><td>Where the output is written</td><td>inside the state circle (<code>S1/0</code>)</td><td>on the arrow (<code>input/output</code>, e.g. <code>1/0</code>)</td></tr>
+  <tr><td>When the output changes</td><td>only when the state changes</td><td>can react to the input in the same cycle</td></tr>
+  <tr><td>Timing</td><td>output appears <b>1 cycle later</b></td><td>output appears <b>in the same cycle</b></td></tr>
+  <tr><td>Glitches</td><td>glitch-free, simpler</td><td>output may glitch if the input glitches</td></tr>
+  <tr><td>Number of states</td><td>may need more states</td><td>often fewer states</td></tr>
+</table></div>
+<div class="callout tip"><b>Memory hook</b><p>"Moore = output in the <b>circle</b>, Mealy = output on the <b>arrow</b>." Both styles can solve the same problems.</p></div>
+
+<h2>3. Anatomy of any FSM</h2>
+<p>Every FSM is built from three blocks: next-state logic (combinational gates), a state register (flip-flops), and output logic (combinational gates).</p>
+<figure class="diagram">
+  <svg viewBox="0 0 660 215" width="660" role="img" aria-label="FSM block diagram: inputs go to next-state logic, then the state register clocked by clk, then output logic; the current state feeds back to the next-state logic; in a Mealy machine the inputs also go to the output logic">
+    <text x="150" y="18" class="hi">Mealy only: inputs also reach the output logic</text>
+    <path class="w-hi" d="M80 80 V28 H525 V50"/>
+    <circle cx="80" cy="80" r="3.5" class="fill-hi"/>
+    <text x="8" y="72" class="b">inputs</text>
+    <path class="w" d="M8 80 H110"/>
+    <rect x="110" y="50" width="130" height="60" rx="8" class="box"/>
+    <text x="134" y="76" class="b">Next-state</text>
+    <text x="126" y="94" class="m dim">logic (gates)</text>
+    <path class="w" d="M240 80 H300"/>
+    <text x="250" y="72" class="m dim">next</text>
+    <rect x="300" y="50" width="120" height="60" rx="8" class="box-hi"/>
+    <text x="316" y="72" class="b">State register</text>
+    <text x="326" y="89" class="m dim">(flip-flops)</text>
+    <path class="w" d="M360 110 V130"/>
+    <polygon points="350,110 370,110 360,100" class="box"/>
+    <text x="368" y="130" class="m">clk</text>
+    <path class="w" d="M420 80 H470"/>
+    <text x="424" y="70" class="m dim">state</text>
+    <rect x="470" y="50" width="110" height="60" rx="8" class="box"/>
+    <text x="490" y="76" class="b">Output</text>
+    <text x="482" y="94" class="m dim">logic (gates)</text>
+    <path class="w-g" d="M580 80 H615"/>
+    <text x="585" y="70" class="g">outputs</text>
+    <path class="w" d="M445 80 V175 H175 V110"/>
+    <circle cx="445" cy="80" r="3.5" class="fill-ink"/>
+    <text x="210" y="195" class="dim">current state is fed back (this loop is the "memory")</text>
+  </svg>
+  <figcaption>Moore: output logic sees only the state. Mealy: output logic also sees the inputs (copper path).</figcaption>
+</figure>
+
+<h2>4. Example: a traffic light (Moore)</h2>
+<p>The light goes GREEN → YELLOW → RED → GREEN. It moves on only when a timer says "expired". The output (Go / Slow / Stop) depends only on the colour, so this is a <strong>Moore</strong> machine.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 600 310" width="600" role="img" aria-label="Traffic light state diagram: GREEN goes to YELLOW, YELLOW to RED, RED to GREEN when the timer expires; each state loops to itself when the timer has not expired">
+    <defs><marker id="ah-tl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-ink"/></marker></defs>
+    <circle cx="280" cy="80" r="45" class="box-g"/>
+    <text x="280" y="76" class="b" text-anchor="middle">GREEN</text>
+    <text x="280" y="94" class="m" text-anchor="middle">00 · Go</text>
+    <circle cx="450" cy="240" r="45" class="box-hi"/>
+    <text x="450" y="236" class="b" text-anchor="middle">YELLOW</text>
+    <text x="450" y="254" class="m" text-anchor="middle">01 · Slow</text>
+    <circle cx="110" cy="240" r="45" class="box-r"/>
+    <text x="110" y="236" class="b" text-anchor="middle">RED</text>
+    <text x="110" y="254" class="m" text-anchor="middle">10 · Stop</text>
+    <path class="w" marker-end="url(#ah-tl)" d="M312.8 110.8 L417.2 209.2"/>
+    <text x="372" y="155" class="m">expired</text>
+    <path class="w" marker-end="url(#ah-tl)" d="M405 240 L155 240"/>
+    <text x="252" y="232" class="m">expired</text>
+    <path class="w" marker-end="url(#ah-tl)" d="M142.8 209.2 L247.2 110.8"/>
+    <text x="185" y="155" class="m" text-anchor="end">expired</text>
+    <path class="w" marker-end="url(#ah-tl)" d="M262 39 C240 0, 320 0, 298 39"/>
+    <text x="318" y="20" class="m dim">not expired</text>
+    <path class="w" marker-end="url(#ah-tl)" d="M491 222 C530 200, 530 280, 491 258"/>
+    <text x="505" y="200" class="m dim">not expired</text>
+    <path class="w" marker-end="url(#ah-tl)" d="M69 222 C30 200, 30 280, 69 258"/>
+    <text x="10" y="190" class="m dim">not expired</text>
+  </svg>
+  <figcaption>Moore notation: the output (Go, Slow, Stop) is written inside each circle, together with the state's binary code.</figcaption>
+</figure>
+
+<div class="scroll"><table>
+  <tr><th>Current state</th><th>Input</th><th>Next state</th><th>Output</th></tr>
+  <tr><td>GREEN</td><td>expired</td><td>YELLOW</td><td>Go</td></tr>
+  <tr><td>YELLOW</td><td>expired</td><td>RED</td><td>Slow</td></tr>
+  <tr><td>RED</td><td>expired</td><td>GREEN</td><td>Stop</td></tr>
+  <tr><td>any</td><td>not expired</td><td>same state (hold)</td><td>same</td></tr>
+</table></div>
+
+<h3>Encoding the states</h3>
+<p>3 states need ⌈log₂ 3⌉ = <b>2 flip-flops</b> (s1 s0). Choose GREEN = <code>00</code>, YELLOW = <code>01</code>, RED = <code>10</code>. Let T = 1 mean "timer expired". Now each column of the table is a truth table:</p>
+<div class="vs">
+  <div>
+    <div class="scroll" style="margin:0"><table class="tt">
+      <tr><th>s1 s0</th><th>T</th><th class="out">s1⁺ s0⁺</th></tr>
+      <tr><td>00</td><td>0</td><td class="out">00</td></tr>
+      <tr><td>00</td><td>1</td><td class="out one">01</td></tr>
+      <tr><td>01</td><td>0</td><td class="out">01</td></tr>
+      <tr><td>01</td><td>1</td><td class="out one">10</td></tr>
+      <tr><td>10</td><td>0</td><td class="out">10</td></tr>
+      <tr><td>10</td><td>1</td><td class="out one">00</td></tr>
+      <tr><td>11</td><td>x</td><td class="out zero">unused</td></tr>
+    </table></div>
+  </div>
+  <div>
+    <div class="formula" style="margin-top:0">s1⁺ = T'·s1 + T·s0<small>⁺ means "next". ' means NOT.</small></div>
+    <div class="formula">s0⁺ = T'·s0 + T·s1'·s0'</div>
+    <div class="formula">Go = s1'·s0' · Slow = s0 · Stop = s1</div>
+    <p style="font-size:15px">Code 11 is never used, so it was treated as "don't care" in the <a href="m1-02-logic-minimization.html">K-maps</a>.</p>
+  </div>
+</div>
+
+<h2>5. The 6-step design flow</h2>
+<ol class="flow arrows">
+  <li><b>1. Understand</b>What must the machine detect or do?</li>
+  <li><b>2. Diagram</b>Draw the state diagram</li>
+  <li><b>3. Table</b>Write the state table</li>
+  <li><b>4. Encode</b>Give each state a binary code</li>
+  <li><b>5. Logic</b>Derive equations with K-maps</li>
+  <li><b>6. Build</b>Flip-flops + gates</li>
+</ol>
+<p>"The state diagram IS the design; everything else is just translating it to gates."</p>
+<div class="callout tip"><b>Big picture: how a CPU uses FSMs</b><p>A CPU has a <b>control unit</b> (an FSM) and a <b>datapath</b> (registers, ALU, MUXes). Control sends control signals to the datapath; the datapath sends status flags (like "result is zero") back.</p></div>
+
+<h2>6. Worked design: a "1011" sequence detector</h2>
+<p><b>Goal:</b> one input bit <code>x</code> arrives on each clock edge. Output <code>y = 1</code> when the last four bits were <code>1011</code>. <b>Overlapping is allowed</b>: in <code>1011011</code> the pattern is found twice, because the last 1 of the first match starts the next one.</p>
+<p><b>Idea:</b> each state remembers "how much of 1011 have I matched so far?"</p>
+<div class="scroll"><table>
+  <tr><th>State</th><th>Meaning</th></tr>
+  <tr><td>S0</td><td>nothing matched yet</td></tr>
+  <tr><td>S1</td><td>matched <code>1</code></td></tr>
+  <tr><td>S2</td><td>matched <code>10</code></td></tr>
+  <tr><td>S3</td><td>matched <code>101</code></td></tr>
+  <tr><td>S4 (Moore only)</td><td>matched <code>1011</code> → output 1</td></tr>
+</table></div>
+<p><b>The rule for a wrong bit:</b> don't just go back to S0. Look at the bits you have so far and find the <em>longest ending</em> that is still a start of <code>1011</code>. Example: in S3 (<code>101</code>) a 0 arrives → <code>1010</code>. Its ending <code>10</code> is a start of 1011, so go to S2.</p>
+
+<h3>Mealy version: 4 states</h3>
+<figure class="diagram">
+  <svg viewBox="0 0 640 280" width="640" role="img" aria-label="Mealy 1011 detector: states S0 to S3 in a row with input/output labels on each arrow">
+    <defs><marker id="ah-me" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-ink"/></marker>
+    <marker id="ah-me-hi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-hi"/></marker></defs>
+    <text x="4" y="140" class="m dim">reset</text>
+    <path class="w" marker-end="url(#ah-me)" d="M8 150 L48 150"/>
+    <circle cx="80" cy="150" r="32" class="box"/>
+    <text x="80" y="150" class="b" text-anchor="middle">S0</text>
+    <text x="80" y="166" class="m dim" text-anchor="middle">—</text>
+    <circle cx="230" cy="150" r="32" class="box"/>
+    <text x="230" y="150" class="b" text-anchor="middle">S1</text>
+    <text x="230" y="166" class="m dim" text-anchor="middle">1</text>
+    <circle cx="380" cy="150" r="32" class="box"/>
+    <text x="380" y="150" class="b" text-anchor="middle">S2</text>
+    <text x="380" y="166" class="m dim" text-anchor="middle">10</text>
+    <circle cx="530" cy="150" r="32" class="box-hi"/>
+    <text x="530" y="150" class="b" text-anchor="middle">S3</text>
+    <text x="530" y="166" class="m dim" text-anchor="middle">101</text>
+    <!-- forward -->
+    <path class="w" marker-end="url(#ah-me)" d="M112 150 L198 150"/>
+    <text x="142" y="142" class="m">1/0</text>
+    <path class="w" marker-end="url(#ah-me)" d="M262 150 L348 150"/>
+    <text x="292" y="142" class="m">0/0</text>
+    <path class="w" marker-end="url(#ah-me)" d="M412 150 L498 150"/>
+    <text x="442" y="142" class="m">1/0</text>
+    <!-- S3 -> S1 on 1/1 -->
+    <path class="w-hi" marker-end="url(#ah-me-hi)" d="M530 118 Q380 30 230 118"/>
+    <text x="330" y="64" class="m hi">1/1 (found!)</text>
+    <!-- S3 -> S2 on 0/0 -->
+    <path class="w" marker-end="url(#ah-me)" d="M512 177 Q455 230 398 177"/>
+    <text x="443" y="225" class="m">0/0</text>
+    <!-- S2 -> S0 on 0/0 -->
+    <path class="w" marker-end="url(#ah-me)" d="M365 178 Q222 310 95 178"/>
+    <text x="215" y="266" class="m">0/0</text>
+    <!-- self loops -->
+    <path class="w" marker-end="url(#ah-me)" d="M66 121 C50 80, 110 80, 94 121"/>
+    <text x="68" y="82" class="m">0/0</text>
+    <path class="w" marker-end="url(#ah-me)" d="M216 179 C200 220, 260 220, 244 179"/>
+    <text x="254" y="214" class="m">1/0</text>
+  </svg>
+  <figcaption>Mealy notation: every arrow says <code>input/output</code>. The small text in each circle is the part of 1011 matched so far. Only S3 with input 1 outputs 1 (copper).</figcaption>
+</figure>
+
+<div class="scroll"><table class="tt">
+  <tr><th>Current</th><th>x = 0: next / y</th><th>x = 1: next / y</th></tr>
+  <tr><td>S0</td><td>S0 / 0</td><td>S1 / 0</td></tr>
+  <tr><td>S1</td><td>S2 / 0</td><td>S1 / 0</td></tr>
+  <tr><td>S2</td><td>S0 / 0</td><td>S3 / 0</td></tr>
+  <tr class="hl"><td>S3</td><td>S2 / 0</td><td class="one">S1 / 1</td></tr>
+</table></div>
+<ul>
+  <li><b>S1 + 1 → S1:</b> <code>11</code> ends in <code>1</code>, which is still a start.</li>
+  <li><b>S2 + 0 → S0:</b> <code>100</code> has no useful ending (neither <code>0</code> nor <code>00</code> starts 1011).</li>
+  <li><b>S3 + 1 → S1, output 1:</b> found 1011! Its last <code>1</code> can begin the next match.</li>
+</ul>
+<p>Encoding: 4 states need ⌈log₂ 4⌉ = <b>2 flip-flops</b>, e.g. S0 = 00, S1 = 01, S2 = 10, S3 = 11.</p>
+
+<h3>Moore version: 5 states</h3>
+<p>In Moore, the output must live <em>inside a state</em>, so we need an extra state S4 meaning "just matched 1011, output 1".</p>
+<figure class="diagram">
+  <svg viewBox="0 0 620 260" width="620" role="img" aria-label="Moore 1011 detector: five states S0 to S4, output written in each circle, S4 outputs 1">
+    <defs><marker id="ah-mo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-ink"/></marker></defs>
+    <path class="w" marker-end="url(#ah-mo)" d="M4 150 L40 150"/>
+    <circle cx="70" cy="150" r="30" class="box"/>
+    <text x="70" y="148" class="b" text-anchor="middle">S0</text>
+    <text x="70" y="164" class="m" text-anchor="middle">y=0</text>
+    <circle cx="190" cy="150" r="30" class="box"/>
+    <text x="190" y="148" class="b" text-anchor="middle">S1</text>
+    <text x="190" y="164" class="m" text-anchor="middle">y=0</text>
+    <circle cx="310" cy="150" r="30" class="box"/>
+    <text x="310" y="148" class="b" text-anchor="middle">S2</text>
+    <text x="310" y="164" class="m" text-anchor="middle">y=0</text>
+    <circle cx="430" cy="150" r="30" class="box"/>
+    <text x="430" y="148" class="b" text-anchor="middle">S3</text>
+    <text x="430" y="164" class="m" text-anchor="middle">y=0</text>
+    <circle cx="550" cy="150" r="30" class="box-g"/>
+    <text x="550" y="148" class="b" text-anchor="middle">S4</text>
+    <text x="550" y="164" class="m g" text-anchor="middle">y=1</text>
+    <!-- straight -->
+    <path class="w" marker-end="url(#ah-mo)" d="M100 150 L160 150"/><text x="126" y="142" class="m">1</text>
+    <path class="w" marker-end="url(#ah-mo)" d="M220 150 L280 150"/><text x="246" y="142" class="m">0</text>
+    <path class="w" marker-end="url(#ah-mo)" d="M340 150 L400 150"/><text x="366" y="142" class="m">1</text>
+    <path class="w" marker-end="url(#ah-mo)" d="M460 150 L520 150"/><text x="486" y="142" class="m">1</text>
+    <!-- top curves from S4 -->
+    <path class="w" marker-end="url(#ah-mo)" d="M550 120 Q370 20 190 120"/>
+    <text x="365" y="62" class="m">1</text>
+    <path class="w" marker-end="url(#ah-mo)" d="M536 124 Q430 60 324 124"/>
+    <text x="426" y="112" class="m">0</text>
+    <!-- bottom curves -->
+    <path class="w" marker-end="url(#ah-mo)" d="M296 176 Q190 270 84 176"/>
+    <text x="186" y="240" class="m">0</text>
+    <path class="w" marker-end="url(#ah-mo)" d="M416 176 Q370 215 324 176"/>
+    <text x="366" y="212" class="m">0</text>
+    <!-- loops -->
+    <path class="w" marker-end="url(#ah-mo)" d="M56 124 C40 85, 100 85, 84 124"/>
+    <text x="66" y="86" class="m">0</text>
+    <path class="w" marker-end="url(#ah-mo)" d="M176 176 C160 215, 220 215, 204 176"/>
+    <text x="214" y="200" class="m">1</text>
+  </svg>
+  <figcaption>Moore notation: arrows carry only the input; the output <code>y</code> is inside each circle. Only S4 outputs 1.</figcaption>
+</figure>
+
+<div class="scroll"><table class="tt">
+  <tr><th>Current</th><th>Output y</th><th>next if x = 0</th><th>next if x = 1</th></tr>
+  <tr><td>S0</td><td>0</td><td>S0</td><td>S1</td></tr>
+  <tr><td>S1</td><td>0</td><td>S2</td><td>S1</td></tr>
+  <tr><td>S2</td><td>0</td><td>S0</td><td>S3</td></tr>
+  <tr><td>S3</td><td>0</td><td>S2</td><td>S4</td></tr>
+  <tr class="hl"><td>S4</td><td class="one">1</td><td>S2</td><td>S1</td></tr>
+</table></div>
+<p>S4 + 0 → S2 because <code>10110</code> ends in <code>10</code>. S4 + 1 → S1 because <code>10111</code> ends in <code>1</code>. 5 states need ⌈log₂ 5⌉ = <b>3 flip-flops</b>, one more than Mealy.</p>
+
+<h3>Trace: input "101011" through the Mealy detector</h3>
+<div class="stepper" data-stepper>
+  <div class="stage"><p><b>Start:</b> reset puts the machine in <b>S0</b>. Inputs will arrive in this order: 1, 0, 1, 0, 1, 1.</p></div>
+  <div class="stage"><p><b>Bit 1 = 1:</b> in S0, input 1 → output <b>0</b>, go to <b>S1</b> (matched <code>1</code>).</p></div>
+  <div class="stage"><p><b>Bit 2 = 0:</b> in S1, input 0 → output <b>0</b>, go to <b>S2</b> (matched <code>10</code>).</p></div>
+  <div class="stage"><p><b>Bit 3 = 1:</b> in S2, input 1 → output <b>0</b>, go to <b>S3</b> (matched <code>101</code>).</p></div>
+  <div class="stage"><p><b>Bit 4 = 0:</b> in S3, input 0 → output <b>0</b>. <code>1010</code> ends in <code>10</code>, so go to <b>S2</b>, not S0.</p></div>
+  <div class="stage"><p><b>Bit 5 = 1:</b> in S2, input 1 → output <b>0</b>, go to <b>S3</b> (matched <code>101</code> again).</p></div>
+  <div class="stage"><p><b>Bit 6 = 1:</b> in S3, input 1 → output <b>1</b>. Found <code>1011</code>! Go to <b>S1</b>, because the last 1 can start a new match.</p></div>
+</div>
+<div class="scroll"><table class="tt">
+  <tr><th>Step</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th></tr>
+  <tr><td>Input x</td><td>1</td><td>0</td><td>1</td><td>0</td><td>1</td><td>1</td></tr>
+  <tr><td>Current state</td><td>S0</td><td>S1</td><td>S2</td><td>S3</td><td>S2</td><td>S3</td></tr>
+  <tr><td>Next state</td><td>S1</td><td>S2</td><td>S3</td><td>S2</td><td>S3</td><td>S1</td></tr>
+  <tr class="hl"><td>Output y (Mealy)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td class="one">1</td></tr>
+</table></div>
+<p style="font-size:15px">State path: S0 → S1 → S2 → S3 → S2 → S3 → S1. Output: <code>000001</code>. The Moore machine takes the path S0 → S1 → S2 → S3 → S2 → S3 → <b>S4</b>; its 1 appears only once it is <em>in</em> S4, one clock cycle later than the Mealy output.</p>
+
+<h3>The Mealy detector in Verilog</h3>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · det1011.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="com">// Mealy "1011" detector, overlapping</span></td><td class="n">A comment.</td></tr>
+    <tr><td class="c"><span class="kw">module</span> det1011 (</td><td class="n">A circuit block called <code>det1011</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">input</span>      clk,</td><td class="n">The clock.</td></tr>
+    <tr><td class="c">  <span class="kw">input</span>      rst,</td><td class="n">Reset: 1 sends the machine back to S0.</td></tr>
+    <tr><td class="c">  <span class="kw">input</span>      x,</td><td class="n">The serial input bit.</td></tr>
+    <tr><td class="c">  <span class="kw">output reg</span> y</td><td class="n">The "found it" output. It is <code>reg</code> because it is set inside an <code>always</code> block (it is still plain gates).</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">localparam</span> S0 = <span class="num">2'd0</span>, S1 = <span class="num">2'd1</span>,</td><td class="n"><code>localparam</code> gives names to numbers. This is the state encoding: S0 = 00, S1 = 01…</td></tr>
+    <tr><td class="c">             S2 = <span class="num">2'd2</span>, S3 = <span class="num">2'd3</span>;</td><td class="n">…S2 = 10, S3 = 11. 4 states → 2 bits.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span> [1:0] state, next;</td><td class="n"><code>state</code> = the current state (the 2 flip-flops). <code>next</code> = the state to move to.</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="com">// 1) state register</span></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(<span class="kw">posedge</span> clk) <span class="kw">begin</span></td><td class="n">At every rising clock edge…</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rst) state &lt;= S0;</td><td class="n">…if reset is on, go to the start state…</td></tr>
+    <tr><td class="c">    <span class="kw">else</span>     state &lt;= next;</td><td class="n">…otherwise move to the state chosen by the logic below.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="com">// 2) next-state + output logic</span></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(*) <span class="kw">begin</span></td><td class="n"><code>@(*)</code> = recompute whenever any input changes. This builds plain gates, no flip-flops.</td></tr>
+    <tr><td class="c">    next = S0;</td><td class="n">Default values first, so every path gives an answer (otherwise the tool adds unwanted latches).</td></tr>
+    <tr><td class="c">    y    = <span class="num">1'b0</span>;</td><td class="n">Output is 0 unless we say otherwise.</td></tr>
+    <tr><td class="c">    <span class="kw">case</span> (state)</td><td class="n">Choose a branch depending on the current state.</td></tr>
+    <tr><td class="c">      S0: next = x ? S1 : S0;</td><td class="n"><code>x ? A : B</code> means "if x is 1 then A, else B". In S0: 1 → S1, 0 → stay.</td></tr>
+    <tr><td class="c">      S1: next = x ? S1 : S2;</td><td class="n">In S1: 1 → stay in S1, 0 → S2.</td></tr>
+    <tr><td class="c">      S2: next = x ? S3 : S0;</td><td class="n">In S2: 1 → S3, 0 → back to S0.</td></tr>
+    <tr><td class="c">      S3: <span class="kw">begin</span></td><td class="n">In S3 two things happen, so wrap them in begin/end.</td></tr>
+    <tr><td class="c">            next = x ? S1 : S2;</td><td class="n">1 → S1 (overlap), 0 → S2.</td></tr>
+    <tr><td class="c">            y    = x;</td><td class="n"><b>Mealy output:</b> y = 1 exactly when we are in S3 <em>and</em> x = 1. It uses the input directly.</td></tr>
+    <tr><td class="c">          <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c">      <span class="kw">default</span>: next = S0;</td><td class="n">Safety net: any unexpected value goes back to S0.</td></tr>
+    <tr><td class="c">    <span class="kw">endcase</span></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<p style="font-size:15px">For the Moore version you would add S4 (needing a 3-bit <code>state</code>) and write the output from the state alone: <code>assign y = (state == S4);</code></p>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>Resetting to S0 after a match</b> is wrong for overlapping detection. After <code>1011</code> the trailing 1 can start a new match, so go to S1.</li>
+  <li><b>Mixing notations:</b> Moore writes the output in the circle (<code>S1/1</code>); Mealy writes <code>in/out</code> on the arrow. Don't mix them in one diagram.</li>
+  <li><b>Miscounting states:</b> Moore usually needs one more state than Mealy (5 vs 4 for 1011).</li>
+  <li><b>Wrong flip-flop count:</b> N states need ⌈log₂ N⌉ flip-flops. 5 states → 3, not 2.</li>
+  <li><b>Forgetting the reset state.</b> Without reset, the machine may power up in a random state.</li>
+  <li><b>Unused codes</b> (like 11 in the traffic light) should route back to reset, so the machine can't get stuck.</li>
+  <li>Missing <code>default</code> or default values in <code>always @(*)</code> creates accidental latches.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>Moore or Mealy: the output changes in the same cycle the input changes. Which one is it?</summary><div class="a"><p><b>Mealy</b>, because its output depends on the input directly. A Moore output only changes when the state changes (one cycle later).</p></div></details>
+  <details class="q"><summary>Homework: draw a Mealy "10" detector (overlapping).</summary><div class="a">
+    <p>Two states: <b>A</b> = "last bit was not 1", <b>B</b> = "last bit was 1".</p>
+    <div class="scroll"><table class="tt">
+      <tr><th>Current</th><th>x = 0</th><th>x = 1</th></tr>
+      <tr><td>A</td><td>A / 0</td><td>B / 0</td></tr>
+      <tr><td>B</td><td class="one">A / 1</td><td>B / 0</td></tr>
+    </table></div>
+    <p>Check <code>0110</code>: A→A(0) →B(0) →B(0) →A(<b>1</b>). ✓ The Moore version needs 3 states (add C = "just saw 10", output 1; C goes to A on 0, B on 1).</p>
+  </div></details>
+  <details class="q"><summary>Homework: draw an "11" detector (overlapping). Give Mealy and Moore.</summary><div class="a">
+    <p><b>Mealy (2 states):</b> A = "last bit 0 / start", B = "last bit 1".</p>
+    <div class="scroll"><table class="tt">
+      <tr><th>Current</th><th>x = 0</th><th>x = 1</th></tr>
+      <tr><td>A</td><td>A / 0</td><td>B / 0</td></tr>
+      <tr><td>B</td><td>A / 0</td><td class="one">B / 1</td></tr>
+    </table></div>
+    <p><b>Moore (3 states):</b> A[0]: 0→A, 1→B · B[0]: 0→A, 1→C · C[1]: 0→A, 1→C (staying in C, because <code>111</code> still ends in <code>11</code>).</p>
+    <p>Check <code>0111</code> (Mealy): outputs 0, 0, <b>1</b>, <b>1</b>. Two overlapping matches. ✓</p>
+  </div></details>
+  <details class="q"><summary>Homework: design a Mealy "110" detector (overlapping).</summary><div class="a">
+    <p>S0 = nothing, S1 = "1", S2 = "11".</p>
+    <div class="scroll"><table class="tt">
+      <tr><th>Current</th><th>x = 0</th><th>x = 1</th></tr>
+      <tr><td>S0</td><td>S0 / 0</td><td>S1 / 0</td></tr>
+      <tr><td>S1</td><td>S0 / 0</td><td>S2 / 0</td></tr>
+      <tr><td>S2</td><td class="one">S0 / 1</td><td>S2 / 0</td></tr>
+    </table></div>
+    <ul>
+      <li>S1 + 0 → S0: <code>10</code> has no ending that starts <code>110</code>.</li>
+      <li>S2 + 1 → S2: <code>111</code> ends in <code>11</code>.</li>
+      <li>S2 + 0 → S0 with output 1: <code>110</code> found. Its ending <code>0</code> starts nothing, so back to S0.</li>
+    </ul>
+    <p>Check <code>11110</code>: S0→S1→S2→S2→S2, then 0 → output <b>1</b>. ✓</p>
+  </div></details>
+  <details class="q"><summary>Homework: convert the 3-state Mealy "110" detector into a Moore machine.</summary><div class="a">
+    <p>A Mealy arrow with output 1 must point to a <b>new state</b> whose output is 1. So add S3 = "just saw 110", output 1.</p>
+    <div class="scroll"><table class="tt">
+      <tr><th>State</th><th>y</th><th>x = 0</th><th>x = 1</th></tr>
+      <tr><td>S0</td><td>0</td><td>S0</td><td>S1</td></tr>
+      <tr><td>S1</td><td>0</td><td>S0</td><td>S2</td></tr>
+      <tr><td>S2</td><td>0</td><td>S3</td><td>S2</td></tr>
+      <tr class="hl"><td>S3</td><td class="one">1</td><td>S0</td><td>S1</td></tr>
+    </table></div>
+    <p>S3 behaves like S0 for its next moves (its history <code>110</code> gives the same "nothing matched" situation). 4 states → 2 flip-flops.</p>
+  </div></details>
+  <details class="q"><summary>Feed "1011011" into the Mealy 1011 detector. When is y = 1?</summary><div class="a">
+    <p>States: S0 →1 S1 →0 S2 →1 S3 →1 S1 (<b>y=1</b>) →0 S2 →1 S3 →1 S1 (<b>y=1</b>).</p>
+    <p>y = <code>0001001</code>: found after bit 4 and bit 7. The second match reuses the 1 from bit 4.</p>
+  </div></details>
+  <details class="q"><summary>How many flip-flops for an FSM with 12 states?</summary><div class="a"><p>⌈log₂ 12⌉ = ⌈3.58⌉ = <b>4</b> flip-flops (3 bits only give 8 codes).</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=kb-Ww8HaHuE" target="_blank" rel="noopener"><i class="play"></i><span><b>Finite State Machine Explained | Mealy Machine and Moore Machine | What is State Diagram ?</b><small>ALL ABOUT ELECTRONICS</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=fPOM6sPuHCo" target="_blank" rel="noopener"><i class="play"></i><span><b>Difference between Mealy and Moore FSM using state diagrams, tables, and timing</b><small>Learn with Dr. Shobha Nikam</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=HXG_YPVNIsM" target="_blank" rel="noopener"><i class="play"></i><span><b>Sequence Detector (Example)</b><small>Neso Academy</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

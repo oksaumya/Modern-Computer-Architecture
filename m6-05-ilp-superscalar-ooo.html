@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Superscalar &amp; OoO</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 6 / ILP &amp; OoO</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 6 · Parallelism &amp; Modern Architectures <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>ILP: superscalar, out-of-order execution &amp; register renaming</h1>
+  <p class="idea">Even one core can do several instructions at once. It can run them side by side (<strong>superscalar</strong>), run them in whatever order their inputs become ready (<strong>out-of-order</strong>), and rename registers so that unrelated instructions stop blocking each other. This page is an overview.</p>
+  <div class="analogy"><b>Think of it like this:</b> a restaurant kitchen gets orders in sequence. A smart kitchen cooks the quick salad while the steak is still grilling, instead of waiting. The waiter still <em>serves</em> the dishes in the order they were ordered. That serving step is the "commit in order".</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>ILP</dt><dd>Instruction-level parallelism: running parts of <em>different instructions</em> at the same time inside one core.</dd></div>
+  <div class="term"><dt>IPC</dt><dd>Instructions per cycle (1 ÷ CPI). Above 1 means more than one instruction finishes per clock cycle. See <a href="m4-04-performance.html">performance</a>.</dd></div>
+  <div class="term"><dt>Superscalar</dt><dd>A pipeline that fetches, decodes and executes several instructions in each stage.</dd></div>
+  <div class="term"><dt>Width</dt><dd>How many instructions a superscalar core can handle per stage (2-wide, 4-wide…).</dd></div>
+  <div class="term"><dt>Out-of-order (OoO)</dt><dd>Executing an instruction as soon as its inputs are ready, even if earlier instructions are still waiting.</dd></div>
+  <div class="term"><dt>Architectural register</dt><dd>A register the program sees, like <code>$t0</code>: one of the 32 in the <a href="m2-05-register-file.html">register file</a>.</dd></div>
+  <div class="term"><dt>Physical register</dt><dd>One of a larger hidden pool of real storage slots inside the CPU (r1, r2, …).</dd></div>
+  <div class="term"><dt>RAT</dt><dd>Register alias table: says which physical register currently holds each architectural register.</dd></div>
+  <div class="term"><dt>Reservation station</dt><dd>A waiting slot where an instruction sits until its inputs are ready.</dd></div>
+  <div class="term"><dt>ROB</dt><dd>Reorder buffer: a queue that holds finished results until they can be committed in program order.</dd></div>
+  <div class="term"><dt>Commit (retire)</dt><dd>Making a result official: writing it to the real register or memory.</dd></div>
+  <div class="term"><dt>Precise exception</dt><dd>When an error happens, everything before the faulting instruction is done and nothing after it is. The OS sees a clean state.</dd></div>
+</dl>
+
+<h2>1. Three ways to get ILP</h2>
+<ol class="flow arrows">
+  <li><b>Pipelining</b>Split each instruction into stages, like an assembly line (<a href="m4-02-pipeline-5-stage.html">5-stage pipeline</a>).</li>
+  <li><b>Superscalar</b>Make every stage wider, so several instructions move through side by side.</li>
+  <li><b>Dynamic scheduling</b>Let the hardware reorder instructions at run time (OoO + renaming).</li>
+</ol>
+
+<h2>2. Superscalar: IPC above 1</h2>
+<p>A 2-wide pipeline copies the stage hardware, so two instructions enter each stage together:</p>
+<figure class="diagram">
+  <svg viewBox="0 0 520 210" width="520" role="img" aria-label="2-wide superscalar pipeline chart: I1 and I2 start in cycle 1, I3 and I4 in cycle 2, I5 and I6 in cycle 3; each pair finishes together">
+    <g>
+      <text x="100" y="20" class="m dim">c1</text><text x="160" y="20" class="m dim">c2</text><text x="220" y="20" class="m dim">c3</text><text x="280" y="20" class="m dim">c4</text><text x="340" y="20" class="m dim">c5</text><text x="400" y="20" class="m dim">c6</text><text x="460" y="20" class="m dim">c7</text>
+    </g>
+    <g class="grid"><path d="M90 28 V196 M150 28 V196 M210 28 V196 M270 28 V196 M330 28 V196 M390 28 V196 M450 28 V196 M510 28 V196"/></g>
+    <text x="20" y="46" class="m">I1</text><text x="20" y="72" class="m">I2</text>
+    <text x="20" y="104" class="m">I3</text><text x="20" y="130" class="m">I4</text>
+    <text x="20" y="162" class="m">I5</text><text x="20" y="188" class="m">I6</text>
+    <g>
+      <rect x="92" y="32" width="56" height="20" rx="4" class="box-b"/><rect x="152" y="32" width="56" height="20" rx="4" class="box"/><rect x="212" y="32" width="56" height="20" rx="4" class="box"/><rect x="272" y="32" width="56" height="20" rx="4" class="box"/><rect x="332" y="32" width="56" height="20" rx="4" class="box-g"/>
+      <rect x="92" y="58" width="56" height="20" rx="4" class="box-b"/><rect x="152" y="58" width="56" height="20" rx="4" class="box"/><rect x="212" y="58" width="56" height="20" rx="4" class="box"/><rect x="272" y="58" width="56" height="20" rx="4" class="box"/><rect x="332" y="58" width="56" height="20" rx="4" class="box-g"/>
+      <rect x="152" y="90" width="56" height="20" rx="4" class="box-b"/><rect x="212" y="90" width="56" height="20" rx="4" class="box"/><rect x="272" y="90" width="56" height="20" rx="4" class="box"/><rect x="332" y="90" width="56" height="20" rx="4" class="box"/><rect x="392" y="90" width="56" height="20" rx="4" class="box-g"/>
+      <rect x="152" y="116" width="56" height="20" rx="4" class="box-b"/><rect x="212" y="116" width="56" height="20" rx="4" class="box"/><rect x="272" y="116" width="56" height="20" rx="4" class="box"/><rect x="332" y="116" width="56" height="20" rx="4" class="box"/><rect x="392" y="116" width="56" height="20" rx="4" class="box-g"/>
+      <rect x="212" y="148" width="56" height="20" rx="4" class="box-b"/><rect x="272" y="148" width="56" height="20" rx="4" class="box"/><rect x="332" y="148" width="56" height="20" rx="4" class="box"/><rect x="392" y="148" width="56" height="20" rx="4" class="box"/><rect x="452" y="148" width="56" height="20" rx="4" class="box-g"/>
+      <rect x="212" y="174" width="56" height="20" rx="4" class="box-b"/><rect x="272" y="174" width="56" height="20" rx="4" class="box"/><rect x="332" y="174" width="56" height="20" rx="4" class="box"/><rect x="392" y="174" width="56" height="20" rx="4" class="box"/><rect x="452" y="174" width="56" height="20" rx="4" class="box-g"/>
+    </g>
+    <g>
+      <text x="108" y="46" class="m">IF</text><text x="168" y="46" class="m">ID</text><text x="228" y="46" class="m">EX</text><text x="284" y="46" class="m">MEM</text><text x="348" y="46" class="m">WB</text>
+      <text x="108" y="72" class="m">IF</text><text x="168" y="72" class="m">ID</text><text x="228" y="72" class="m">EX</text><text x="284" y="72" class="m">MEM</text><text x="348" y="72" class="m">WB</text>
+      <text x="168" y="104" class="m">IF</text><text x="228" y="104" class="m">ID</text><text x="288" y="104" class="m">EX</text><text x="344" y="104" class="m">MEM</text><text x="408" y="104" class="m">WB</text>
+      <text x="168" y="130" class="m">IF</text><text x="228" y="130" class="m">ID</text><text x="288" y="130" class="m">EX</text><text x="344" y="130" class="m">MEM</text><text x="408" y="130" class="m">WB</text>
+      <text x="228" y="162" class="m">IF</text><text x="288" y="162" class="m">ID</text><text x="348" y="162" class="m">EX</text><text x="404" y="162" class="m">MEM</text><text x="468" y="162" class="m">WB</text>
+      <text x="228" y="188" class="m">IF</text><text x="288" y="188" class="m">ID</text><text x="348" y="188" class="m">EX</text><text x="404" y="188" class="m">MEM</text><text x="468" y="188" class="m">WB</text>
+    </g>
+  </svg>
+  <figcaption>2-wide, 5-stage. From cycle 5 on, <b>two</b> instructions finish every cycle: IPC → 2 in the ideal case.</figcaption>
+</figure>
+<div class="formula">Cycles for N instructions ≈ stages + (⌈N ÷ width⌉ − 1)<small>10 instructions: scalar = 5 + 9 = 14 cycles · 2-wide = 5 + (5 − 1) = 9 cycles</small></div>
+<p>In practice IPC stays well below the width. Dependencies between instructions, branch mispredictions and cache misses all get in the way. That is what OoO tries to fix.</p>
+
+<h2>3. Out-of-order execution (Tomasulo-style)</h2>
+<p>A simple pipeline stalls everything behind a slow instruction (for example a load that misses the cache). An OoO core lets later instructions go ahead, <b>as long as they don't need the slow one's result</b>. The idea comes from Robert Tomasulo's algorithm (IBM, 1967). The reorder buffer was added later to keep exceptions precise.</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 650 260" width="650" role="img" aria-label="OoO pipeline: fetch and decode, rename, dispatch to reservation stations, execute out of order, results into reorder buffer, commit in order to the register file">
+    <defs><marker id="arO" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M0 0 L10 5 L0 10 Z" class="fill-ink"/></marker></defs>
+    <text x="10" y="18" class="b">in program order</text>
+    <text x="250" y="18" class="b hi">out of order</text>
+    <text x="500" y="18" class="b">in order again</text>
+    <rect x="10" y="40" width="96" height="60" rx="8" class="box-b"/><text x="22" y="66" class="b">Fetch +</text><text x="22" y="86" class="b">Decode</text>
+    <rect x="126" y="40" width="96" height="60" rx="8" class="box-b"/><text x="140" y="66" class="b">Rename</text><text x="140" y="86" class="m dim">RAT</text>
+    <rect x="242" y="30" width="120" height="80" rx="8" class="box-hi"/><text x="254" y="52" class="b">Reservation</text><text x="254" y="70" class="b">stations</text><text x="254" y="94" class="m dim">wait here</text>
+    <rect x="382" y="30" width="96" height="22" rx="4" class="box-g"/><text x="400" y="46" class="m">ALU 1</text>
+    <rect x="382" y="58" width="96" height="22" rx="4" class="box-g"/><text x="400" y="74" class="m">ALU 2</text>
+    <rect x="382" y="86" width="96" height="22" rx="4" class="box-g"/><text x="396" y="102" class="m">mul/load</text>
+    <path class="w" d="M106 70 H122" marker-end="url(#arO)"/>
+    <path class="w" d="M222 70 H238" marker-end="url(#arO)"/>
+    <path class="w" d="M362 41 H378 M362 69 H378 M362 97 H378"/>
+    <path class="w" d="M478 41 H490 M478 69 H490 M478 97 H490 M490 41 V160 H440" />
+    <polygon points="430,160 440,155 440,165" class="fill-ink"/>
+    <text x="496" y="120" class="m dim">results</text>
+    <text x="10" y="140" class="b">Reorder buffer (ROB), oldest on the left</text>
+    <rect x="80" y="150" width="70" height="30" class="box-g"/><text x="90" y="170" class="m">I1 done</text>
+    <rect x="150" y="150" width="70" height="30" class="box"/><text x="160" y="170" class="m">I2 wait</text>
+    <rect x="220" y="150" width="70" height="30" class="box-g"/><text x="230" y="170" class="m">I3 done</text>
+    <rect x="290" y="150" width="70" height="30" class="box"/><text x="300" y="170" class="m">I4 wait</text>
+    <rect x="360" y="150" width="70" height="30" class="box"/><text x="382" y="170" class="m">…</text>
+    <path class="w-hi" d="M80 165 H40 V220 H70" marker-end="url(#arO)"/>
+    <rect x="74" y="200" width="300" height="40" rx="8" class="box"/>
+    <text x="88" y="225" class="b">Commit → register file / memory</text>
+    <text x="390" y="215" class="m">I1 commits now. I3 is done but</text>
+    <text x="390" y="233" class="m">must wait until I2 commits.</text>
+  </svg>
+  <figcaption>Instructions enter the ROB in program order. They execute whenever their inputs are ready, and they <b>commit only from the head</b> of the ROB. If I2 faults, I3's finished result is simply thrown away: a precise exception.</figcaption>
+</figure>
+
+<h2>4. Register renaming</h2>
+<p>Recall the data dependencies from <a href="m4-03-hazards-forwarding.html">hazards</a>. Only one kind is a real dependency:</p>
+<div class="scroll"><table>
+  <tr><th>Name</th><th>Pattern</th><th>Real?</th></tr>
+  <tr><td><b>RAW</b> (read after write)</td><td>A later instruction reads a register an earlier one writes</td><td><b>True</b> dependency: it needs that value</td></tr>
+  <tr><td><b>WAW</b> (write after write)</td><td>Two instructions write the same register</td><td><b>False</b>: they only share a name</td></tr>
+  <tr><td><b>WAR</b> (write after read)</td><td>A later instruction overwrites a register an earlier one reads</td><td><b>False</b>: they only share a name</td></tr>
+</table></div>
+<p>False dependencies exist only because there are just 32 register names. Renaming gives <b>each new write its own fresh physical register</b>, so the name clash disappears.</p>
+
+<h3>Worked example</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · original code</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">I1: <span class="kw">add</span> $t0, $t1, $t2</td><td class="n">$t0 = $t1 + $t2. (<code>$t</code> registers are temporary working registers.)</td></tr>
+    <tr><td class="c">I2: <span class="kw">sub</span> $t3, $t0, $t4</td><td class="n">$t3 = $t0 − $t4. Reads I1's $t0: <b>RAW, true</b>.</td></tr>
+    <tr><td class="c">I3: <span class="kw">add</span> $t0, $t5, $t6</td><td class="n">$t0 = $t5 + $t6. Writes $t0 again: <b>WAW</b> with I1, and <b>WAR</b> with I2. Both are false.</td></tr>
+    <tr><td class="c">I4: <span class="kw">or</span>  $t7, $t0, $t3</td><td class="n">$t7 = $t0 OR $t3. Needs I3's $t0 and I2's $t3: true.</td></tr>
+  </table>
+</div>
+<p>There are 7 free physical registers, r1–r7. Inputs that nobody writes here ($t1, $t2, $t4, $t5, $t6) are already available. Each write takes the next free register, and the RAT is updated:</p>
+<div class="scroll"><table>
+  <tr><th>Instr.</th><th>Renamed</th><th>RAT change</th><th>Free list after</th></tr>
+  <tr><td>I1</td><td><code>r1 = t1 + t2</code></td><td>t0 → r1</td><td>r2 … r7</td></tr>
+  <tr><td>I2</td><td><code>r2 = r1 − t4</code></td><td>t3 → r2</td><td>r3 … r7</td></tr>
+  <tr class="hl"><td>I3</td><td><code>r3 = t5 + t6</code></td><td>t0 → r3 (a new name!)</td><td>r4 … r7</td></tr>
+  <tr><td>I4</td><td><code>r4 = r3 | r2</code></td><td>t7 → r4</td><td>r5, r6, r7</td></tr>
+</table></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 600 220" width="600" role="img" aria-label="Before renaming I3 must wait for I1 and I2; after renaming I1 and I3 run in the same cycle, then I2, then I4">
+    <text x="20" y="20" class="b">Without renaming: 4 cycles</text>
+    <rect x="20" y="34" width="60" height="30" rx="6" class="box"/><text x="38" y="54" class="m">I1</text>
+    <rect x="90" y="34" width="60" height="30" rx="6" class="box"/><text x="108" y="54" class="m">I2</text>
+    <rect x="160" y="34" width="60" height="30" rx="6" class="box-r"/><text x="178" y="54" class="m">I3</text>
+    <rect x="230" y="34" width="60" height="30" rx="6" class="box"/><text x="248" y="54" class="m">I4</text>
+    <text x="20" y="90" class="m dim">I3 can't write $t0 until</text><text x="20" y="108" class="m dim">I2 has read the old value</text>
+    <path class="grid" d="M310 10 V210"/>
+    <text x="330" y="20" class="b">With renaming: 3 cycles</text>
+    <text x="330" y="44" class="m dim">cycle 1</text><text x="420" y="44" class="m dim">cycle 2</text><text x="510" y="44" class="m dim">cycle 3</text>
+    <rect x="330" y="56" width="60" height="30" rx="6" class="box-g"/><text x="348" y="76" class="m">I1</text>
+    <rect x="330" y="96" width="60" height="30" rx="6" class="box-g"/><text x="348" y="116" class="m">I3</text>
+    <rect x="420" y="56" width="60" height="30" rx="6" class="box"/><text x="438" y="76" class="m">I2</text>
+    <rect x="510" y="76" width="60" height="30" rx="6" class="box"/><text x="528" y="96" class="m">I4</text>
+    <path class="w" d="M390 71 H420 M480 71 H495 V86 H510 M390 111 H495 V96 H510"/>
+    <text x="330" y="150" class="m">I1 and I3 share no real inputs,</text>
+    <text x="330" y="168" class="m">so they run together.</text>
+    <text x="330" y="196" class="m dim">Commit order is still I1, I2, I3, I4.</text>
+  </svg>
+  <figcaption>Renaming removed the false WAW/WAR links, so I3 no longer waits. Only the true (RAW) arrows remain. This assumes one execution unit is free per instruction in each cycle.</figcaption>
+</figure>
+
+<div class="callout tip"><b>What happens to the "real" $t0?</b><p>At commit, the architectural register $t0 takes the value of <b>r3</b> (the last write to it). I1's r1 is freed once nothing needs it any more. The program never notices any of this.</p></div>
+
+<h2>5. Branch prediction and speculation</h2>
+<ul>
+  <li>An OoO core fetches far ahead, past branches it hasn't resolved yet. It <b>predicts</b> the direction (see <a href="m4-03-hazards-forwarding.html">branch prediction</a>) and executes <b>speculatively</b>.</li>
+  <li>The ROB makes this safe. On a mispredict, every instruction after the branch is <b>squashed</b> (thrown away) before it commits.</li>
+  <li>But squashed instructions can still leave traces in the <b>cache</b>. That is exactly what <a href="m6-07-spectre-meltdown.html">Spectre and Meltdown</a> exploit.</li>
+</ul>
+
+<h2>6. The limits of ILP</h2>
+<div class="vs">
+  <div>
+    <h3>Power wall</h3>
+    <p>Renaming tables, big ROBs, wide decoders and many reservation stations use lots of transistors and energy, and much of it only does bookkeeping. See <a href="m6-01-power-wall-multicore.html">power wall</a>.</p>
+  </div>
+  <div>
+    <h3>Diminishing returns</h3>
+    <p>Real programs have limited ILP: branches, true dependencies and memory waits. Doubling the width gives far less than double the IPC. Mispredictions throw away more work in deeper, wider pipelines. So designers turned to <b>more cores</b> instead.</p>
+  </div>
+</div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>OoO <b>executes</b> out of order, but <b>commits in order</b>. Say both halves.</li>
+  <li>Only RAW is a true dependency. WAW and WAR are <b>name</b> dependencies, and renaming removes them.</li>
+  <li>Superscalar ≠ multicore. Superscalar is <b>one core</b> running several instructions per stage.</li>
+  <li>The ROB is what makes exceptions <b>precise</b>, not the reservation stations.</li>
+  <li>IPC can exceed 1 only in a superscalar design. A plain scalar pipeline gives IPC ≤ 1.</li>
+  <li>Renaming doesn't create more architectural registers. The program still sees 32.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>A 5-stage, 2-wide pipeline runs 8 instructions with no stalls. How many cycles? What would a scalar pipeline need?</summary><div class="a"><p>2-wide: 5 + (4 − 1) = <b>8 cycles</b>. Scalar: 5 + (8 − 1) = <b>12 cycles</b>.</p></div></details>
+  <details class="q"><summary>Name the dependency: I1 writes $s0; I2 writes $s0 (and doesn't read it).</summary><div class="a"><p><b>WAW</b>, a false (name) dependency. Renaming gives each write its own physical register.</p></div></details>
+  <details class="q"><summary>Why does an OoO core need a reorder buffer?</summary><div class="a"><p>To commit results in program order. Then exceptions are precise, and mispredicted (speculative) work can be thrown away before it becomes visible.</p></div></details>
+  <details class="q"><summary>Rename: <code>I1: add $t0,$t1,$t2</code> · <code>I2: add $t0,$t0,$t3</code> · <code>I3: sub $t4,$t0,$t1</code>, using free list r1, r2, r3.</summary><div class="a"><p>I1: <code>r1 = t1 + t2</code> (t0 → r1). I2: <code>r2 = r1 + t3</code> (t0 → r2). I3: <code>r3 = r2 − t1</code> (t4 → r3). I3 correctly uses the <b>latest</b> t0, which is r2.</p></div></details>
+  <details class="q"><summary>What are reservation stations for?</summary><div class="a"><p>They hold decoded instructions until all their inputs are ready. Then the instruction is sent to a free execution unit, regardless of program order.</p></div></details>
+  <details class="q"><summary>Why did the industry stop making cores ever wider?</summary><div class="a"><p>Diminishing returns (limited ILP in real code, mispredictions) and the power cost of the extra bookkeeping hardware. More cores gave more performance per watt.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=4xhyXVyFMHw" target="_blank" rel="noopener"><i class="play"></i><span><b>Superscalar CPUs: Multiple, Parallel, Execution Units</b><small>Coding Coach</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=gm54xjD8_Kk" target="_blank" rel="noopener"><i class="play"></i><span><b>Session 14: Register Renaming, Tomasulo's Architecture and Reorder Buffer (ROB)</b><small>Chandramouleeswaran Sankaran</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=8P5bcYTqIbU" target="_blank" rel="noopener"><i class="play"></i><span><b>Lecture 28: Intro. to superscalar and out-of-order processors</b><small>Biswabandan (Biswa@IITB)</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=LqENViWsThI" target="_blank" rel="noopener"><i class="play"></i><span><b>Lecture 14. Out-of-order Execution - CMU - Computer Architecture 2014 - Onur Mutlu</b><small>Carnegie Mellon Computer Architecture</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

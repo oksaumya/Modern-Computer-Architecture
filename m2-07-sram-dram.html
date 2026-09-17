@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SRAM vs DRAM</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 2 / SRAM vs DRAM</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 2 · Sequential Logic &amp; Memory <span class="tag class">From class notes · L08</span></div>
+  <h1>SRAM vs DRAM: two ways to store a bit</h1>
+  <p class="idea"><strong>SRAM</strong> stores each bit in a tiny latch made of 6 transistors: fast, but big and costly. <strong>DRAM</strong> stores each bit as charge on a tiny capacitor with 1 transistor: small and cheap, but slower, and it must be refreshed.</p>
+  <div class="analogy"><b>Think of it like this:</b> SRAM is a light switch: flip it and it stays put for as long as the power is on. DRAM is a leaky bucket: full means 1, empty means 0, but the water slowly drips out, so someone must top up every bucket every few milliseconds.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>RAM</dt><dd>Random-access memory: any cell can be read or written directly by its address.</dd></div>
+  <div class="term"><dt>Transistor</dt><dd>An electronic switch. A control input (the <em>gate</em>) turns it on or off.</dd></div>
+  <div class="term"><dt>Capacitor</dt><dd>A tiny component that holds electric charge, like a small bucket for electrons.</dd></div>
+  <div class="term"><dt>Word line (WL)</dt><dd>A horizontal wire that selects one row of cells for reading or writing.</dd></div>
+  <div class="term"><dt>Bit line (BL)</dt><dd>A vertical wire that carries a bit into or out of the selected cell.</dd></div>
+  <div class="term"><dt>Sense amplifier</dt><dd>A circuit that detects a very small voltage change on a bit line and turns it into a clean 0 or 1.</dd></div>
+  <div class="term"><dt>Refresh</dt><dd>Reading every DRAM cell and writing its value back before its charge leaks away.</dd></div>
+  <div class="term"><dt>Density</dt><dd>How many bits fit in a given chip area. Higher density means cheaper per bit.</dd></div>
+</dl>
+
+<h2>1. The core tension</h2>
+<p>The <a href="m2-05-register-file.html">register file</a> is very fast, but it holds only 32–128 words. At 20+ transistors per bit it can never scale to gigabytes.</p>
+<div class="formula">Fast memory is small and expensive · big memory is slow and cheap<small>"No single memory is fast, big, AND cheap. Computers cheat by layering them."</small></div>
+<p>SRAM and DRAM are the two main ways to build large memories. They make opposite trade-offs:</p>
+<div class="vs">
+  <div><h3>SRAM stores ACTIVELY</h3><p>Transistors keep pushing the bit back into place. Fast and stable, but bulky.</p></div>
+  <div><h3>DRAM stores PASSIVELY</h3><p>The bit is just charge sitting in a capacitor. Tiny and cheap, but it needs constant refreshing.</p></div>
+</div>
+
+<h2>2. SRAM: static RAM</h2>
+<p>Each bit is a <strong>bistable latch</strong>: two inverters wired in a loop (see <a href="m2-01-latches.html">latches</a>). "Static" means it needs <b>no refresh</b> while the power is on. It uses <b>6 transistors per bit</b> (the "6T cell") and takes a few nanoseconds to access.</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 600 290" width="600" role="img" aria-label="6T SRAM cell: two cross-coupled inverters M1 to M4 hold Q and Q-bar; access transistors M5 and M6, controlled by the word line, connect Q to BL and Q-bar to BL-bar">
+    <text x="50" y="22" class="b">BL</text>
+    <text x="528" y="22" class="b"><tspan style="text-decoration:overline">BL</tspan></text>
+    <path class="w-g" d="M60 30 V280 M540 30 V280"/>
+    <path class="w-hi" d="M20 60 H580"/>
+    <text x="240" y="50" class="hi">WL (word line)</text>
+    <!-- access transistors -->
+    <rect x="110" y="140" width="60" height="40" rx="6" class="box-b"/>
+    <text x="126" y="165" class="b">M5</text>
+    <rect x="430" y="140" width="60" height="40" rx="6" class="box-b"/>
+    <text x="446" y="165" class="b">M6</text>
+    <path class="w-hi" d="M140 60 V140 M460 60 V140"/>
+    <circle cx="140" cy="60" r="3.5" class="fill-hi"/>
+    <circle cx="460" cy="60" r="3.5" class="fill-hi"/>
+    <path class="w" d="M60 160 H110 M170 160 H210 M490 160 H540 M430 160 H390"/>
+    <circle cx="60" cy="160" r="3.5" class="fill-ink"/>
+    <circle cx="540" cy="160" r="3.5" class="fill-ink"/>
+    <!-- storage nodes -->
+    <path class="w" d="M210 120 V200 M390 120 V200"/>
+    <circle cx="210" cy="160" r="3.5" class="fill-ink"/>
+    <circle cx="390" cy="160" r="3.5" class="fill-ink"/>
+    <!-- inverter 1: Q -> Qbar -->
+    <path class="w" d="M210 120 H250 M332 120 H390"/>
+    <polygon points="250,97 250,143 318,120" class="box"/>
+    <circle cx="325" cy="120" r="6" class="box"/>
+    <text x="252" y="90" class="m dim">M1, M2</text>
+    <!-- inverter 2: Qbar -> Q -->
+    <path class="w" d="M390 200 H350 M268 200 H210"/>
+    <polygon points="350,177 350,223 282,200" class="box"/>
+    <circle cx="275" cy="200" r="6" class="box"/>
+    <text x="292" y="244" class="m dim">M3, M4</text>
+    <text x="186" y="226" class="g">Q = 1</text>
+    <text x="370" y="226" class="r"><tspan style="text-decoration:overline">Q</tspan> = 0</text>
+  </svg>
+  <figcaption>The 6T cell. M1–M4 form two inverters in a loop (the latch that holds the bit). M5 and M6 are <b>access transistors</b>: switches that the word line (copper) turns on. BL and BL-bar (green) carry the bit and its opposite.</figcaption>
+</figure>
+
+<h3>How it holds a bit</h3>
+<p>If Q = 1, the top inverter makes Q-bar (<span style="text-decoration:overline">Q</span>, the opposite of Q) = 0. <span style="text-decoration:overline">Q</span> = 0 goes into the bottom inverter, which drives Q back to 1. The loop keeps reinforcing itself, so any small leakage is corrected instantly. The bit is <b>self-healing</b>.</p>
+
+<div class="vs">
+  <div>
+    <h3>Read (non-destructive)</h3>
+    <ol class="steps">
+      <li>Pre-charge both bit lines high.</li>
+      <li>Raise WL (turn on M5, M6).</li>
+      <li>The stored 0 side pulls its bit line slightly low.</li>
+      <li>A sense amplifier sees which line dropped.</li>
+    </ol>
+    <p style="font-size:15px">The latch keeps its value, so nothing needs to be rewritten.</p>
+  </div>
+  <div>
+    <h3>Write</h3>
+    <ol class="steps">
+      <li>Drive the bit lines to the new value (BL = bit, BL-bar = its opposite).</li>
+      <li>Raise WL.</li>
+      <li>The strong drivers overpower the cell.</li>
+      <li>The latch flips and holds the new bit.</li>
+    </ol>
+  </div>
+</div>
+<p><b>SRAM scorecard:</b> very fast, no refresh, low density, expensive, and it draws some power all the time (static power). Used for the <b>L1/L2/L3 caches</b>.</p>
+
+<h2>3. DRAM: dynamic RAM</h2>
+<p>Each bit is <strong>charge on a capacitor</strong>: charged = 1, empty = 0. One access transistor connects it to the bit line. This is the <b>1T1C cell</b> (1 transistor, 1 capacitor). Access takes about 50–100 ns.</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 560 280" width="560" role="img" aria-label="1T1C DRAM cell: the word line drives the gate of one transistor that connects the bit line to a storage capacitor Cs whose other plate goes to ground">
+    <text x="62" y="22" class="b">BL (bit line)</text>
+    <path class="w-g" d="M100 30 V265"/>
+    <path class="w-hi" d="M30 60 H500"/>
+    <text x="250" y="50" class="hi">WL (word line)</text>
+    <rect x="160" y="130" width="80" height="40" rx="6" class="box-b"/>
+    <text x="172" y="155" class="b">switch</text>
+    <text x="164" y="190" class="m dim">transistor</text>
+    <path class="w-hi" d="M200 60 V130"/>
+    <circle cx="200" cy="60" r="3.5" class="fill-hi"/>
+    <path class="w" d="M100 150 H160 M240 150 H320 V190 M320 202 V240"/>
+    <circle cx="100" cy="150" r="3.5" class="fill-ink"/>
+    <path class="w" stroke-width="4" d="M292 190 H348 M292 202 H348"/>
+    <path class="w" d="M295 240 H345 M305 248 H335 M315 256 H325"/>
+    <text x="360" y="200" class="b">Cs</text>
+    <text x="360" y="218" class="dim">storage capacitor</text>
+    <text x="360" y="236" class="m">charged = 1 · empty = 0</text>
+    <text x="330" y="268" class="m dim">ground</text>
+  </svg>
+  <figcaption>The whole DRAM cell: the word line turns the transistor on, which connects the capacitor to the bit line. "One capacitor vs six transistors is why DRAM packs ~6× more bits into the same area."</figcaption>
+</figure>
+
+<h3>Why DRAM must be refreshed</h3>
+<p>The capacitor is not perfect: its charge slowly <b>leaks</b> away. If it drops below the level the sense amplifier can recognise, a 1 turns into a 0 and the bit is lost. So the memory controller reads and rewrites every row about <b>every 64 ms</b>. While it refreshes, that memory is briefly unavailable. The class calls this "the single biggest practical difference".</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 295" width="640" role="img" aria-label="Chart of stored charge against time: with refresh every 64 ms the charge rises back to full before reaching the threshold, a sawtooth; without refresh the charge keeps falling and drops below the threshold">
+    <path class="grid" d="M236.4 40 V250 M402.8 40 V250 M569.2 40 V250"/>
+    <path class="w" d="M70 40 V250 H600"/>
+    <path class="w" stroke-dasharray="6 5" d="M70 150 H600"/>
+    <text x="78" y="146" class="m dim">sense threshold</text>
+    <path class="w-hi" stroke-dasharray="7 5" d="M70 50 L111.6 74 L153.2 95 L194.8 113.6 L236.4 130 L278 144.4 L319.6 157 L361.2 168.2 L402.8 178 L444.4 186.6 L486 194.2 L527.6 200.9 L569.2 206.8 L590 209.5"/>
+    <path class="w-g" d="M70 50 L111.6 74 L153.2 95 L194.8 113.6 L236.4 130 V50 L278 74 L319.6 95 L361.2 113.6 L402.8 130 V50 L444.4 74 L486 95 L527.6 113.6 L569.2 130 V50 L590 62.4"/>
+    <circle cx="296" cy="150" r="5" class="fill-hi"/>
+    <text x="305" y="232" class="hi">no refresh: 1 is read as 0, bit lost</text>
+    <text x="222" y="36" class="m g">refresh</text>
+    <text x="388" y="36" class="m g">refresh</text>
+    <text x="555" y="36" class="m g">refresh</text>
+    <text x="26" y="54" class="m">100%</text>
+    <text x="34" y="154" class="m">50%</text>
+    <text x="56" y="254" class="m">0</text>
+    <text x="66" y="268" class="m dim">0</text>
+    <text x="218" y="268" class="m dim">64 ms</text>
+    <text x="382" y="268" class="m dim">128 ms</text>
+    <text x="548" y="268" class="m dim">192 ms</text>
+    <text x="8" y="24" class="b">charge</text>
+    <text x="70" y="288" class="g">with refresh</text>
+    <text x="180" y="288" class="hi">no refresh (dashed)</text>
+    <text x="560" y="288" class="b">time →</text>
+  </svg>
+  <figcaption>Illustrative shape, not real measurements. With refresh (green) each cell is topped back up before it can fall below the threshold, giving a sawtooth. Without refresh (copper, dashed) the charge keeps leaking until the bit is misread.</figcaption>
+</figure>
+<div class="callout fix"><b>Slide correction</b><p>The slide lists charge as "full at 0 ms, fading at 20 ms, weak at 50 ms, lost at 64 ms" and also says to refresh every ~64 ms. If data were really lost at 64 ms, refreshing at 64 ms would be too late. The correct idea: the refresh period (typically 64 ms) is chosen so that even the leakiest cell is rewritten <em>before</em> its charge falls below the sense threshold. Treat the slide numbers as a rough picture of the leak.</p></div>
+
+<h3>Reading DRAM destroys the bit</h3>
+<ol class="flow arrows">
+  <li><b>1. Access</b>WL rises; the capacitor shares its charge with the (much bigger) bit line</li>
+  <li><b>2. Tiny signal</b>The bit line moves only a very small amount</li>
+  <li><b>3. Sense</b>The sense amplifier swings it to a full 0 or 1</li>
+  <li><b>4. Write-back</b>That value is written back into the capacitor</li>
+</ol>
+<p>Step 1 empties the capacitor, so the read is <b>destructive</b>. Every DRAM read is really a <b>read + rewrite</b>. Together with row activation and pre-charge, this makes DRAM access about 50–100 ns: <b>more than 10× slower than SRAM</b>.</p>
+<p><b>DRAM scorecard:</b> dense, cheap, slower, needs refresh. Used for <b>main memory</b> (8/16/32 GB).</p>
+<div class="callout tip"><b>Quick check</b><p>Which memory needs refresh? <b>DRAM</b>, because its capacitor leaks. SRAM's latch actively holds its value.</p></div>
+
+<h2>4. The comparison you need for exams</h2>
+<div class="scroll"><table>
+  <tr><th></th><th>SRAM</th><th>DRAM</th></tr>
+  <tr><td>Cell</td><td>6 transistors (6T)</td><td>1 transistor + 1 capacitor (1T1C)</td></tr>
+  <tr><td>How the bit is stored</td><td>Actively, in a latch</td><td>Passively, as charge</td></tr>
+  <tr><td>Density</td><td>Low</td><td>High (~6×)</td></tr>
+  <tr><td>Speed</td><td>Fast (a few ns)</td><td>Slower (50–100 ns)</td></tr>
+  <tr><td>Refresh</td><td>Not needed</td><td>Every few ms (~64 ms)</td></tr>
+  <tr><td>Read</td><td>Non-destructive</td><td>Destructive (needs write-back)</td></tr>
+  <tr><td>Cost per bit</td><td>High</td><td>Low</td></tr>
+  <tr><td>Used for</td><td>Caches (L1/L2/L3)</td><td>Main memory</td></tr>
+</table></div>
+<div class="formula">SRAM trades density for speed · DRAM trades speed for density</div>
+
+<h3>Where each is used</h3>
+<div class="vs">
+  <div><h3>SRAM</h3><ul><li>CPU caches (on the chip, KB to MB)</li><li>Register files</li><li>Buffers</li></ul></div>
+  <div><h3>DRAM</h3><ul><li>Main memory (your "RAM sticks")</li><li>GPU frame buffers (GDDR)</li></ul></div>
+</div>
+
+<h2>5. Preview: the memory hierarchy</h2>
+<p>Computers stack memories in layers. Each step down is <b>bigger, slower and cheaper per bit</b>. The growing speed gap between the CPU and DRAM is called the <b>memory wall</b>. Module 5 covers this in depth: <a href="m5-01-memory-wall-locality.html">Memory wall &amp; locality</a>.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 600 295" width="600" role="img" aria-label="Memory hierarchy pyramid: registers at the top, then SRAM caches, then DRAM main memory, then SSD or disk at the base">
+    <polygon points="230,20 275.8,75 184.2,75" class="box-hi"/>
+    <polygon points="184.2,75 275.8,75 321.7,130 138.3,130" class="box-g"/>
+    <polygon points="138.3,130 321.7,130 375.8,195 84.2,195" class="box-b"/>
+    <polygon points="84.2,195 375.8,195 430,260 30,260" class="box"/>
+    <path class="grid" d="M266 58 H444 M307 107 H444 M357 167 H444 M411 232 H444"/>
+    <text x="450" y="62" class="b">Registers</text>
+    <text x="450" y="111" class="b">Cache (SRAM)</text>
+    <text x="450" y="171" class="b">Main memory (DRAM)</text>
+    <text x="450" y="236" class="b">SSD / disk</text>
+    <text x="10" y="30" class="m hi">↑ faster, smaller,</text>
+    <text x="10" y="46" class="m hi">  costlier per bit</text>
+    <text x="30" y="282" class="m dim">↓ bigger, slower, cheaper per bit</text>
+  </svg>
+  <figcaption>The CPU looks in the top layers first. Keeping the most-used data near the top makes the whole system feel fast.</figcaption>
+</figure>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li><b>"SRAM needs refresh"</b> is false. Only DRAM does. SRAM keeps its data as long as it has power.</li>
+  <li><b>"Static" does not mean non-volatile.</b> SRAM still loses everything when the power goes off.</li>
+  <li><b>Mixing up the cells:</b> SRAM = 6 transistors; DRAM = 1 transistor + 1 capacitor.</li>
+  <li><b>Forgetting write-back:</b> a DRAM read destroys the stored charge, so it must be rewritten.</li>
+  <li><b>Wrong uses:</b> caches are SRAM; main memory is DRAM. Not the other way round.</li>
+  <li>"DRAM is ~6× denser" comes from 1 capacitor vs 6 transistors per bit.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>How many transistors are in one SRAM cell and one DRAM cell?</summary><div class="a"><p>SRAM: <b>6</b> (6T). DRAM: <b>1</b>, plus one capacitor (1T1C).</p></div></details>
+  <details class="q"><summary>Why does DRAM need refresh but SRAM does not?</summary><div class="a"><p>DRAM stores the bit as charge on a capacitor, which leaks. SRAM stores it in two cross-coupled inverters that keep driving each other, so the value corrects itself.</p></div></details>
+  <details class="q"><summary>What does "destructive read" mean, and how does DRAM deal with it?</summary><div class="a"><p>Reading shares the capacitor's charge with the bit line, which wipes out the stored value. The sense amplifier recovers the bit, then the controller <b>writes it back</b> into the cell.</p></div></details>
+  <details class="q"><summary>List the four steps of an SRAM read.</summary><div class="a"><p>1. Pre-charge both bit lines high. 2. Raise the word line. 3. The cell pulls one bit line low. 4. The sense amplifier detects which line dropped.</p></div></details>
+  <details class="q"><summary>Which memory would you use for an L1 cache, and why?</summary><div class="a"><p><b>SRAM</b>. The L1 cache must answer in a few ns, and it is small (KB), so SRAM's high cost per bit is affordable.</p></div></details>
+  <details class="q"><summary>A 1 GB memory made of 6T SRAM vs 1T1C DRAM: roughly how many transistors each?</summary><div class="a"><p>1 GB ≈ 8 × 10⁹ bits (using 1 GB = 10⁹ bytes).<br>SRAM: 6 × 8×10⁹ = <b>48 billion transistors</b>.<br>DRAM: <b>8 billion transistors</b> + 8 billion capacitors. That is why main memory is DRAM.</p></div></details>
+  <details class="q"><summary>Name the layers of the memory hierarchy from fastest to slowest.</summary><div class="a"><p>Registers → cache (SRAM) → main memory (DRAM) → SSD/disk.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=7J7X7aZvMXQ" target="_blank" rel="noopener"><i class="play"></i><span><b>How does Computer Memory Work? 💻🛠</b><small>Branch Education</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=7WnbIeMgWYA" target="_blank" rel="noopener"><i class="play"></i><span><b>Capacitors are terrible at remembering data. But for this reason we continue doing it.</b><small>Core Dumped</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=C-AfYLn6JH4" target="_blank" rel="noopener"><i class="play"></i><span><b>SRAM Vs DRAM</b><small>Learn with Dr. Shobha Nikam</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=_pdwsakYhMk" target="_blank" rel="noopener"><i class="play"></i><span><b>Dynamic Random Acess Memory (DRAM) Explained | 'All About Semiconductor' by Samsung Semiconductor</b><small>Samsung Semiconductor Newsroom</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

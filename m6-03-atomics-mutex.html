@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Atomics &amp; Mutexes</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 6 / Atomics &amp; mutexes</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 6 · Parallelism &amp; Modern Architectures <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>Data races, atomic operations &amp; mutexes</h1>
+  <p class="idea">When two threads update the same variable at the same time, updates can silently get lost. The fix is to make the update <strong>atomic</strong>, meaning it happens as one step that can't be split. The CPU gives us tiny atomic instructions, and we build locks (mutexes) on top of them.</p>
+  <div class="analogy"><b>Think of it like this:</b> two clerks share one tally sheet. Each reads the number (5), walks away to add 1 in their head, and comes back to write 6. Two visits should give 7, but the sheet says 6. A <b>mutex</b> is a single key to the room: only the person holding the key may touch the sheet.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Thread / task</dt><dd>A separate line of work in a program. Several threads can run at the same time on different cores. FreeRTOS calls them tasks.</dd></div>
+  <div class="term"><dt>Shared variable</dt><dd>A piece of memory that more than one thread can read and write.</dd></div>
+  <div class="term"><dt>Data race</dt><dd>Two threads use the same variable at the same time, at least one of them writes, and nothing coordinates them.</dd></div>
+  <div class="term"><dt>Interleaving</dt><dd>The order in which the steps of different threads happen to mix together. It changes from run to run.</dd></div>
+  <div class="term"><dt>Critical section</dt><dd>The piece of code that touches shared data and must be run by only one thread at a time.</dd></div>
+  <div class="term"><dt>Mutual exclusion</dt><dd>The guarantee that at most one thread is inside the critical section.</dd></div>
+  <div class="term"><dt>Atomic</dt><dd>Done as one indivisible step. No other thread can see it half-finished.</dd></div>
+  <div class="term"><dt>Spinlock</dt><dd>A lock where a waiting thread keeps looping ("spinning") until the lock is free.</dd></div>
+  <div class="term"><dt>Mutex</dt><dd>A "mutual exclusion" lock. A waiting thread is put to sleep by the OS and woken up when the lock is free.</dd></div>
+  <div class="term"><dt>Deadlock</dt><dd>Two or more threads each wait forever for a lock that another one holds.</dd></div>
+</dl>
+
+<h2>1. Why <code>counter++</code> is not safe</h2>
+<p><code>counter++</code> means "add 1 to counter". It looks like one step, but the CPU does it in <b>three</b> steps. In MIPS (see <a href="m3-04-c-to-mips.html">C to MIPS</a>) it becomes:</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · what counter++ really is</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">lw</span>   $t0, counter</td><td class="n"><b>Load</b>: copy counter from memory into the temporary register <code>$t0</code>.</td></tr>
+    <tr><td class="c"><span class="kw">addi</span> $t0, $t0, <span class="num">1</span></td><td class="n"><b>Add</b>: $t0 = $t0 + 1. This happens only in this thread's own register.</td></tr>
+    <tr><td class="c"><span class="kw">sw</span>   $t0, counter</td><td class="n"><b>Store</b>: write $t0 back to memory.</td></tr>
+  </table>
+</div>
+<p>Each thread has its own registers, but both share memory. If the other thread's steps land in between these three, one update is lost:</p>
+
+<figure class="diagram">
+  <svg viewBox="0 0 620 330" width="620" role="img" aria-label="Timeline: thread A loads 5, thread B loads 5, both add 1 to get 6, both store 6, so counter ends at 6 instead of 7">
+    <text x="16" y="24" class="b">time</text>
+    <rect x="80" y="8" width="180" height="26" rx="6" class="box-b"/><text x="136" y="26" class="b">Thread A</text>
+    <rect x="290" y="8" width="180" height="26" rx="6" class="box-g"/><text x="346" y="26" class="b">Thread B</text>
+    <text x="498" y="26" class="b">counter</text>
+    <path class="w" d="M40 40 V310"/><polygon points="40,318 35,306 45,306" class="fill-ink"/>
+    <text x="50" y="66" class="m dim">1</text><rect x="80" y="50" width="180" height="26" rx="6" class="box"/><text x="92" y="68" class="m">load → A.reg = 5</text><text x="520" y="68" class="m">5</text>
+    <text x="50" y="108" class="m dim">2</text><rect x="290" y="92" width="180" height="26" rx="6" class="box"/><text x="302" y="110" class="m">load → B.reg = 5</text><text x="520" y="110" class="m">5</text>
+    <text x="50" y="150" class="m dim">3</text><rect x="80" y="134" width="180" height="26" rx="6" class="box"/><text x="92" y="152" class="m">add  → A.reg = 6</text><text x="520" y="152" class="m">5</text>
+    <text x="50" y="192" class="m dim">4</text><rect x="290" y="176" width="180" height="26" rx="6" class="box"/><text x="302" y="194" class="m">add  → B.reg = 6</text><text x="520" y="194" class="m">5</text>
+    <text x="50" y="234" class="m dim">5</text><rect x="80" y="218" width="180" height="26" rx="6" class="box-hi"/><text x="92" y="236" class="m">store 6</text><text x="520" y="236" class="m">6</text>
+    <text x="50" y="276" class="m dim">6</text><rect x="290" y="260" width="180" height="26" rx="6" class="box-r"/><text x="302" y="278" class="m">store 6 (overwrites!)</text><text x="520" y="278" class="r">6</text>
+    <text x="80" y="318" class="r">Two increments, but counter went 5 → 6. One update is lost.</text>
+  </svg>
+  <figcaption>A bad interleaving. B loaded the old value before A stored its result, so B's store wipes out A's work.</figcaption>
+</figure>
+
+<h3>Lab 6B: what you will see</h3>
+<ul>
+  <li>Two tasks each run <code>counter++</code> 100,000 times.</li>
+  <li><b>Expected:</b> 2 × 100,000 = <b>200,000</b>.</li>
+  <li><b>Actual (no protection):</b> usually <b>less than 200,000</b>, and a different number each run. That randomness is the tell-tale sign of a race.</li>
+  <li>This can happen even on a single core, because the OS can pause a thread between the load and the store.</li>
+</ul>
+
+<h2>2. Critical sections and why a simple flag fails</h2>
+<p>The three steps form a <b>critical section</b>. We need <b>mutual exclusion</b>: only one thread inside at a time. The first idea is a flag, but it fails:</p>
+<div class="code">
+  <div class="code-head"><span><b>pseudocode</b> · a broken lock</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">if</span> lock == <span class="num">0</span>:</td><td class="n">Step 1: check whether the room is free.</td></tr>
+    <tr><td class="c">    lock = <span class="num">1</span></td><td class="n">Step 2: mark it taken. But two threads can both pass step 1 before either reaches step 2, and then both enter.</td></tr>
+    <tr><td class="c">    <span class="com"># critical section</span></td><td class="n">Now two threads are inside. Mutual exclusion is broken.</td></tr>
+  </table>
+</div>
+<p>The "check" and the "set" must happen as <b>one atomic step</b>. Software alone can't guarantee that, so the CPU provides special atomic instructions.</p>
+
+<h2>3. Hardware atomics: TAS and CAS</h2>
+<div class="vs">
+  <div>
+    <h3>TAS: test-and-set</h3>
+    <p>Sets the flag to 1 and returns its <b>old</b> value, all in one indivisible step.</p>
+    <ul>
+      <li>It returns 0: the lock was free, and now you own it.</li>
+      <li>It returns 1: someone else holds it, so try again.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>CAS: compare-and-swap</h3>
+    <p><code>CAS(addr, expected, new)</code>: if the value at addr <b>still equals</b> expected, write new and return true. Otherwise change nothing and return false.</p>
+    <p>It means: "update only if nobody changed it since I looked".</p>
+  </div>
+</div>
+
+<div class="code">
+  <div class="code-head"><span><b>pseudocode</b> · a spinlock built from TAS</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">while</span> TAS(lock) == <span class="num">1</span>:</td><td class="n">Keep trying. Each try atomically sets lock = 1 and tells us if it was already 1.</td></tr>
+    <tr><td class="c">    <span class="kw">pass</span></td><td class="n">Do nothing, just loop again. This is the "spinning" (it wastes CPU time while waiting).</td></tr>
+    <tr><td class="c">counter = counter + <span class="num">1</span></td><td class="n">We got 0 back, so we own the lock. This is the critical section.</td></tr>
+    <tr><td class="c">lock = <span class="num">0</span></td><td class="n">Release: the next thread's TAS will now return 0.</td></tr>
+  </table>
+</div>
+
+<div class="code">
+  <div class="code-head"><span><b>pseudocode</b> · lock-free increment with CAS</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">loop</span>:</td><td class="n">Repeat until it works.</td></tr>
+    <tr><td class="c">    old = x</td><td class="n">Take a snapshot of the current value.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> CAS(&amp;x, old, old + <span class="num">1</span>):</td><td class="n">Atomically: "if x is still old, set it to old + 1". <code>&amp;x</code> means "the address of x".</td></tr>
+    <tr><td class="c">        <span class="kw">break</span></td><td class="n">Success: leave the loop. If CAS failed, another thread changed x first, so loop and retry with the new value.</td></tr>
+  </table>
+</div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 600 200" width="600" role="img" aria-label="CAS retry loop: read old, compute new, CAS; on success done, on failure go back to read">
+    <defs><marker id="arC" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M0 0 L10 5 L0 10 Z" class="fill-ink"/></marker></defs>
+    <rect x="20" y="60" width="120" height="50" rx="8" class="box"/><text x="36" y="90" class="m">old = x</text>
+    <rect x="180" y="60" width="140" height="50" rx="8" class="box"/><text x="194" y="90" class="m">new = old + 1</text>
+    <rect x="360" y="55" width="110" height="60" rx="8" class="box-hi"/><text x="372" y="82" class="m">CAS(&amp;x,</text><text x="372" y="100" class="m"> old, new)</text>
+    <rect x="510" y="60" width="70" height="50" rx="8" class="box-g"/><text x="522" y="90" class="b">done</text>
+    <path class="w" d="M140 85 H176" marker-end="url(#arC)"/>
+    <path class="w" d="M320 85 H356" marker-end="url(#arC)"/>
+    <path class="w-g" d="M470 85 H506"/>
+    <text x="474" y="76" class="m g">true</text>
+    <path class="w" stroke-dasharray="6 4" d="M415 115 V160 H80 V114" marker-end="url(#arC)"/>
+    <text x="170" y="180" class="m r">false: someone changed x → retry</text>
+  </svg>
+  <figcaption>No lock is ever held. A thread that loses the race simply retries with the fresh value.</figcaption>
+</figure>
+
+<h3>Real CPU support</h3>
+<div class="scroll"><table>
+  <tr><th>Architecture</th><th>Instruction(s)</th><th>Style</th></tr>
+  <tr><td>x86</td><td><code>LOCK CMPXCHG</code></td><td>CAS in a single instruction</td></tr>
+  <tr><td>ARM</td><td><code>LDREX</code> / <code>STREX</code> (load-exclusive / store-exclusive)</td><td>The store succeeds only if nobody wrote the value since the load</td></tr>
+  <tr><td>RISC-V "A" extension</td><td><code>LR</code> / <code>SC</code> (load-reserved / store-conditional), plus <code>AMOADD</code>, <code>AMOSWAP</code>…</td><td>The same idea as ARM, plus single-instruction atomic arithmetic</td></tr>
+</table></div>
+
+<h2>4. The build-up: atomics → spinlock → mutex</h2>
+<ol class="flow arrows">
+  <li><b>Atomic instruction</b>TAS / CAS from the CPU. Indivisible.</li>
+  <li><b>Spinlock</b>Loop on TAS. Good for very short waits, but it burns CPU while spinning.</li>
+  <li><b>Mutex</b>Try the atomic first. If the lock is busy, ask the OS to <b>sleep</b> the thread and wake it later.</li>
+</ol>
+
+<h2>5. Lab 6B code, line by line</h2>
+<p>The lab uses C. You don't need to know C: each line is explained on the right. First the <b>broken</b> version:</p>
+<div class="code">
+  <div class="code-head"><span><b>c · pthreads</b> · race.c (buggy)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">#include</span> <span class="str">&lt;pthread.h&gt;</span></td><td class="n">Bring in the ready-made thread tools (pthreads = POSIX threads).</td></tr>
+    <tr><td class="c"><span class="kw">#include</span> <span class="str">&lt;stdio.h&gt;</span></td><td class="n">Bring in the printing tools.</td></tr>
+    <tr><td class="c"><span class="kw">long</span> counter = <span class="num">0</span>;</td><td class="n">A whole-number variable, starting at 0. It is outside every function, so <b>all threads share it</b>.</td></tr>
+    <tr><td class="c"><span class="kw">void</span> *worker(<span class="kw">void</span> *arg) {</td><td class="n">Define a function called <code>worker</code> that each thread will run. The <code>void *</code> parts are just the shape pthreads requires; we ignore them.</td></tr>
+    <tr><td class="c">  <span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i &lt; <span class="num">100000</span>; i++) {</td><td class="n">A loop: start i at 0; repeat while i is less than 100000; add 1 to i after each round. So the body runs 100,000 times.</td></tr>
+    <tr><td class="c">    counter++;</td><td class="n">Add 1 to the shared counter. This is the <b>unsafe</b> load-add-store.</td></tr>
+    <tr><td class="c">  }</td><td class="n">End of the loop body.</td></tr>
+    <tr><td class="c">  <span class="kw">return</span> NULL;</td><td class="n">The thread is finished. <code>NULL</code> means "no result".</td></tr>
+    <tr><td class="c">}</td><td class="n">End of <code>worker</code>.</td></tr>
+    <tr><td class="c"><span class="kw">int</span> main(<span class="kw">void</span>) {</td><td class="n">The program starts running here.</td></tr>
+    <tr><td class="c">  pthread_t t1, t2;</td><td class="n">Two variables that will identify our two threads.</td></tr>
+    <tr><td class="c">  pthread_create(&amp;t1, NULL, worker, NULL);</td><td class="n">Start thread 1 running <code>worker</code>. <code>&amp;t1</code> = "store its ID in t1". The NULLs mean "default settings" and "no input".</td></tr>
+    <tr><td class="c">  pthread_create(&amp;t2, NULL, worker, NULL);</td><td class="n">Start thread 2, also running <code>worker</code>. Both now run at the same time.</td></tr>
+    <tr><td class="c">  pthread_join(t1, NULL);</td><td class="n">Wait here until thread 1 finishes.</td></tr>
+    <tr><td class="c">  pthread_join(t2, NULL);</td><td class="n">Wait until thread 2 finishes.</td></tr>
+    <tr><td class="c">  printf(<span class="str">"%ld\n"</span>, counter);</td><td class="n">Print counter. <code>%ld</code> is the slot for a long number; <code>\n</code> is a new line.</td></tr>
+    <tr><td class="c">  <span class="kw">return</span> <span class="num">0</span>;</td><td class="n">End the program. 0 means "no error".</td></tr>
+    <tr><td class="c">}</td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h3>Fix 1: an atomic add (one line changes)</h3>
+<div class="code">
+  <div class="code-head"><span><b>c · GCC builtin</b> · replace the counter++ line</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">    __atomic_fetch_add(&amp;counter, <span class="num">1</span>,</td><td class="n">A built-in function of the GCC compiler. It adds 1 to the variable at address <code>&amp;counter</code> <b>atomically</b> (the compiler uses an instruction like x86 <code>LOCK</code>-prefixed add).</td></tr>
+    <tr><td class="c">                       __ATOMIC_SEQ_CST);</td><td class="n">The "strictest ordering" setting. Just copy it; it is the standard choice.</td></tr>
+  </table>
+</div>
+
+<h3>Fix 2: a pthread mutex</h3>
+<div class="code">
+  <div class="code-head"><span><b>c · pthreads</b> · changes to race.c</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">pthread_mutex_t m =<br>    PTHREAD_MUTEX_INITIALIZER;</td><td class="n">Create one shared mutex called <code>m</code>, starting unlocked. Put this next to <code>counter</code>.</td></tr>
+    <tr><td class="c">    pthread_mutex_lock(&amp;m);</td><td class="n">Inside the loop: take the key. If another thread holds it, this thread sleeps here until the key is free.</td></tr>
+    <tr><td class="c">    counter++;</td><td class="n">Safe now: only the key holder can be on this line.</td></tr>
+    <tr><td class="c">    pthread_mutex_unlock(&amp;m);</td><td class="n">Give the key back, so a waiting thread can wake up and enter.</td></tr>
+  </table>
+</div>
+
+<h3>The same fix on the ESP32 (FreeRTOS)</h3>
+<div class="code">
+  <div class="code-head"><span><b>c · FreeRTOS</b> · lab6b.c (excerpt)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">SemaphoreHandle_t m;</td><td class="n">A variable that will refer to our mutex.</td></tr>
+    <tr><td class="c"><span class="kw">long</span> counter = <span class="num">0</span>;</td><td class="n">The shared counter.</td></tr>
+    <tr><td class="c"><span class="kw">void</span> worker(<span class="kw">void</span> *arg) {</td><td class="n">The task function.</td></tr>
+    <tr><td class="c">  <span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i &lt; <span class="num">100000</span>; i++) {</td><td class="n">Repeat 100,000 times (same loop as before).</td></tr>
+    <tr><td class="c">    xSemaphoreTake(m, portMAX_DELAY);</td><td class="n">Lock. <code>portMAX_DELAY</code> = wait as long as needed.</td></tr>
+    <tr><td class="c">    counter++;</td><td class="n">The critical section.</td></tr>
+    <tr><td class="c">    xSemaphoreGive(m);</td><td class="n">Unlock.</td></tr>
+    <tr><td class="c">  }</td><td class="n"></td></tr>
+    <tr><td class="c">  vTaskDelete(NULL);</td><td class="n">A FreeRTOS task must not just return. This deletes the task itself (<code>NULL</code> = "me").</td></tr>
+    <tr><td class="c">}</td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">void</span> app_main(<span class="kw">void</span>) {</td><td class="n">The program's start.</td></tr>
+    <tr><td class="c">  m = xSemaphoreCreateMutex();</td><td class="n">Create the mutex.</td></tr>
+    <tr><td class="c">  xTaskCreatePinnedToCore(worker, <span class="str">"w0"</span>,</td><td class="n">Start a task running <code>worker</code>, named "w0"…</td></tr>
+    <tr><td class="c">      <span class="num">4096</span>, NULL, <span class="num">1</span>, NULL, <span class="num">0</span>);</td><td class="n">…with 4096 bytes of stack, no input, priority 1, no handle saved, on <b>core 0</b>.</td></tr>
+    <tr><td class="c">  xTaskCreatePinnedToCore(worker, <span class="str">"w1"</span>,</td><td class="n">A second worker task, "w1"…</td></tr>
+    <tr><td class="c">      <span class="num">4096</span>, NULL, <span class="num">1</span>, NULL, <span class="num">1</span>);</td><td class="n">…the same, but on <b>core 1</b>. (Printing the result once both finish is left out here.)</td></tr>
+    <tr><td class="c">}</td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h3>For intuition: the same thing in Python</h3>
+<div class="code">
+  <div class="code-head"><span><b>python</b> · race.py</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">import</span> threading</td><td class="n">Python's thread tools.</td></tr>
+    <tr><td class="c">counter = <span class="num">0</span></td><td class="n">The shared counter.</td></tr>
+    <tr><td class="c">lock = threading.Lock()</td><td class="n">A mutex.</td></tr>
+    <tr><td class="c"><span class="kw">def</span> worker():</td><td class="n">The function each thread runs.</td></tr>
+    <tr><td class="c">    <span class="kw">global</span> counter</td><td class="n">"Use the shared counter, not a new local one."</td></tr>
+    <tr><td class="c">    <span class="kw">for</span> _ <span class="kw">in</span> range(<span class="num">100_000</span>):</td><td class="n">Repeat 100,000 times.</td></tr>
+    <tr><td class="c">        <span class="kw">with</span> lock:</td><td class="n">Lock on entry, unlock automatically on exit.</td></tr>
+    <tr><td class="c">            counter += <span class="num">1</span></td><td class="n">The critical section.</td></tr>
+    <tr><td class="c">ts = [threading.Thread(target=worker),<br>      threading.Thread(target=worker)]</td><td class="n">Make two threads.</td></tr>
+    <tr><td class="c"><span class="kw">for</span> t <span class="kw">in</span> ts: t.start()</td><td class="n">Start both.</td></tr>
+    <tr><td class="c"><span class="kw">for</span> t <span class="kw">in</span> ts: t.join()</td><td class="n">Wait for both.</td></tr>
+    <tr><td class="c">print(counter)  <span class="com"># 200000</span></td><td class="n">Always 200000 with the lock. (Without it, standard Python's global interpreter lock can hide the race on some versions, so C shows it more reliably.)</td></tr>
+  </table>
+</div>
+
+<h2>6. Correctness vs overhead</h2>
+<div class="scroll"><table>
+  <tr><th>Approach</th><th>Correct?</th><th>Speed</th><th>Why</th></tr>
+  <tr><td>Unsynchronized</td><td><b>Wrong</b></td><td>Fastest</td><td>No coordination at all</td></tr>
+  <tr><td>Atomic (<code>__atomic_fetch_add</code>)</td><td><b>Correct</b></td><td>Small overhead</td><td>One special instruction per increment</td></tr>
+  <tr><td>Mutex</td><td><b>Correct</b></td><td>Most overhead per increment</td><td>A lock + unlock call every time, plus possible sleeps and wake-ups</td></tr>
+</table></div>
+<p style="font-size:15px">This comparison is qualitative. Time your own runs in the lab; the exact ratios depend on the board and compiler.</p>
+
+<div class="callout tip"><b>Batching: the fastest correct option</b><p>Let each thread count in its <b>own local variable</b> (not shared, so no race), then add the total to the shared counter <b>once</b> at the end:</p>
+<p><code>long local = 0; for (...) local++;</code> then <code>__atomic_fetch_add(&amp;counter, local, __ATOMIC_SEQ_CST);</code></p>
+<p>That is 1 synchronised operation instead of 100,000.</p></div>
+
+<h2>7. Pitfalls of locks</h2>
+<div class="vs">
+  <div>
+    <h3>Deadlock</h3>
+    <p>Thread 1 holds lock A and waits for B. Thread 2 holds B and waits for A. Both wait forever. It needs all four conditions:</p>
+    <ul>
+      <li><b>Mutual exclusion</b>: a lock has one owner at a time.</li>
+      <li><b>Hold and wait</b>: a thread holds one lock while waiting for another.</li>
+      <li><b>No preemption</b>: a lock can't be taken away.</li>
+      <li><b>Circular wait</b>: a cycle of waiting.</li>
+    </ul>
+    <p>Fix: always take locks in the <b>same order</b>. That breaks the cycle.</p>
+  </div>
+  <div>
+    <h3>Priority inversion</h3>
+    <p>A low-priority task holds a lock that a high-priority task needs. Meanwhile, a medium-priority task keeps running, so the high-priority task waits indirectly behind it.</p>
+    <p>Fix: <b>priority inheritance</b>. The lock holder temporarily gets the waiter's high priority. FreeRTOS mutexes do this; this is one reason to use a mutex rather than a plain semaphore.</p>
+  </div>
+</div>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Thinking <code>counter++</code> is one step. It is load, add, store.</li>
+  <li>Expecting the buggy result to be the same every run. It is random.</li>
+  <li>Building a lock from a normal "check then set". Only an <b>atomic</b> TAS/CAS makes it safe.</li>
+  <li>CAS <b>does nothing</b> when the value has changed. It returns false and you must retry.</li>
+  <li>Calling a spinlock a mutex. A spinlock <b>busy-waits</b>; a mutex <b>sleeps</b>.</li>
+  <li>Forgetting to unlock (for example on an early exit). Every other thread then waits forever.</li>
+  <li>Locking inside a tight loop and then being surprised it is slow. Batch instead.</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>Two threads each do counter++ 100,000 times with no lock. What result do you expect, and what do you get?</summary><div class="a"><p>Expected <b>200,000</b>. Actual: usually less, and different each run, because interleaved load-add-store sequences lose updates.</p></div></details>
+  <details class="q"><summary>counter = 5. Show an interleaving of two increments that ends with 6.</summary><div class="a"><p>A loads 5, B loads 5, A adds (6), B adds (6), A stores 6, B stores 6. The result is <b>6 instead of 7</b>.</p></div></details>
+  <details class="q"><summary>x = 7. What does CAS(&amp;x, 5, 6) do?</summary><div class="a"><p>7 ≠ 5, so it <b>writes nothing</b> and returns <b>false</b>. x stays 7.</p></div></details>
+  <details class="q"><summary>lock = 0. Thread A calls TAS(lock), then thread B calls TAS(lock). What does each get back?</summary><div class="a"><p>A gets <b>0</b> (it was free; A now owns it, and lock = 1). B gets <b>1</b> (busy), so B keeps waiting.</p></div></details>
+  <details class="q"><summary>Why is a mutex better than a spinlock for long waits?</summary><div class="a"><p>A spinlock burns CPU time looping. A mutex asks the OS to put the waiting thread to sleep, which frees the core for other work.</p></div></details>
+  <details class="q"><summary>Rank unsynchronized, atomic and mutex by speed and by correctness.</summary><div class="a"><p>Speed: unsynchronized &gt; atomic &gt; mutex. Correctness: only atomic and mutex are correct.</p></div></details>
+  <details class="q"><summary>Name the x86, ARM and RISC-V atomic primitives.</summary><div class="a"><p>x86 <code>LOCK CMPXCHG</code>. ARM <code>LDREX</code>/<code>STREX</code>. RISC-V "A" extension <code>LR</code>/<code>SC</code> (and <code>AMO*</code>).</p></div></details>
+  <details class="q"><summary>Give a simple rule that prevents deadlock between two locks.</summary><div class="a"><p>Every thread takes the locks in the <b>same fixed order</b> (always A, then B). That breaks the circular-wait condition.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=qMQsd7Iy5jo" target="_blank" rel="noopener"><i class="play"></i><span><b>L-3.4: Critical Section Problem | Mutual Exclusion, Progress and Bounded Waiting | Operating System</b><small>Gate Smashers</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=dU8GMar5Efs" target="_blank" rel="noopener"><i class="play"></i><span><b>What is a Race Condition? (And How Mutex &amp; Semaphore Fix It) | OS Fundamentals Series #7</b><small>Himanshi Garg</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=3ZxZPeXPaM4" target="_blank" rel="noopener"><i class="play"></i><span><b>C++ Threading #3: Data Race and Mutex</b><small>Bo Qian</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Power Wall &amp; Multicore</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 6 / Power wall</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 6 · Parallelism &amp; Modern Architectures <span class="tag book">From syllabus · textbook-based</span></div>
+  <h1>The power wall &amp; why every chip went multicore</h1>
+  <p class="idea">For about 30 years, CPUs got faster mainly by ticking their clock faster. Around 2005 that stopped: a faster clock made the chip too hot to cool. Chip makers still got more transistors every generation, so they used them to build <strong>more cores</strong> instead of one faster core.</p>
+  <div class="analogy"><b>Think of it like this:</b> one cook can only chop so fast before their hands overheat. Past that point, you don't train the cook to go faster. You hire a second cook. That only helps if the recipe can be split into jobs they can do at the same time.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Dynamic power</dt><dd>Power used each time transistors switch between 0 and 1. It is most of a busy chip's power.</dd></div>
+  <div class="term"><dt>Clock frequency (f)</dt><dd>How many clock ticks happen per second, in hertz (Hz). 3 GHz = 3 billion ticks per second.</dd></div>
+  <div class="term"><dt>Supply voltage (V)</dt><dd>The voltage that powers the transistors. A lower V saves power but makes transistors slower.</dd></div>
+  <div class="term"><dt>Leakage current</dt><dd>Current that trickles through a transistor even when it is "off". It wastes power as heat.</dd></div>
+  <div class="term"><dt>Power density</dt><dd>Power per unit of chip area (W/cm²). Too high and the chip overheats.</dd></div>
+  <div class="term"><dt>Moore's law</dt><dd>The observation that the number of transistors on a chip roughly doubles every two years.</dd></div>
+  <div class="term"><dt>Dennard scaling</dt><dd>The rule that smaller transistors could also use a lower voltage, so power density stayed the same.</dd></div>
+  <div class="term"><dt>Power wall</dt><dd>The limit on how much heat a chip can get rid of cheaply. It stopped clock speeds from rising.</dd></div>
+  <div class="term"><dt>Dark silicon</dt><dd>Parts of a chip that must stay switched off at any moment, because powering everything at once would overheat it.</dd></div>
+  <div class="term"><dt>Core</dt><dd>One complete processor (datapath + control) on a chip. A multicore chip has several.</dd></div>
+  <div class="term"><dt>SMP</dt><dd>Symmetric multiprocessing: all cores are the same and share one main memory.</dd></div>
+  <div class="term"><dt>Throughput</dt><dd>How much work gets finished per second (for example, tasks per second).</dd></div>
+</dl>
+
+<h2>1. Where the power goes: P = α·C·V²·f</h2>
+<p>Every time a transistor switches, it charges or drains a tiny capacitor. That costs energy. Add it up over the whole chip and you get dynamic power:</p>
+<div class="formula">P = α · C · V² · f<small>α (alpha) = the fraction of transistors switching each tick · C = total capacitance being switched · V = supply voltage · f = clock frequency</small></div>
+<ul>
+  <li><b>f</b> is in the formula directly: double the clock speed and you double the power.</li>
+  <li><b>V is squared</b>, so voltage matters most. Cut V by 10% and power falls by about 19% (0.9² = 0.81).</li>
+  <li>A faster clock usually also needs a <em>higher</em> voltage, so raising f costs even more than the formula suggests.</li>
+</ul>
+
+<h3>Worked example: lower V and f by 15%</h3>
+<ol class="steps">
+  <li>New voltage V' = 0.85 V. New frequency f' = 0.85 f. α and C stay the same.</li>
+  <li>P' = α · C · (0.85 V)² · (0.85 f) = 0.85² × 0.85 × (α·C·V²·f) = <b>0.85³ × P</b>.</li>
+  <li>0.85³ = 0.85 × 0.85 × 0.85 = 0.614, so <b>P' ≈ 0.61 P</b>. That is about <b>39% less power</b> for only 15% less speed.</li>
+  <li><b>The multicore trick:</b> use two such slowed-down cores. Power = 2 × 0.61 P ≈ <b>1.23 P</b>. Work done can reach 2 × 0.85 = <b>1.7×</b>, but only if the job splits perfectly in two.</li>
+</ol>
+
+<h2>2. Dennard scaling: the free lunch</h2>
+<p>In 1974 Robert Dennard noticed a happy rule. Each new process generation shrinks transistor sizes by about 0.7×. If you also lower the voltage by 0.7×, the numbers work out like this:</p>
+<div class="scroll"><table>
+  <tr><th>Quantity</th><th>Change per generation</th><th>Why</th></tr>
+  <tr><td>Length, width</td><td>× 0.7</td><td>The transistor shrinks.</td></tr>
+  <tr><td>Area per transistor</td><td>× 0.49 (0.7 × 0.7)</td><td>So twice as many fit in the same space (Moore's law).</td></tr>
+  <tr><td>Capacitance C</td><td>× 0.7</td><td>A smaller transistor has less to charge.</td></tr>
+  <tr><td>Voltage V</td><td>× 0.7</td><td>Scaled down together with the size.</td></tr>
+  <tr><td>Frequency f</td><td>× 1.4 (1 ÷ 0.7)</td><td>Shorter distances switch faster.</td></tr>
+  <tr class="hl"><td>Power per transistor</td><td>0.7 × 0.7² × 1.4 ≈ × 0.49</td><td>From P = α·C·V²·f.</td></tr>
+  <tr class="hl"><td>Power density</td><td>0.49 ÷ 0.49 = × 1 (unchanged)</td><td>Power and area both shrink by the same amount.</td></tr>
+</table></div>
+<p>So every generation brought more transistors <em>and</em> a faster clock at the same heat per cm². Software simply got faster by itself. People called this the "free lunch".</p>
+
+<h2>3. The breakdown (around 2005–2006)</h2>
+<ol class="flow arrows">
+  <li><b>Voltage stuck</b>Below roughly 1 V, transistors cannot switch off cleanly.</li>
+  <li><b>Leakage grows</b>Lowering the switching threshold makes "off" transistors leak much more current.</li>
+  <li><b>So V stops falling</b>Without a lower V, a faster f means more heat per cm².</li>
+  <li><b>Power wall</b>About 100 W/cm² is the practical limit for cheap air cooling.</li>
+  <li><b>Clock stalls</b>Desktop CPUs stay around 3–4 GHz from then on.</li>
+</ol>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 250" width="640" role="img" aria-label="Illustrative trend: clock frequency rises until about 2005 then flattens, while cores per chip stay at one until about 2005 then rise">
+    <text x="50" y="18" class="b">Clock frequency</text>
+    <text x="370" y="18" class="b">Cores per chip</text>
+    <path class="grid" d="M50 190 H290 M50 30 V190 M370 190 H610 M370 30 V190"/>
+    <path class="grid" stroke-dasharray="4 4" d="M153 30 V190 M473 30 V190"/>
+    <path class="w-hi" d="M50 182 C95 175 120 120 153 55 C175 50 230 48 290 48"/>
+    <text x="175" y="40" class="m hi">flat ~3–4 GHz</text>
+    <path class="w-g" d="M370 180 H473 V160 H510 V130 H545 V100 H580 V60 H610"/>
+    <text x="385" y="172" class="m g">1 core</text>
+    <text x="520" y="52" class="m g">many cores</text>
+    <text x="40" y="208" class="m dim">1990</text>
+    <text x="138" y="208" class="m dim">2005</text>
+    <text x="264" y="208" class="m dim">2025</text>
+    <text x="360" y="208" class="m dim">1990</text>
+    <text x="458" y="208" class="m dim">2005</text>
+    <text x="584" y="208" class="m dim">2025</text>
+    <text x="165" y="236" class="dim">Illustrative shape only, not measured data</text>
+  </svg>
+  <figcaption>The turning point, sketched (illustrative, not real measurements). The dashed line marks about 2005. Frequency flattens and core count starts to climb.</figcaption>
+</figure>
+
+<div class="callout tip"><b>Moore's law did not end at the same time</b><p>Transistor counts kept rising. What ended was <em>Dennard scaling</em>: the ability to use those transistors at a higher speed without more heat. The extra transistors went into more cores, bigger caches and special accelerators. Because not all of them can be powered at once, some sit idle as <b>dark silicon</b>.</p></div>
+
+<h2>4. Why multicore?</h2>
+<div class="vs">
+  <div>
+    <h3>One faster core</h3>
+    <ul>
+      <li>Needs a higher f, and usually a higher V.</li>
+      <li>Power rises much faster than speed.</li>
+      <li>Speeds up every program with no rewriting.</li>
+      <li>Now blocked by the power wall.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Several slower cores</h3>
+    <ul>
+      <li>Each core runs at a comfortable V and f.</li>
+      <li>Total power grows roughly with the number of cores.</li>
+      <li>Only helps work that can be <b>split</b> into parallel parts.</li>
+      <li>The programmer must write parallel code (see <a href="m6-03-atomics-mutex.html">data races</a>).</li>
+    </ul>
+  </div>
+</div>
+
+<h3>SMP: symmetric shared-memory multicore</h3>
+<figure class="diagram">
+  <svg viewBox="0 0 600 250" width="600" role="img" aria-label="Four identical cores, each with private L1 and L2 caches, share an L3 cache and one main memory">
+    <rect x="20" y="20" width="560" height="160" rx="10" fill="none" class="w" stroke-dasharray="6 4"/>
+    <text x="30" y="38" class="m dim">one chip</text>
+    <rect x="40" y="48" width="115" height="70" rx="8" class="box-b"/><text x="70" y="72" class="b">Core 0</text><text x="52" y="100" class="m">L1 · L2</text>
+    <rect x="170" y="48" width="115" height="70" rx="8" class="box-b"/><text x="200" y="72" class="b">Core 1</text><text x="182" y="100" class="m">L1 · L2</text>
+    <rect x="300" y="48" width="115" height="70" rx="8" class="box-b"/><text x="330" y="72" class="b">Core 2</text><text x="312" y="100" class="m">L1 · L2</text>
+    <rect x="430" y="48" width="115" height="70" rx="8" class="box-b"/><text x="460" y="72" class="b">Core 3</text><text x="442" y="100" class="m">L1 · L2</text>
+    <path class="w" d="M97 118 V135 M227 118 V135 M357 118 V135 M487 118 V135"/>
+    <rect x="40" y="135" width="505" height="35" rx="8" class="box-hi"/>
+    <text x="210" y="158" class="b">Shared L3 cache</text>
+    <path class="w" d="M292 170 V205"/>
+    <rect x="160" y="205" width="265" height="38" rx="8" class="box"/>
+    <text x="220" y="229" class="b">Main memory (DRAM)</text>
+  </svg>
+  <figcaption>SMP: all cores are equal and see the same memory. Each core has private caches. Keeping those caches in agreement is the next page's topic (<a href="m6-02-mesi-cache-coherence.html">MESI</a>).</figcaption>
+</figure>
+
+<h2>5. How much faster can more cores make a program?</h2>
+<p>Recall <a href="m4-04-performance.html">Amdahl's law</a>. If a fraction <b>p</b> of the work can run in parallel on <b>N</b> cores:</p>
+<div class="formula">Speedup = 1 ÷ ( (1 − p) + p ÷ N )<small>The serial part (1 − p) does not get faster, so it sets a ceiling: the speedup can never exceed 1 ÷ (1 − p).</small></div>
+
+<figure class="diagram">
+  <svg viewBox="0 0 600 290" width="600" role="img" aria-label="Bar chart: with p equal to 0.9, speedup is 1, 1.82, 3.08, 4.71 and 6.40 for 1, 2, 4, 8 and 16 cores, against ideal speedups 1, 2, 4, 8, 16; the ceiling is 10">
+    <path class="grid" d="M60 230 H560 M60 30 V230 M55 180 H560 M55 130 H560 M55 80 H560 M55 30 H560"/>
+    <text x="40" y="234" class="m dim">0</text><text x="40" y="184" class="m dim">4</text><text x="40" y="134" class="m dim">8</text><text x="32" y="84" class="m dim">12</text><text x="32" y="34" class="m dim">16</text>
+    <rect x="80" y="217.5" width="50" height="12.5" class="box"/><rect x="80" y="217.5" width="50" height="12.5" class="box-g"/>
+    <rect x="180" y="205" width="50" height="25" class="box"/><rect x="180" y="207.25" width="50" height="22.75" class="box-g"/>
+    <rect x="280" y="180" width="50" height="50" class="box"/><rect x="280" y="191.5" width="50" height="38.5" class="box-g"/>
+    <rect x="380" y="130" width="50" height="100" class="box"/><rect x="380" y="171.1" width="50" height="58.9" class="box-g"/>
+    <rect x="480" y="30" width="50" height="200" class="box"/><rect x="480" y="150" width="50" height="80" class="box-g"/>
+    <path class="w-hi" stroke-dasharray="6 4" d="M60 105 H560"/>
+    <text x="336" y="99" class="m hi">ceiling = 10</text>
+    <text x="90" y="210" class="m g">1.00</text>
+    <text x="190" y="200" class="m g">1.82</text>
+    <text x="290" y="175" class="m g">3.08</text>
+    <text x="390" y="125" class="m g">4.71</text>
+    <text x="489" y="144" class="m g">6.40</text>
+    <text x="96" y="250" class="m">N=1</text><text x="196" y="250" class="m">N=2</text><text x="296" y="250" class="m">N=4</text><text x="396" y="250" class="m">N=8</text><text x="492" y="250" class="m">N=16</text>
+    <rect x="120" y="266" width="14" height="12" class="box"/><text x="140" y="277" class="m">ideal (= N)</text>
+    <rect x="260" y="266" width="14" height="12" class="box-g"/><text x="280" y="277" class="m">Amdahl, p = 0.9</text>
+  </svg>
+  <figcaption>Computed from the formula with p = 0.9. The outline shows the ideal speedup; the green bar shows the real one. With 10% serial work, even endless cores give at most 10×.</figcaption>
+</figure>
+
+<div class="callout tip"><b>Gustafson's law: the hopeful view</b><p>Amdahl keeps the <em>problem size fixed</em>. In practice, people give a bigger machine a <em>bigger problem</em> (more pixels, more data). Then the parallel part grows while the serial part stays small. Gustafson's <b>scaled speedup</b> = (1 − p) + p × N. With p = 0.95 and N = 8: 0.05 + 7.6 = <b>7.65×</b>.</p></div>
+
+<h2>6. Lab 6A: dual-core offload</h2>
+<p>The board is most likely an <b>ESP32</b> (a small chip with two cores) running <b>FreeRTOS</b>, a tiny operating system that runs several <b>tasks</b> (small independent programs) at once. The lab compares two setups:</p>
+<ul>
+  <li><b>Single-core:</b> one core both reads the DHT11 temperature/humidity sensor and computes the sliding mean, max and min.</li>
+  <li><b>Split:</b> Core 0 only handles the sensor. Core 1 only does the maths. A <b>queue</b> (a first-in, first-out mailbox) carries readings from one core to the other.</li>
+</ul>
+
+<figure class="diagram">
+  <svg viewBox="0 0 640 200" width="640" role="img" aria-label="Lab 6A pipeline: DHT11 sensor to ISR on core 0, into a queue, to the compute task on core 1, producing mean, max and min">
+    <rect x="10" y="70" width="90" height="56" rx="8" class="box"/><text x="26" y="96" class="b">DHT11</text><text x="26" y="114" class="m dim">sensor</text>
+    <path class="w" d="M100 98 H140"/><polygon points="140,98 130,93 130,103" class="fill-ink"/>
+    <rect x="140" y="40" width="150" height="116" rx="10" class="box-b"/>
+    <text x="178" y="62" class="b">Core 0</text>
+    <text x="156" y="96" class="m">ISR / read task</text>
+    <text x="156" y="118" class="m dim">grab reading</text>
+    <text x="156" y="136" class="m dim">push to queue</text>
+    <path class="w-hi" d="M290 98 H320"/>
+    <rect x="320" y="80" width="30" height="36" class="box-hi"/>
+    <rect x="350" y="80" width="30" height="36" class="box-hi"/>
+    <rect x="380" y="80" width="30" height="36" class="box-hi"/>
+    <text x="338" y="140" class="m hi">queue</text>
+    <path class="w-hi" d="M410 98 H440"/><polygon points="440,98 430,93 430,103" class="fill-hi"/>
+    <rect x="440" y="40" width="150" height="116" rx="10" class="box-g"/>
+    <text x="478" y="62" class="b">Core 1</text>
+    <text x="456" y="96" class="m">compute task</text>
+    <text x="456" y="118" class="m dim">sliding mean,</text>
+    <text x="456" y="136" class="m dim">max, min</text>
+    <path class="w" d="M590 98 H630"/>
+    <text x="150" y="186" class="dim">Each core does one job; the queue is the only thing they share.</text>
+  </svg>
+  <figcaption>The split design. Core 0 reacts to the sensor quickly; Core 1 crunches numbers without being interrupted.</figcaption>
+</figure>
+
+<h3>The key FreeRTOS lines</h3>
+<p>This is C code. You don't need to know C: every line is explained on the right.</p>
+<div class="code">
+  <div class="code-head"><span><b>c · FreeRTOS (ESP-IDF)</b> · main.c (excerpt)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">void</span> app_main(<span class="kw">void</span>) {</td><td class="n">The starting point of an ESP32 program. <code>void</code> means "gives nothing back". The <code>{</code> opens the body.</td></tr>
+    <tr><td class="c">  q = xQueueCreate(<span class="num">32</span>, <span class="kw">sizeof</span>(<span class="kw">int</span>));</td><td class="n">Make a queue that can hold 32 items, each the size of one whole number (<code>int</code>). Store it in <code>q</code>.</td></tr>
+    <tr><td class="c">  xTaskCreatePinnedToCore(sensor_task,</td><td class="n">Start a new task that runs the function <code>sensor_task</code>…</td></tr>
+    <tr><td class="c">      <span class="str">"sensor"</span>, <span class="num">4096</span>, NULL,</td><td class="n">…named "sensor", with 4096 bytes of stack memory, and no extra input (<code>NULL</code> means "nothing")…</td></tr>
+    <tr><td class="c">      <span class="num">2</span>, NULL, <span class="num">0</span>);</td><td class="n">…at priority 2 (higher runs first), without saving a handle to it, <b>pinned to core 0</b> (the last number).</td></tr>
+    <tr><td class="c">  xTaskCreatePinnedToCore(compute_task,</td><td class="n">Start a second task that runs <code>compute_task</code>…</td></tr>
+    <tr><td class="c">      <span class="str">"compute"</span>, <span class="num">4096</span>, NULL,</td><td class="n">…with the same stack size and no input…</td></tr>
+    <tr><td class="c">      <span class="num">1</span>, NULL, <span class="num">1</span>);</td><td class="n">…at priority 1, <b>pinned to core 1</b>. For the single-core test, change this last 1 to 0.</td></tr>
+    <tr><td class="c">}</td><td class="n">End of <code>app_main</code>. The two tasks keep running on their own.</td></tr>
+  </table>
+</div>
+
+<div class="code">
+  <div class="code-head"><span><b>pseudocode</b> · what each task does</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">task</span> sensor_task:</td><td class="n">Runs on core 0.</td></tr>
+    <tr><td class="c">  <span class="kw">forever</span>:</td><td class="n">Repeat without end (embedded tasks never finish).</td></tr>
+    <tr><td class="c">    v = read_dht11()</td><td class="n">Get one reading from the sensor.</td></tr>
+    <tr><td class="c">    queue.send(v)</td><td class="n">Drop it in the mailbox. (Inside a real ISR, FreeRTOS requires the special <code>xQueueSendFromISR</code>.)</td></tr>
+    <tr><td class="c">    wait(sample_period)</td><td class="n">Sleep until the next reading is due.</td></tr>
+    <tr><td class="c"><span class="kw">task</span> compute_task:</td><td class="n">Runs on core 1.</td></tr>
+    <tr><td class="c">  <span class="kw">forever</span>:</td><td class="n"></td></tr>
+    <tr><td class="c">    v = queue.receive()</td><td class="n">Wait until a reading arrives, then take it.</td></tr>
+    <tr><td class="c">    window.add(v); drop oldest</td><td class="n">Keep only the last K readings (the "sliding window").</td></tr>
+    <tr><td class="c">    count += <span class="num">1</span>; report mean, max, min</td><td class="n">Do the statistics and count how many windows were processed. That count ÷ time is the throughput.</td></tr>
+  </table>
+</div>
+
+<h3>How to compare the two setups</h3>
+<ol class="flow arrows">
+  <li><b>Same input</b>Use the same sample rate and window size in both runs.</li>
+  <li><b>Measure</b>Count windows processed over a fixed time, e.g. 60 s.</li>
+  <li><b>Repeat</b>Do 3–5 runs and take the average.</li>
+  <li><b>Compare</b>Speedup = split throughput ÷ single-core throughput.</li>
+</ol>
+<p style="font-size:15px">Expect less than 2×. The queue adds overhead, and the sensor side may be idle much of the time (Amdahl again).</p>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Writing P = C·V·f. The voltage is <b>squared</b>: P = α·C·V²·f.</li>
+  <li>Saying "Moore's law ended in 2005". It was <b>Dennard scaling</b> that broke. Transistor counts kept growing.</li>
+  <li>Blaming the power wall on the transistors being too big. The real cause is that <b>voltage could not keep falling</b> because of leakage.</li>
+  <li>Assuming N cores give N× speed. Amdahl's law caps it at 1 ÷ (1 − p).</li>
+  <li>Forgetting that a 15% cut in both V and f gives 0.85³ (not 0.85²) of the power.</li>
+  <li>Mixing up Amdahl (fixed problem size) and Gustafson (problem grows with N).</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>V drops by 20% and f stays the same. What happens to dynamic power?</summary><div class="a"><p>P' = 0.8² × P = <b>0.64 P</b>, a 36% saving.</p></div></details>
+  <details class="q"><summary>V and f both drop by 15%. Find the new power. Then find the power of two such cores.</summary><div class="a"><p>One core: 0.85³ = <b>0.614 P</b>. Two cores: 2 × 0.614 = <b>1.23 P</b>, for up to 1.7× the work if the job splits perfectly.</p></div></details>
+  <details class="q"><summary>Why did clock frequency stop rising around 2005?</summary><div class="a"><p>Dennard scaling broke. Leakage current stopped voltage from falling any further. Without lower V, a higher f raised power density past about 100 W/cm², more than cheap cooling can remove. That limit is the <b>power wall</b>.</p></div></details>
+  <details class="q"><summary>Under Dennard scaling (shrink 0.7×), show that power density stays constant.</summary><div class="a"><p>Power per transistor = C × V² × f = 0.7 × 0.49 × (1/0.7) = 0.49. Area per transistor = 0.7² = 0.49. Density = 0.49 ÷ 0.49 = <b>1</b> (unchanged).</p></div></details>
+  <details class="q"><summary>p = 0.9 and N = 8. What does Amdahl's law give? What is the ceiling?</summary><div class="a"><p>1 ÷ (0.1 + 0.9/8) = 1 ÷ 0.2125 = <b>4.71×</b>. Ceiling = 1 ÷ 0.1 = <b>10×</b>.</p></div></details>
+  <details class="q"><summary>What is "dark silicon"?</summary><div class="a"><p>Transistors that must stay switched off at any moment because the chip's power/heat budget can't run them all. It is one reason chips now include specialised blocks (GPU, NPU) that are only switched on when needed.</p></div></details>
+  <details class="q"><summary>In Lab 6A, why pin the sensor and compute tasks to different cores?</summary><div class="a"><p>So the compute work never delays the sensor's time-critical handling, and both run truly at the same time. Throughput can rise, but by less than 2×, because of queue overhead and the serial parts.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=LH3Tvfx4Xbo" target="_blank" rel="noopener"><i class="play"></i><span><b>Why CPU Clock Speeds Stopped Increasing | The Power Wall &amp; Dennard Scaling Explained</b><small>Abhijit Pethe</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=fBX-U8Ucww0" target="_blank" rel="noopener"><i class="play"></i><span><b>Bits of Architecture: The Power Wall</b><small>Nick</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=oQHnHM8CG4c" target="_blank" rel="noopener"><i class="play"></i><span><b>Computer Organization and Design: The Power Wall</b><small>Nick</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Registers &amp; Shift Registers</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Module 2 / Registers &amp; shift registers</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Module 2 · Memory &amp; State <span class="tag class">From class notes · L06, Lab 06 &amp; Lab 2A</span></div>
+  <h1>Registers &amp; shift registers</h1>
+  <p class="idea">A <strong>register</strong> is a row of D flip-flops that share one clock, so a whole word (8, 32 or 64 bits) is stored at once. A <strong>shift register</strong> is a register whose bits move one place along on every clock edge.</p>
+  <div class="analogy"><b>Think of it like this:</b> a register is a row of lockers that all open and shut at the same bell. A shift register is a conveyor belt: at every bell, each box moves one spot along, a new box goes on at one end and the last box falls off the other.</div>
+</section>
+
+<h2>Key terms</h2>
+<dl class="terms">
+  <div class="term"><dt>Register</dt><dd>n D flip-flops with a shared clock, storing an n-bit word.</dd></div>
+  <div class="term"><dt>Load (LD) / load enable</dt><dd>A control input. 1 = store new data at the edge. 0 = keep the old value.</dd></div>
+  <div class="term"><dt>Clear / reset</dt><dd>A control input that sets every bit to 0.</dd></div>
+  <div class="term"><dt>Serial</dt><dd>One bit at a time on one wire, one bit per clock edge.</dd></div>
+  <div class="term"><dt>Parallel</dt><dd>All n bits at once on n wires, in a single edge.</dd></div>
+  <div class="term"><dt>MUX (multiplexer)</dt><dd>A selector switch: a control input picks which of its data inputs reaches the output.</dd></div>
+  <div class="term"><dt>Concatenation <code>{ }</code></dt><dd>Verilog for gluing bits together: <code>{2'b10, 1'b1}</code> = <code>101</code>.</dd></div>
+  <div class="term"><dt>Bit slice <code>q[2:0]</code></dt><dd>Bits 2, 1 and 0 of q, as a 3-bit group.</dd></div>
+</dl>
+
+<h2>1. Registers</h2>
+<p>Are registers made of flip-flops? <strong>Yes, always.</strong> A CPU register is 32 or 64 D flip-flops. The program counter (PC), the instruction register and the pipeline registers are all registers.</p>
+
+<h3>Load enable: a MUX in front of every D</h3>
+<p>A plain D flip-flop stores D on <em>every</em> edge. To keep a value when we don't want to change it, put a 2:1 MUX in front of each D input:</p>
+<ul>
+  <li><b>LOAD = 1:</b> the MUX passes the new data.</li>
+  <li><b>LOAD = 0:</b> the MUX passes the flip-flop's own Q back in, so it stores the same value again (hold).</li>
+</ul>
+<figure class="diagram">
+  <svg viewBox="0 0 560 205" width="560" role="img" aria-label="One bit of a register with load: a 2 to 1 MUX chooses between new data d and the old output q, controlled by LOAD, and feeds a D flip-flop.">
+    <text x="182" y="14" class="m b">LOAD</text>
+    <path class="w" d="M200 20 V50"/>
+    <polygon points="180,40 220,60 220,130 180,150" class="box"/>
+    <text x="186" y="74" class="m">1</text>
+    <text x="186" y="124" class="m">0</text>
+    <text x="186" y="100" class="m dim">MUX</text>
+    <text x="20" y="60" class="m b">d[i] (new)</text>
+    <path class="w" d="M20 70 H180"/>
+    <path class="w" d="M220 95 H300"/>
+    <rect x="300" y="50" width="110" height="90" rx="6" class="box-b"/>
+    <text x="318" y="72" class="b">D flip-flop</text>
+    <text x="308" y="99" class="m">D</text>
+    <text x="394" y="99" class="m">Q</text>
+    <path class="w" d="M300 116 L312 124 L300 132"/>
+    <text x="236" y="128" class="m">clk</text>
+    <path class="w" d="M262 124 H300"/>
+    <path class="w-g" d="M410 95 H530"/>
+    <text x="488" y="88" class="g">q[i]</text>
+    <circle cx="470" cy="95" r="3.5" class="fill-ink"/>
+    <path class="w-hi" d="M470 95 V175 H140 V120 H180"/>
+    <text x="210" y="195" class="m hi">feedback: old q[i] (hold)</text>
+  </svg>
+  <figcaption>One bit of a register with load. Repeat this for every bit; all bits share LOAD and clk.</figcaption>
+</figure>
+<p>In Verilog you don't draw the MUX. Writing <code>if (ld) q &lt;= d;</code> with no <code>else</code> means "otherwise keep q", and the tool builds the MUX for you.</p>
+
+<h3>Serial vs parallel</h3>
+<div class="vs">
+  <div><h3>Serial</h3><p>1 wire. One bit moves per clock edge, so n bits take n edges. Cheap wiring. (USB, UART, SPI)</p></div>
+  <div><h3>Parallel</h3><p>n wires. All n bits move on one edge. Fast, but needs many wires. (inside a CPU)</p></div>
+</div>
+
+<h2>2. Lab 2A: an 8-bit register</h2>
+<h3>Q1: register with load</h3>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · register_8bit.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> register_8bit (</td><td class="n">A block named <code>register_8bit</code>.</td></tr>
+    <tr><td class="c">    <span class="kw">input</span>        clk,</td><td class="n">The clock. (No type written means <code>wire</code>.)</td></tr>
+    <tr><td class="c">    <span class="kw">input</span>        ld,</td><td class="n">Load enable.</td></tr>
+    <tr><td class="c">    <span class="kw">input</span>  [<span class="num">7</span>:<span class="num">0</span>] d,</td><td class="n">8 data wires, d[7] down to d[0].</td></tr>
+    <tr><td class="c">    <span class="kw">output reg</span> [<span class="num">7</span>:<span class="num">0</span>] q</td><td class="n">8 stored bits. <code>reg</code> because they are set inside <code>always</code>.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">always @(posedge</span> clk<span class="kw">) begin</span></td><td class="n">At every rising edge of the clock…</td></tr>
+    <tr><td class="c">        <span class="kw">if</span> (ld)</td><td class="n">…if load is 1…</td></tr>
+    <tr><td class="c">            q &lt;= d;</td><td class="n">…copy all 8 bits of d into q at once.</td></tr>
+    <tr><td class="c">    <span class="kw">end</span></td><td class="n">No <code>else</code>: when ld = 0, q simply keeps its value.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h3>Q2: add a synchronous reset</h3>
+<p>Priority order: <b>reset &gt; load &gt; hold</b>. The first true condition wins.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · register_8bit_rst.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> register_8bit_rst (</td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">input</span>            clk,</td><td class="n">Clock.</td></tr>
+    <tr><td class="c">    <span class="kw">input</span>            rst,</td><td class="n">Reset (1 = clear to zero).</td></tr>
+    <tr><td class="c">    <span class="kw">input</span>            ld,</td><td class="n">Load enable.</td></tr>
+    <tr><td class="c">    <span class="kw">input</span>      [<span class="num">7</span>:<span class="num">0</span>] d,</td><td class="n">New data.</td></tr>
+    <tr><td class="c">    <span class="kw">output reg</span> [<span class="num">7</span>:<span class="num">0</span>] q</td><td class="n">Stored byte.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">always @(posedge</span> clk<span class="kw">) begin</span></td><td class="n">Only the clock is listed, so the reset waits for an edge: <b>synchronous</b>.</td></tr>
+    <tr><td class="c">        <span class="kw">if</span> (rst)</td><td class="n">Checked first, so reset has top priority.</td></tr>
+    <tr><td class="c">            q &lt;= <span class="num">8'b00000000</span>;</td><td class="n">Clear. <code>8'b…</code> = an 8-bit binary number.</td></tr>
+    <tr><td class="c">        <span class="kw">else if</span> (ld)</td><td class="n">Not resetting? Then check load.</td></tr>
+    <tr><td class="c">            q &lt;= d;</td><td class="n">Store the new byte.</td></tr>
+    <tr><td class="c">    <span class="kw">end</span></td><td class="n">Neither? Hold.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="callout tip"><b>Pro tip: one skeleton for every lab exercise</b><p>Write reset and load inside <code>always @(posedge clk)</code> as an <code>if / else if / else</code> chain. Every Verilog exercise in this lab is this same skeleton; only the next-state expression changes.</p></div>
+
+<h2>3. Shift registers</h2>
+<p>Connect each flip-flop's Q to the next one's D. On every edge, every bit moves one place: a conveyor belt for bits.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 640 195" width="640" role="img" aria-label="Four D flip-flops in a chain. Serial input enters q0, bits move to q1, q2, q3, and leave as serial out. Each stage also has a parallel output tap.">
+    <text x="8" y="34" class="m b">clk</text>
+    <path class="w" d="M40 30 H505 M115 30 V50 M245 30 V50 M375 30 V50 M505 30 V50"/>
+    <rect x="70" y="50" width="90" height="70" rx="6" class="box-b"/>
+    <rect x="200" y="50" width="90" height="70" rx="6" class="box-b"/>
+    <rect x="330" y="50" width="90" height="70" rx="6" class="box-b"/>
+    <rect x="460" y="50" width="90" height="70" rx="6" class="box-b"/>
+    <text x="94" y="90" class="b">q[0]</text>
+    <text x="224" y="90" class="b">q[1]</text>
+    <text x="354" y="90" class="b">q[2]</text>
+    <text x="484" y="90" class="b">q[3]</text>
+    <text x="14" y="78" class="m hi">sin</text>
+    <path class="w-hi" d="M14 85 H70 M160 85 H200 M290 85 H330 M420 85 H460 M550 85 H620"/>
+    <polygon points="200,85 190,80 190,90" class="fill-hi"/>
+    <polygon points="330,85 320,80 320,90" class="fill-hi"/>
+    <polygon points="460,85 450,80 450,90" class="fill-hi"/>
+    <text x="558" y="78" class="m hi">serial out</text>
+    <path class="w-g" d="M115 120 V160 M245 120 V160 M375 120 V160 M505 120 V160"/>
+    <text x="100" y="178" class="m g">q[0]</text>
+    <text x="230" y="178" class="m g">q[1]</text>
+    <text x="360" y="178" class="m g">q[2]</text>
+    <text x="490" y="178" class="m g">q[3]</text>
+  </svg>
+  <figcaption>Copper = serial path (SISO). Tap the green outputs as well and the same circuit is SIPO: no extra hardware.</figcaption>
+</figure>
+
+<div class="scroll"><table>
+  <tr><th>Mode</th><th>In</th><th>Out</th><th>Typical use</th></tr>
+  <tr><td><b>SISO</b></td><td>serial</td><td>serial</td><td>delay line (output = input from n edges ago)</td></tr>
+  <tr><td><b>SIPO</b></td><td>serial</td><td>parallel</td><td>UART receive (bits arrive one by one, CPU reads a byte)</td></tr>
+  <tr><td><b>PISO</b></td><td>parallel</td><td>serial</td><td>UART transmit (CPU gives a byte, it leaves bit by bit)</td></tr>
+  <tr><td><b>PIPO</b></td><td>parallel</td><td>parallel</td><td>buffer register with load (the Lab Q1 register)</td></tr>
+</table></div>
+<p><b>Other uses:</b> serial ↔ parallel conversion (UART, SPI, USB); an N-cycle delay; shift left = ×2 and shift right = ÷2; LFSRs (a shift register with XOR feedback) that make pseudo-random numbers.</p>
+
+<h3>SISO</h3>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · SISO (4-bit)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">always @(posedge</span> clk<span class="kw">) begin</span></td><td class="n">At every rising edge…</td></tr>
+    <tr><td class="c">  q &lt;= {q[<span class="num">2</span>:<span class="num">0</span>], serial_in}; <span class="kw">end</span></td><td class="n">…glue the lower 3 bits to the new input bit. Everything moves one place left; q[3] is pushed out.</td></tr>
+    <tr><td class="c"><span class="kw">assign</span> serial_out = q[<span class="num">3</span>];</td><td class="n">The output is the last bit. A bit takes 4 edges to travel through.</td></tr>
+  </table>
+</div>
+
+<h3>SIPO: worked example (shift in 1, 0, 1, 1)</h3>
+<div class="scroll"><table class="tt">
+  <tr><th>Edge</th><th>sin</th><th class="out">q[3:0] after</th></tr>
+  <tr><td>start</td><td>–</td><td class="out">0000</td></tr>
+  <tr><td>1</td><td>1</td><td class="out">0001</td></tr>
+  <tr><td>2</td><td>0</td><td class="out">0010</td></tr>
+  <tr><td>3</td><td>1</td><td class="out">0101</td></tr>
+  <tr class="hl"><td>4</td><td>1</td><td class="out">1011</td></tr>
+</table></div>
+<p>After 4 edges, the 4 serial bits are available all at once on q. SIPO is the <b>same circuit</b> as SISO; you just read all of q.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · sipo_reg.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> sipo_reg(</td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">input</span> clk, sin,</td><td class="n">Clock and the serial input bit.</td></tr>
+    <tr><td class="c">  <span class="kw">output reg</span> [<span class="num">3</span>:<span class="num">0</span>] q);</td><td class="n">4 stored bits, which are also the parallel output.</td></tr>
+    <tr><td class="c">  <span class="kw">always @(posedge</span> clk<span class="kw">)</span></td><td class="n">Every rising edge (one line, so no begin/end needed).</td></tr>
+    <tr><td class="c">    q &lt;= {q[<span class="num">2</span>:<span class="num">0</span>], sin};</td><td class="n">Shift left and bring in sin at bit 0.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span> <span class="com">// q IS the parallel out</span></td><td class="n"></td></tr>
+  </table>
+</div>
+
+<h3>Lab Q3: SIPO with reset</h3>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · sipo.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> sipo (</td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">input</span>        clk,</td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">input</span>        rst,</td><td class="n">Synchronous reset.</td></tr>
+    <tr><td class="c">    <span class="kw">input</span>        d_in,</td><td class="n">Serial input bit.</td></tr>
+    <tr><td class="c">    <span class="kw">output reg</span> [<span class="num">3</span>:<span class="num">0</span>] q</td><td class="n">Parallel output.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">always @(posedge</span> clk<span class="kw">) begin</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">if</span> (rst)</td><td class="n">Reset first…</td></tr>
+    <tr><td class="c">            q &lt;= <span class="num">4'b0000</span>;</td><td class="n">…clear all 4 bits.</td></tr>
+    <tr><td class="c">        <span class="kw">else begin</span></td><td class="n">Otherwise shift (several lines, so begin/end).</td></tr>
+    <tr><td class="c">            q[<span class="num">3</span>] &lt;= q[<span class="num">2</span>];</td><td class="n">Bit 3 takes the old bit 2.</td></tr>
+    <tr><td class="c">            q[<span class="num">2</span>] &lt;= q[<span class="num">1</span>];</td><td class="n">Bit 2 takes the old bit 1.</td></tr>
+    <tr><td class="c">            q[<span class="num">1</span>] &lt;= q[<span class="num">0</span>];</td><td class="n">Bit 1 takes the old bit 0.</td></tr>
+    <tr><td class="c">            q[<span class="num">0</span>] &lt;= d_in;</td><td class="n">Bit 0 takes the new input. Because <code>&lt;=</code> uses the <b>old</b> values, the order of these 4 lines doesn't matter.</td></tr>
+    <tr><td class="c">        <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">Same result as <code>q &lt;= {q[2:0], d_in};</code></td></tr>
+  </table>
+</div>
+
+<h3>PISO: worked example (load 1011, then shift right)</h3>
+<p>Each D input needs a 2:1 MUX: one input for "load", one for "shift". The output <code>sout</code> is always q[0], so the LSB leaves first.</p>
+<div class="scroll"><table class="tt">
+  <tr><th>Edge</th><th>Action</th><th class="out">q[3:0] after</th><th>sout = q[0]</th></tr>
+  <tr><td>1</td><td>load</td><td class="out">1011</td><td class="one">1</td></tr>
+  <tr><td>2</td><td>shift</td><td class="out">0101</td><td class="one">1</td></tr>
+  <tr><td>3</td><td>shift</td><td class="out">0010</td><td class="zero">0</td></tr>
+  <tr><td>4</td><td>shift</td><td class="out">0001</td><td class="one">1</td></tr>
+  <tr class="hl"><td>5</td><td>shift</td><td class="out">0000</td><td class="zero">0</td></tr>
+</table></div>
+<p>sout sends out <b>1, 1, 0, 1</b>: the bits of 1011 read from right to left (LSB first).</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · PISO (class version)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">always @(posedge</span> clk<span class="kw">) begin</span></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">if</span> (load) q &lt;= d;            <span class="com">// parallel load</span></td><td class="n">load = 1: take all 4 bits at once.</td></tr>
+    <tr><td class="c">  <span class="kw">else</span> q &lt;= {<span class="num">1'b0</span>, q[<span class="num">3</span>:<span class="num">1</span>]};    <span class="com">// shift right</span></td><td class="n">load = 0: put a 0 on the left, drop q[0]. Everything moves right.</td></tr>
+    <tr><td class="c"><span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">assign</span> sout = q[<span class="num">0</span>];</td><td class="n">The serial output is the rightmost bit.</td></tr>
+  </table>
+</div>
+
+<h3>Lab Q4: PISO (posted solution)</h3>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · piso.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> piso (</td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">input</span>            clk,</td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">input</span>            rst,</td><td class="n">Synchronous reset.</td></tr>
+    <tr><td class="c">    <span class="kw">input</span>            sh_ld,</td><td class="n">Mode select: "shift / load-bar". 1 = shift, 0 = load.</td></tr>
+    <tr><td class="c">    <span class="kw">input</span>      [<span class="num">3</span>:<span class="num">0</span>] d,</td><td class="n">Parallel data to load.</td></tr>
+    <tr><td class="c">    <span class="kw">output reg</span> [<span class="num">3</span>:<span class="num">0</span>] q,</td><td class="n">The 4 stored bits.</td></tr>
+    <tr><td class="c">    <span class="kw">output</span>           d_out</td><td class="n">Serial output.</td></tr>
+    <tr><td class="c">);</td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">assign</span> d_out = q[<span class="num">0</span>];</td><td class="n">LSB goes out.</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">always @(posedge</span> clk<span class="kw">) begin</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">if</span> (rst)</td><td class="n">Priority 1: reset.</td></tr>
+    <tr><td class="c">            q &lt;= <span class="num">4'b0000</span>;</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">else if</span> (!sh_ld)</td><td class="n"><code>!</code> means NOT. So this runs when sh_ld = <b>0</b>.</td></tr>
+    <tr><td class="c">            q &lt;= d;</td><td class="n">Load all 4 bits.</td></tr>
+    <tr><td class="c">        <span class="kw">else begin</span></td><td class="n">sh_ld = 1: shift right.</td></tr>
+    <tr><td class="c">            q[<span class="num">0</span>] &lt;= q[<span class="num">1</span>];</td><td class="n">Each bit takes the old value from its left neighbour.</td></tr>
+    <tr><td class="c">            q[<span class="num">1</span>] &lt;= q[<span class="num">2</span>];</td><td class="n"></td></tr>
+    <tr><td class="c">            q[<span class="num">2</span>] &lt;= q[<span class="num">3</span>];</td><td class="n"></td></tr>
+    <tr><td class="c">            q[<span class="num">3</span>] &lt;= <span class="num">1'b0</span>;</td><td class="n">A 0 enters on the left.</td></tr>
+    <tr><td class="c">        <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c">    <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="callout fix"><b>Slide correction: which value loads?</b>
+<p>The lab question says <b>load = 1 captures d</b> and load = 0 shifts. The posted solution does the opposite: it loads when <code>sh_ld = 0</code> (an active-low load) and shifts when <code>sh_ld = 1</code>. Both designs work; they just use opposite control values.</p>
+<p>To match the question exactly, change the load test to <code>else if (load) q &lt;= d;</code> (and rename the input <code>load</code>). With the posted code, your testbench must drive <code>sh_ld = 0</code> to load and <code>sh_ld = 1</code> to shift. Always state which convention you used in an exam answer.</p></div>
+
+<h3>PIPO</h3>
+<p>Parallel in, parallel out: exactly the Lab Q1 register with load. All bits go in on one edge and are all readable at once.</p>
+
+<h2>4. Bidirectional &amp; universal shift registers</h2>
+<ul>
+  <li><b>Bidirectional:</b> adds a direction input, so it can shift left <em>or</em> right.</li>
+  <li><b>Universal:</b> adds a 2-bit mode select that chooses one of four actions: <b>hold, shift left, shift right, parallel load</b>. Each flip-flop gets a 4:1 MUX in front of it (a bigger version of the load MUX above).</li>
+</ul>
+
+<h2>Common mistakes &amp; exam traps</h2>
+<div class="callout trap"><b>Slips that cost marks</b>
+<ul>
+  <li>Using <code>=</code> instead of <code>&lt;=</code> in a shift. With <code>=</code>, the line order matters and bits can be overwritten before they move.</li>
+  <li>Forgetting that <code>if (ld)</code> with no <code>else</code> means <b>hold</b>, not "clear".</li>
+  <li>Putting the load test before the reset test: reset must have top priority.</li>
+  <li>Mixing up shift direction: <code>{q[2:0], x}</code> shifts left; <code>{x, q[3:1]}</code> shifts right.</li>
+  <li>Getting the PISO output order wrong: with <code>sout = q[0]</code> and right shifts, the <b>LSB</b> goes first.</li>
+  <li>Driving the wrong <code>sh_ld</code> value in the Lab Q4 testbench (0 loads in the posted code).</li>
+</ul></div>
+
+<h2>Practice</h2>
+<div data-practice>
+  <details class="q"><summary>A 4-bit register with load holds 1010. ld = 0 and d = 0110. What is q after the edge?</summary><div class="a"><p>ld = 0 means hold: <b>q = 1010</b>.</p></div></details>
+  <details class="q"><summary>In Lab Q2, rst = 1 and ld = 1 at the same edge. What happens?</summary><div class="a"><p>rst is checked first, so <b>q = 00000000</b>. The load is ignored.</p></div></details>
+  <details class="q"><summary>A SIPO register (<code>q &lt;= {q[2:0], sin}</code>) starts at 0000. Shift in 1, 1, 0, 1. Show q after each edge.</summary><div class="a"><p>0001 → 0011 → 0110 → <b>1101</b>.</p></div></details>
+  <details class="q"><summary>A PISO loads 0110, then shifts right 4 times. What bits come out on sout = q[0]?</summary><div class="a"><p>q: 0110 → 0011 → 0001 → 0000. sout reads q[0] before each shift: <b>0, 1, 1, 0</b> (LSB first).</p></div></details>
+  <details class="q"><summary>How many clock edges does a 4-bit SISO need before the first input bit appears at serial_out?</summary><div class="a"><p><b>4 edges</b>: the bit must pass through q[0], q[1], q[2] and q[3].</p></div></details>
+  <details class="q"><summary>Why does shifting left multiply by 2?</summary><div class="a"><p>Every bit moves to a place worth twice as much, and a 0 enters at the right. Example: 0011 (3) → 0110 (6). (Bits shifted out of the top are lost.)</p></div></details>
+  <details class="q"><summary>Name the four actions of a universal shift register.</summary><div class="a"><p><b>Hold, shift left, shift right, parallel load</b>, chosen by a 2-bit mode select.</p></div></details>
+</div>
+
+<h2>Watch</h2>
+<div class="videos">
+  <a class="video" href="https://www.youtube.com/watch?v=NjMX4hohyRI" target="_blank" rel="noopener"><i class="play"></i><span><b>Lec - 48: Shift Registers | SISO, SIPO, PISO, PIPO</b><small>Gate Smashers</small></span></a>
+  <a class="video" href="https://www.youtube.com/watch?v=HGFGQ3D3iJ8" target="_blank" rel="noopener"><i class="play"></i><span><b>Shift Register (SIPO &amp; PIPO Mode)</b><small>Neso Academy</small></span></a>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

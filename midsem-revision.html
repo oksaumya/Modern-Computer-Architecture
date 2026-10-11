@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mid-Sem Revision Sheet</title>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+<style>
+  .lec { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--copper); border-radius: var(--radius); padding: 14px 16px; margin: 10px 0; }
+  .lec h3 { margin-top: 0; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .lec h3 .num { font: 700 12px/1 var(--mono); color: var(--copper); border: 1px solid var(--copper); border-radius: 999px; padding: 4px 7px; }
+  .lec .one { color: var(--ink); font-weight: 700; display: block; margin-bottom: 6px; }
+  .lec ul { margin: 0 0 8px; }
+  .lec li { font-size: 15.5px; }
+  .lec .trap { font-size: 14.5px; color: var(--red); }
+  .lec .more { font-size: 14px; }
+  .modbar { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; border-top: 2px solid var(--ink); padding-top: 10px; margin-top: 34px; }
+  .modbar b { font-family: var(--display); font-size: 20px; }
+  .modbar span { font-size: 14px; color: var(--ink-2); }
+  table.key td:first-child { font-family: var(--mono); white-space: nowrap; }
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="crumbs"><a href="index.html">CSA222 Notes</a> / Mid-sem revision</div>
+  <button class="theme-btn" type="button" data-theme-toggle>Dark mode</button>
+</div></header>
+
+<main>
+<section class="hero">
+  <div class="eyebrow">Mid-Semester Exam · Lectures 1–15 <span class="tag class">Quick revision</span></div>
+  <h1>Mid-sem revision sheet</h1>
+  <p class="idea">The whole mid-sem syllabus in short. One card per lecture: the one-line idea, the facts you must know, and the mistake that costs marks. Click any heading to open the full page.</p>
+  <div class="analogy"><b>How to use this:</b> read it straight through once (about 20 minutes). Anything that feels unfamiliar, open its full page. The night before, re-read only the <b>red trap lines</b> and the formula table at the bottom.</div>
+</section>
+
+<div class="modbar"><b>Module 1 · Digital Foundations</b><span>Lectures 1–4 · 0s and 1s become arithmetic</span></div>
+
+<div class="lec">
+  <h3><span class="num">L1</span><a href="m1-01-boolean-gates.html">Boolean algebra &amp; logic gates</a></h3>
+  <span class="one">Circuits are built from gates, and gates follow algebra you can simplify.</span>
+  <ul>
+    <li><b>Gates:</b> AND = both 1. OR = at least one 1. NOT = flip. <b>XOR = inputs differ.</b> NAND/NOR = AND/OR with the output flipped.</li>
+    <li><b>Universal gates:</b> NAND alone (or NOR alone) can build everything. NOT A = A NAND A.</li>
+    <li><b>Laws:</b> A+0=A · A·1=A · A+1=1 · A·0=0 · A+A'=1 · A·A'=0 · A+AB=A (absorption).</li>
+    <li><b>De Morgan:</b> (A·B)' = A'+B' ("not both") and (A+B)' = A'·B' ("neither"). <i>Break the bar, flip the sign.</i></li>
+    <li><b>Architecture vs organisation:</b> architecture = what the programmer sees (instructions); organisation = how it's built (pipeline, caches).</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> `+` is OR, not addition, so A+1 = 1. And OR ≠ XOR — check the row where both inputs are 1.</p>
+</div>
+
+<div class="lec">
+  <h3><span class="num">L2</span><a href="m1-02-logic-minimization.html">Logic minimisation &amp; universal gates</a></h3>
+  <span class="one">Fewer gates means less area, power, delay and cost — K-maps find the smallest circuit.</span>
+  <ul>
+    <li><b>SOP</b> uses the rows where F = 1: a 1 becomes X, a 0 becomes X'. <b>POS</b> uses the rows where F = 0 and flips that rule.</li>
+    <li><b>Shorthand:</b> F = Σm(1,3,5,7) = ΠM(0,2,4,6). The two lists are complements.</li>
+    <li><b>K-map:</b> columns run in Gray code 00, 01, <b>11, 10</b>. Group 1s in rectangles of 1, 2, 4 or 8. Bigger group = fewer letters. Groups may overlap, and edges wrap around (corners count).</li>
+    <li><b>Don't-care (X):</b> treat as 1 only when it makes a group bigger.</li>
+    <li><b>Prime implicant</b> = a group that can't grow. <b>Essential</b> = it's the only one covering some 1.</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> reading K-map columns in binary order (00, 01, 10, 11) instead of Gray code, and forgetting the four-corner group.</p>
+</div>
+
+<div class="lec">
+  <h3><span class="num">L3</span><a href="m1-03-mux-demux-decoder.html">Combinational building blocks</a> &amp; <a href="m1-04-adders.html">adders</a></h3>
+  <span class="one">Reusable blocks: choose a signal, route a signal, and add numbers.</span>
+  <ul>
+    <li><b>MUX</b> (many → one): 2ⁿ inputs need n select lines. 2:1 MUX: Y = S'A + SB. A 2ⁿ:1 MUX can implement <i>any</i> n-variable function — this is how FPGA lookup tables work.</li>
+    <li><b>DEMUX</b> (one → many) and <b>decoder</b> (code → one-hot). A decoder is a DEMUX whose data input is a constant 1. An n-to-2ⁿ decoder needs 2ⁿ AND gates, one per minterm.</li>
+    <li><b>Half adder:</b> Sum = A⊕B, Carry = A·B. No carry-in, so it can't be chained.</li>
+    <li><b>Full adder:</b> Sum = A⊕B⊕Cin, Cout = AB + Cin(A⊕B). Build from 2 half adders + OR.</li>
+    <li><b>Ripple-carry:</b> delay ≈ 2n gate delays (slow). <b>Carry look-ahead:</b> G = A·B (generate), P = A⊕B (propagate), c(i+1) = G + P·c(i) — all carries computed at once.</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> mixing up DEMUX and decoder, and wrong select count (an 8:1 MUX needs 3 selects, not 8).</p>
+</div>
+
+<div class="lec">
+  <h3><span class="num">L4</span><a href="m1-05-number-systems.html">Number systems &amp; two's complement</a> · <a href="m1-06-overflow.html">overflow</a></h3>
+  <span class="one">The same bits mean different numbers — the instruction decides, not the bits.</span>
+  <ul>
+    <li><b>Hex:</b> 1 digit = 4 bits. 0x2A = 0010 1010 = 42. <b>Powers of 2:</b> 2¹⁰ = 1024, 2²⁰ ≈ 1 million, 2³⁰ ≈ 1 billion.</li>
+    <li><b>Two's complement negate:</b> invert all bits, add 1. +18 = 00010010 → 11101110 = −18. It works both ways.</li>
+    <li><b>Read it:</b> the MSB has weight −2ⁿ⁻¹. <b>Range:</b> −2ⁿ⁻¹ … +2ⁿ⁻¹−1 (8-bit: −128…+127). Asymmetric: −128 has no positive twin.</li>
+    <li><b>Sign extension:</b> copy the sign bit, don't pad with zeros. −5 = 1011 → 11111011.</li>
+    <li><b>Subtract:</b> A − B = A + (~B) + 1.</li>
+    <li><b>Overflow:</b> signed <b>OF = C(into MSB) ⊕ C(out of MSB)</b>; unsigned <b>CF = carry-out</b>. Sign rule: (+)+(+) = (−) or (−)+(−) = (+) means overflow; mixed signs never overflow.</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> 10000000 is −128, not −0. And carry-out alone does <i>not</i> mean signed overflow.</p>
+</div>
+
+<div class="modbar"><b>Module 2 · Sequential Circuits &amp; Memory</b><span>Lectures 5–8 · circuits that remember</span></div>
+
+<div class="lec">
+  <h3><span class="num">L5</span><a href="m2-01-latches.html">Latches</a> · <a href="m2-02-flipflops-timing.html">flip-flops &amp; timing</a></h3>
+  <span class="one">A feedback loop turns a circuit into memory; a clock decides when it may change.</span>
+  <ul>
+    <li><b>Combinational</b> output = f(inputs now). <b>Sequential</b> output = f(inputs, past state). The difference is one feedback loop.</li>
+    <li><b>SR latch:</b> 00 hold, 10 set, 01 reset, <b>11 forbidden</b> (both outputs 0; releasing both causes a race, so the result is unpredictable).</li>
+    <li><b>D latch:</b> S = D·E, R = ~D·E, so the forbidden state can't happen. <b>Transparent</b> while E = 1.</li>
+    <li><b>D flip-flop:</b> samples D at the clock <i>edge</i> only, so glitches between edges are ignored. Built master-slave. Latch = level, flip-flop = edge.</li>
+    <li><b>Timing:</b> D must be steady t_setup before and t_hold after the edge. Breaking that risks <b>metastability</b> (output hovering between 0 and 1); fix with a 2–3 flip-flop synchroniser. It can be made rare, never impossible.</li>
+    <li><b>Max clock:</b> T ≥ t_cq + t_logic + t_setup; f_max = 1/T. (0.28 ns path + 0.05 ns setup → T ≥ 0.33 ns ≈ 3.03 GHz.)</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> in Verilog use <code>&lt;=</code> inside every <code>posedge</code> block, and declare the output <code>reg</code>.</p>
+</div>
+
+<div class="lec">
+  <h3><span class="num">L6</span><a href="m2-03-registers-shift.html">Registers &amp; shift registers</a> · <a href="m2-04-counters.html">counters</a></h3>
+  <span class="one">Put flip-flops side by side and you get words, shifting and counting.</span>
+  <ul>
+    <li><b>Register</b> = n flip-flops on one clock. <b>Load enable</b> = a 2:1 MUX per bit: load new data, or feed Q back to hold.</li>
+    <li><b>Shift registers:</b> SISO (delay), SIPO (serial→parallel, UART receive), PISO (parallel→serial, UART transmit), PIPO (plain register). Shift left = ×2, right = ÷2.</li>
+    <li><b>Ripple counter:</b> each flip-flop clocks the next. Cheap but briefly shows wrong values; f_max = 1/(n × t_pd).</li>
+    <li><b>Synchronous counter:</b> one shared clock, valid right after the edge. Rule: <b>a bit flips when all lower bits are 1</b> (T0 = 1, T1 = Q0, T2 = Q0·Q1).</li>
+    <li><b>Mod-N</b> needs ⌈log₂N⌉ flip-flops (mod-12 → 4). <b>Ring</b> counter = n states; <b>Johnson</b> = 2n states.</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> forgetting the reset, and resetting a down-counter to 0 instead of its maximum value.</p>
+</div>
+
+<div class="lec">
+  <h3><span class="num">L7</span><a href="m2-05-register-file.html">Register files</a> · <a href="m2-06-fsm.html">FSMs</a></h3>
+  <span class="one">A bank of registers the CPU reads twice and writes once per cycle, steered by a state machine.</span>
+  <ul>
+    <li><b>Register file:</b> 32 registers × 32 bits, <b>2 read ports + 1 write port</b>. Write = 5:32 decoder picks which, write-enable decides whether. Read = two 32:1 MUXes.</li>
+    <li><b>The key fact:</b> reads are <b>combinational</b> (no clock, instant); writes are <b>synchronous</b> (clock edge only). That's how `add R1,R2,R3` reads and writes in one cycle. $zero / x0 is hardwired to 0.</li>
+    <li><b>FSM</b> = states + transitions + outputs. Structure: next-state logic → state register → output logic.</li>
+    <li><b>Moore:</b> output depends on state only (written in the circle), glitch-free, often one extra state. <b>Mealy:</b> output depends on state + input (written on the arrow), reacts in the same cycle, fewer states.</li>
+    <li><b>Design flow:</b> diagram → state table → encode states → K-maps → flip-flops + logic.</li>
+    <li><b>1011 detector (overlapping):</b> after a match, go to the state for the prefix the trailing bits already give — not back to S0. Mealy needs 4 states, Moore 5.</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> N states need ⌈log₂N⌉ flip-flops, and mixing Moore notation (output in the circle) with Mealy (in/out on the arrow).</p>
+</div>
+
+<div class="lec">
+  <h3><span class="num">L8</span><a href="m2-07-sram-dram.html">SRAM vs DRAM &amp; the memory stack</a></h3>
+  <span class="one">Fast memory is small and costly; big memory is slow and cheap — so computers layer both.</span>
+  <ul>
+    <li><b>SRAM:</b> 6 transistors per bit (two cross-coupled inverters). Self-healing, no refresh, a few ns, non-destructive read, low density. Used for caches.</li>
+    <li><b>DRAM:</b> 1 transistor + 1 capacitor. ~6× denser and cheaper, 50–100 ns, <b>needs refresh</b> (charge leaks within ~64 ms) and every read is <b>destructive</b>, so the sense amplifier writes the value back. Used for main memory.</li>
+    <li><b>One line:</b> SRAM trades density for speed; DRAM trades speed for density.</li>
+    <li><b>Hierarchy:</b> registers → L1 → L2 → L3 → DRAM → SSD/disk. Each step is bigger, slower, cheaper.</li>
+    <li><b>Memory wall:</b> CPU speed grew far faster than DRAM latency, so memory is now the bottleneck.</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> saying SRAM needs refresh. It doesn't — it needs power. DRAM needs refresh.</p>
+</div>
+
+<div class="modbar"><b>Module 3 · Computer Organization &amp; ISA</b><span>Lectures 9–12 · the language the CPU speaks</span></div>
+
+<div class="lec">
+  <h3><span class="num">L9</span><a href="m3-01-von-neumann-harvard.html">Von Neumann vs Harvard</a></h3>
+  <span class="one">Instructions are stored in memory as numbers, just like data.</span>
+  <ul>
+    <li><b>Stored program (1945):</b> code and data live in the same memory, so a program can be loaded, compiled or generated at run time (that's also where whole classes of security exploits come from).</li>
+    <li><b>Von Neumann:</b> CPU + memory over <b>one shared bus</b>. Simple and flexible.</li>
+    <li><b>Bottleneck</b> (named by John Backus, 1977): instructions and data take turns on one bus, so the CPU waits. It gets worse as CPUs outpace memory.</li>
+    <li><b>Harvard:</b> separate instruction and data memories and buses, so fetch + data access happen in the same cycle — up to 2× throughput, at the cost of more wires and silicon. Used in DSPs and microcontrollers (Arduino's ATmega328).</li>
+    <li><b>Modified Harvard = your laptop:</b> split L1-I and L1-D caches inside the chip, one unified DRAM outside.</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> "up to 2×" is a ceiling, not a promise — only loads and stores use the data bus.</p>
+</div>
+
+<div class="lec">
+  <h3><span class="num">L10</span><a href="m3-02-cisc-risc-riscv.html">CISC vs RISC</a></h3>
+  <span class="one">Put the complexity in the hardware decoder, or in the compiler.</span>
+  <ul>
+    <li><b>CISC</b> (x86, VAX): variable-length instructions, one instruction can touch memory and compute, microcode, fewer instructions per program, hard to pipeline.</li>
+    <li><b>RISC</b> (MIPS, ARM, RISC-V): fixed 32-bit instructions, few formats, <b>load/store only</b> (arithmetic works on registers), many registers, easy to pipeline.</li>
+    <li><b>The trade:</b> CISC = fewer instructions but complex hardware; RISC = more instructions but simple, fast hardware and a smarter compiler.</li>
+    <li><b>Iron law:</b> time = instruction count × CPI × cycle time. CISC lowers the first term; RISC lowers the other two.</li>
+    <li><b>Modern reality:</b> x86 chips decode CISC instructions into RISC-like micro-ops internally, so the line has blurred. RISC-V is open and royalty-free, with modular extensions (RV64GC = base + general + compressed).</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> "RISC = fewer instructions" means fewer <i>kinds</i> of instruction, not a shorter program. The program usually has more instructions.</p>
+</div>
+
+<div class="lec">
+  <h3><span class="num">L11</span><a href="m3-03-mips-registers-formats.html">MIPS32 registers &amp; instruction formats</a></h3>
+  <span class="one">Every MIPS instruction is exactly 32 bits, in one of three shapes.</span>
+  <ul>
+    <li><b>32 registers:</b> $zero (always 0), $v0–$v1 (returns), $a0–$a3 (arguments), <b>$t0–$t9 (temporary — a called function may destroy these)</b>, <b>$s0–$s7 (saved — a called function must restore these)</b>, $sp (stack), $ra (return address).</li>
+    <li><b>R-format:</b> op(6) rs(5) rt(5) rd(5) shamt(5) funct(6) — op = 0, the funct field names the operation. For `add`, `sub`, `and`, `or`, `slt`.</li>
+    <li><b>I-format:</b> op(6) rs(5) rt(5) immediate(16) — for `addi`, `lw`, `sw`, `beq`, `bne`. The immediate is sign-extended.</li>
+    <li><b>J-format:</b> op(6) address(26) — for `j`, `jal`.</li>
+    <li><b>Memory:</b> byte-addressed, so words sit 4 apart and must be 4-aligned. `lw $t0, 4($t1)` means "load from address $t1 + 4".</li>
+    <li><b>Branch offset</b> counts <i>instructions</i> relative to PC+4, not bytes.</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> in R-format, the destination is <b>rd</b>; in I-format (including `lw`), the destination is <b>rt</b>.</p>
+</div>
+
+<div class="lec">
+  <h3><span class="num">L12</span><a href="m3-04-c-to-mips.html">C-to-MIPS translation</a> · <a href="m3-05-functions-stack.html">functions &amp; stack</a></h3>
+  <span class="one">Every C construct becomes a fixed pattern of MIPS instructions.</span>
+  <ul>
+    <li><b>if/else:</b> branch on the <b>opposite</b> condition to skip the "then" part, and put <code>j Exit</code> at its end. `if (i==j)` → <code>bne $t0,$t1,Else</code>.</li>
+    <li><b>Comparisons:</b> MIPS only has `beq`/`bne`, so `&lt;` uses <code>slt $t2,$t0,$t1</code> (set $t2 to 1 if less) then branch on $t2.</li>
+    <li><b>Loops:</b> a `for` is a `while`: test at the top, body, update, jump back. Check the exit test carefully for off-by-one.</li>
+    <li><b>Arrays:</b> address of A[i] = base + 4i, so <code>sll $t1,$i,2</code> then <code>add $t1,$t1,$base</code> then <code>lw</code>.</li>
+    <li><b>Calls:</b> <code>jal label</code> saves PC+4 into $ra and jumps; <code>jr $ra</code> returns. Arguments in $a0–$a3, results in $v0–$v1.</li>
+    <li><b>Stack</b> grows <b>down</b>: push = <code>addi $sp,$sp,-4</code> then <code>sw</code>; pop = <code>lw</code> then <code>addi $sp,$sp,4</code>. A <b>leaf</b> function calls nobody and may skip the frame; a <b>non-leaf</b> must save $ra, or the recursive call overwrites the way home.</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> a non-leaf function that forgets to save and restore $ra loops forever. Also, $t registers are not preserved across a call.</p>
+</div>
+
+<div class="modbar"><b>Module 4 · CPU Datapath &amp; Pipelining</b><span>Lectures 13–15 · how it actually runs</span></div>
+
+<div class="lec">
+  <h3><span class="num">L13</span><a href="m4-01-single-cycle-datapath.html">Fetch-decode-execute &amp; the single-cycle datapath</a></h3>
+  <span class="one">Wire the parts together and an instruction flows through in one clock cycle.</span>
+  <ul>
+    <li><b>Cycle:</b> fetch (PC → instruction memory, PC = PC + 4) → decode (read registers, read fields) → execute (ALU) → memory (load/store) → write back.</li>
+    <li><b>Parts:</b> PC, instruction memory, register file, sign extender, ALU, data memory, and MUXes.</li>
+    <li><b>Control signals:</b> RegDst, RegWrite, ALUSrc, ALUOp, MemRead, MemWrite, MemtoReg, Branch. <b>PCSrc = Branch AND Zero.</b></li>
+    <li><b>Per instruction:</b> R-type uses the ALU and writes a register; `lw` uses every stage (longest); `sw` doesn't write a register; `beq` uses the ALU to subtract and checks Zero.</li>
+    <li><b>Clock period = the slowest instruction</b> (`lw`, about 800 ps in the textbook model), so faster instructions waste time. That's the reason to pipeline.</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> the clock is set by the <i>worst-case</i> path, not the average instruction.</p>
+</div>
+
+<div class="lec">
+  <h3><span class="num">L14</span><a href="m4-02-pipeline-5-stage.html">Pipelining: the 5-stage MIPS pipeline</a></h3>
+  <span class="one">Overlap instructions like a laundry line: same time each, far more finished per hour.</span>
+  <ul>
+    <li><b>Stages:</b> IF → ID → EX → MEM → WB, separated by pipeline registers (IF/ID, ID/EX, EX/MEM, MEM/WB).</li>
+    <li><b>Throughput improves; latency does not.</b> One instruction still takes 5 stages — more of them just finish per second.</li>
+    <li><b>Timing:</b> n instructions on a k-stage pipeline take <b>(k + n − 1) × stage time</b>. 3 loads: 2400 ps single-cycle vs 1400 ps pipelined.</li>
+    <li><b>Ideal speedup</b> ≈ number of stages, but only if the stages are balanced; the stage time is the <i>slowest</i> stage plus register overhead.</li>
+    <li><b>Why RISC pipelines well:</b> fixed-length instructions, few formats, memory touched only by load/store.</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> don't compute pipelined time as n × stage time — the pipeline has to fill first: (k + n − 1).</p>
+</div>
+
+<div class="lec">
+  <h3><span class="num">L15</span><a href="m4-03-hazards-forwarding.html">Hazards, forwarding &amp; scheduling</a></h3>
+  <span class="one">Overlapping breaks when an instruction needs something that isn't ready yet.</span>
+  <ul>
+    <li><b>Three kinds:</b> structural (two instructions want the same hardware), data (a value isn't ready), control (a branch isn't resolved yet).</li>
+    <li><b>Dependency names:</b> <b>RAW</b> (read after write) = the true dependency; <b>WAR</b> (write after read) and <b>WAW</b> (write after write) are name clashes fixed by renaming. <b>In an in-order pipeline, only RAW causes hazards.</b></li>
+    <li><b>Stall (bubble):</b> freeze the earlier stages and insert a NOP. Correct, but slow.</li>
+    <li><b>Forwarding:</b> the ALU result already exists in EX/MEM or MEM/WB, so route it straight back to the ALU input instead of waiting for write-back. Removes most RAW stalls.</li>
+    <li><b>Load-use hazard:</b> the one forwarding can't fully fix — a loaded value isn't ready until after MEM, so you need <b>1 stall</b>, then forward.</li>
+    <li><b>Compiler scheduling:</b> reorder independent instructions into the stall slot (the textbook example drops 13 cycles to 11).</li>
+    <li><b>Control hazards:</b> flush wrongly fetched instructions; deciding the branch in ID cuts the penalty to 1 cycle; predict with a 2-bit saturating counter so a loop mispredicts only once.</li>
+  </ul>
+  <p class="trap"><b>Trap:</b> "forwarding removes all stalls" is false — load-use still costs one cycle.</p>
+</div>
+
+<h2>Formulas to memorise</h2>
+<div class="scroll"><table class="key">
+  <tr><th>Formula</th><th>Meaning</th></tr>
+  <tr><td>Sum = A⊕B⊕Cin<br>Cout = AB + Cin(A⊕B)</td><td>Full adder</td></tr>
+  <tr><td>G = A·B, P = A⊕B<br>c(i+1) = G + P·c(i)</td><td>Carry look-ahead</td></tr>
+  <tr><td>OF = C_in(MSB) ⊕ C_out(MSB)</td><td>Signed overflow (unsigned: CF = carry-out)</td></tr>
+  <tr><td>−2ⁿ⁻¹ … +2ⁿ⁻¹−1</td><td>Two's complement range</td></tr>
+  <tr><td>T ≥ t_cq + t_logic + t_setup</td><td>Minimum clock period; f_max = 1/T</td></tr>
+  <tr><td>⌈log₂N⌉</td><td>Flip-flops for N states / mod-N counter</td></tr>
+  <tr><td>address(A[i]) = base + 4i</td><td>Word array indexing in MIPS</td></tr>
+  <tr><td>PCSrc = Branch AND Zero</td><td>Branch taken in the datapath</td></tr>
+  <tr><td>(k + n − 1) × stage time</td><td>n instructions, k-stage pipeline</td></tr>
+  <tr><td>time = IC × CPI × cycle time</td><td>Iron law of performance</td></tr>
+</table></div>
+
+<h2>Quick self-test</h2>
+<div data-practice>
+  <details class="q"><summary>Simplify A + A'B.</summary><div class="a"><p><b>A + B.</b> By the distributive law, A + A'B = (A+A')(A+B) = 1·(A+B).</p></div></details>
+  <details class="q"><summary>Write −45 as an 8-bit two's complement number.</summary><div class="a"><p>45 = 00101101 → invert = 11010010 → +1 = <b>11010011</b>.</p></div></details>
+  <details class="q"><summary>4-bit: 0111 + 0001. Any overflow?</summary><div class="a"><p>Result <code>1000</code>. Unsigned 7+1 = 8 is fine (CF = 0). Signed +7+1 should be +8, but 1000 reads as −8, so <b>OF = 1</b>. Carry into the MSB is 1, carry out is 0.</p></div></details>
+  <details class="q"><summary>Why are register-file reads combinational but writes clocked?</summary><div class="a"><p>So one instruction can read two registers and write a third in a single cycle. Reads appear after a gate delay; the write lands on the clock edge, which avoids races and half-written values.</p></div></details>
+  <details class="q"><summary>Why does a Moore 1011 detector need one more state than the Mealy version?</summary><div class="a"><p>A Moore output belongs to a state, so "match" needs its own state (5). A Mealy machine can put the 1 on the arrow, so 4 states are enough.</p></div></details>
+  <details class="q"><summary>Which memory needs refreshing, and why?</summary><div class="a"><p><b>DRAM.</b> Each bit is charge on a capacitor, which leaks within about 64 ms, so the controller rewrites every row. SRAM holds its bit in a latch and only needs power.</p></div></details>
+  <details class="q"><summary>Encode `add $t0, $t1, $t2` as R-format fields.</summary><div class="a"><p>op = 0, rs = $t1 = 9, rt = $t2 = 10, rd = $t0 = 8, shamt = 0, funct = 32 (0x20) → <code>000000 01001 01010 01000 00000 100000</code> = <b>0x012A4020</b>.</p></div></details>
+  <details class="q"><summary>Translate: <code>if (i == j) f = g + h; else f = g - h;</code></summary><div class="a"><pre class="plain" style="background:var(--code-bg);border-radius:var(--radius)">      bne  $s3, $s4, Else   # branch on the OPPOSITE test
+      add  $s0, $s1, $s2
+      j    Exit
+Else: sub  $s0, $s1, $s2
+Exit:</pre></div></details>
+  <details class="q"><summary>How long do 5 instructions take on a 5-stage pipeline with a 200 ps stage?</summary><div class="a"><p>(5 + 5 − 1) × 200 = <b>1800 ps</b>.</p></div></details>
+  <details class="q"><summary>Which hazard can forwarding not remove, and what does it cost?</summary><div class="a"><p>The <b>load-use</b> hazard: <code>lw $2,0($1)</code> followed by an instruction using $2. The data arrives only after MEM, so it costs <b>1 stall</b>, then forwarding handles the rest. Reordering an independent instruction into that slot removes the stall.</p></div></details>
+</div>
+
+<nav class="pager" data-pager></nav>
+</main>
+</body>
+</html>

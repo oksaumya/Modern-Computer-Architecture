@@ -15,21 +15,35 @@
 
 <main>
 <section class="hero">
-  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag book">From syllabus · textbook-based</span></div>
-  <h1>C to MIPS: arithmetic, arrays, if-else and loops</h1>
-  <p class="idea">A compiler turns each line of a high-level language (like C) into a few simple MIPS instructions. There are only a handful of patterns to learn: <b>maths → register ops</b>, <b>array element → shift, add, load</b>, <b>if → branch on the opposite condition</b>, <b>loop → branch at the top, jump back at the bottom</b>.</p>
+  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag class">From class notes · L12 + Lab 12 + Lab 13</span></div>
+  <h1>C to MIPS: conditionals, loops and arrays</h1>
+  <p class="idea">A compiler turns each line of a high-level language (like C) into a few simple MIPS instructions. L12 calls it <b>the translation mindset</b>: variables become registers, structure becomes labels and branches, and conditions become <b>compare&nbsp;+&nbsp;branch</b>. One trick runs through everything — <b>branch AWAY on the opposite condition</b>.</p>
   <div class="analogy"><b>Think of it like this:</b> a recipe says "if the dough is sticky, add flour; otherwise, knead". A very literal helper can only do "go to step N" and "if X, go to step N". So you rewrite the recipe: "Step 1: if the dough is <em>not</em> sticky, go to step 3. Step 2: add flour, go to step 4. Step 3: knead. Step 4: …". That rewrite is exactly what translating C into MIPS is.</div>
 </section>
+
+<div class="callout tip"><b>What is on this page, and where it comes from</b>
+<ul>
+  <li><b>Lecture 12 — C to MIPS Translation:</b> the translation mindset, the branch toolkit, if / if-else, the <code>slt</code> idiom, <code>while</code> and <code>for</code>.</li>
+  <li><b>Lab 12 — Memory &amp; Arrays:</b> everything about arrays, the counted loop, reading input, the running maximum, and three portal problems with full solutions.</li>
+  <li><b>Lab 13 — Branching &amp; Loops:</b> every comparison, else-if chains, <code>&amp;&amp;</code> / <code>||</code>, loop shapes and their cost, <code>mult</code>/<code>mflo</code> and overflow, and four portal problems with full solutions.</li>
+  <li>Section 3 of L12 (the calling convention, <code>jal</code>/<code>jr</code>, stack frames, recursive factorial) and Lab 14 live on the next page: <a href="m3-05-functions-stack.html">Functions, stack &amp; recursion</a>.</li>
+</ul></div>
 
 <h2>Key terms</h2>
 <dl class="terms">
   <div class="term"><dt>Variable</dt><dd>A named box that holds a value, e.g. <code>i</code>. In MIPS we keep it in a register.</dd></div>
-  <div class="term"><dt>Label</dt><dd>A name followed by a colon, like <code>Loop:</code>. It marks an address that branches and jumps can go to.</dd></div>
+  <div class="term"><dt>Label</dt><dd>A name followed by a colon, like <code>loop:</code>. It marks an address that branches and jumps can go to.</dd></div>
   <div class="term"><dt>Branch</dt><dd>A <b>conditional</b> go-to: <code>beq</code> (go if equal) or <code>bne</code> (go if not equal).</dd></div>
   <div class="term"><dt>Jump</dt><dd>An <b>unconditional</b> go-to: <code>j Label</code> always goes.</dd></div>
   <div class="term"><dt>Fall through</dt><dd>When a branch is not taken, the CPU simply runs the next line.</dd></div>
-  <div class="term"><dt>Base address</dt><dd>The memory address of an array's first element, <code>A[0]</code>.</dd></div>
-  <div class="term"><dt>Offset</dt><dd>How many bytes past the base address to look. For <code>A[i]</code> it is 4 × i.</dd></div>
+  <div class="term"><dt>Base address</dt><dd>The memory address of an array's first element, <code>arr[0]</code>. <code>la</code> puts it in a register.</dd></div>
+  <div class="term"><dt>Offset</dt><dd>How many bytes past the base address to look. For <code>arr[i]</code> it is 4&nbsp;×&nbsp;i.</dd></div>
+  <div class="term"><dt>Stride</dt><dd>How far apart consecutive elements are. 4 bytes for a word array, 1 byte for a byte array.</dd></div>
+  <div class="term"><dt>Accumulator</dt><dd>The one register the loop builds up: a sum, a count, a product, a running best.</dd></div>
+  <div class="term"><dt>Identity</dt><dd>The value an accumulator must start at: <b>0</b> for a sum, <b>1</b> for a product, <b>arr[0]</b> for a maximum.</dd></div>
+  <div class="term"><dt>Sentinel</dt><dd>A special input value (usually 0) that means "stop reading".</dd></div>
+  <div class="term"><dt>Pseudo-instruction</dt><dd>Something the assembler accepts but the hardware does not have, e.g. <code>blt</code>, <code>li</code>, <code>move</code>. MARS expands each into real instructions.</dd></div>
+  <div class="term"><dt>HI / LO</dt><dd>Two extra registers that <code>mult</code> and <code>div</code> write. <code>mflo</code> and <code>mfhi</code> copy them into a normal register.</dd></div>
   <div class="term"><dt>Syscall</dt><dd>A request to the system (MARS) to do I/O, e.g. print a number. The request number goes in <code>$v0</code>.</dd></div>
 </dl>
 
@@ -37,23 +51,112 @@
 <p>C is a programming language. You don't need to write C. You only need to <b>read</b> these few pieces, so you can translate them.</p>
 <div class="scroll"><table>
   <tr><th>C code</th><th>Plain English</th><th>MIPS idea</th></tr>
-  <tr><td><code>int f;</code></td><td>"Make a box called <code>f</code> that holds a whole number (an <b>int</b>eger)." In MIPS an int is 32 bits.</td><td>Pick a register for f, e.g. <code>$s0</code></td></tr>
-  <tr><td><code>f = g + h;</code></td><td>"Work out g + h and put the answer into f." A single <code>=</code> means <b>store into</b>. The <code>;</code> just ends the line.</td><td><code>add $s0, $s1, $s2</code></td></tr>
-  <tr><td><code>i == j</code></td><td>"Is i equal to j?" Double <code>==</code> means <b>compare</b>; it gives yes or no.</td><td><code>beq</code> / <code>bne</code></td></tr>
-  <tr><td><code>i != j</code>, <code>i &lt; j</code></td><td>"Is i not equal to j?" / "Is i less than j?"</td><td><code>bne</code> / <code>slt</code></td></tr>
-  <tr><td><code>i += 1;</code> or <code>i++</code></td><td>"Add 1 to i." (Short for <code>i = i + 1</code>.)</td><td><code>addi $s3, $s3, 1</code></td></tr>
+  <tr><td><code>int c;</code></td><td>"Make a box called <code>c</code> that holds a whole number (an <b>int</b>eger)." In MIPS an int is 32 bits.</td><td>Pick a register for c, e.g. <code>$t2</code></td></tr>
+  <tr><td><code>c = a + b;</code></td><td>"Work out a + b and put the answer into c." A single <code>=</code> means <b>store into</b>. The <code>;</code> just ends the line.</td><td><code>add $t2, $t0, $t1</code></td></tr>
+  <tr><td><code>a == b</code></td><td>"Is a equal to b?" Double <code>==</code> means <b>compare</b>; it gives true or false.</td><td><code>beq</code> / <code>bne</code></td></tr>
+  <tr><td><code>a != b</code>, <code>a &lt; b</code></td><td>"Is a not equal to b?" / "Is a less than b?"</td><td><code>bne</code> / <code>slt</code></td></tr>
+  <tr><td><code>i += 1;</code> or <code>i++</code></td><td>"Add 1 to i." (Short for <code>i = i + 1</code>.) <code>i--</code> subtracts 1.</td><td><code>addi $t3, $t3, 1</code></td></tr>
+  <tr><td><code>sum += arr[i];</code></td><td>"Add element i of arr onto sum."</td><td><code>lw</code> then <code>add</code></td></tr>
   <tr><td><code>if (cond) X; else Y;</code></td><td>"If cond is true, do X. Otherwise, do Y." Only one of them runs.</td><td>branch + jump</td></tr>
+  <tr><td><code>A &amp;&amp; B</code></td><td>"<b>A and B</b> — both must be true."</td><td>two branches to the same skip label</td></tr>
+  <tr><td><code>A || B</code></td><td>"<b>A or B</b> — at least one must be true."</td><td>one branch into the block, one out</td></tr>
   <tr><td><code>while (cond) X;</code></td><td>"Check cond. If true, do X and check again. Stop when it becomes false." (Maybe zero times.)</td><td>loop with branch + jump back</td></tr>
+  <tr><td><code>do X; while (cond);</code></td><td>"Do X, then check cond; repeat while true." The body always runs <b>at least once</b>.</td><td>test at the bottom</td></tr>
   <tr><td><code>for (i = 0; i &lt; n; i++) X;</code></td><td>"Start i at 0. Repeat while i is less than n: do X, then add 1 to i."</td><td>a while loop</td></tr>
-  <tr><td><code>A[i]</code></td><td>"Element number i of the list (array) A." Counting starts at 0: <code>A[0]</code> is the first.</td><td><code>sll</code>, <code>add</code>, <code>lw</code></td></tr>
-  <tr><td><code>int sum(int a, int b) { return a + b; }</code></td><td>"A reusable mini-program called sum. It takes two ints a and b, and hands back (<b>returns</b>) a + b." The <code>{ }</code> group lines together.</td><td><code>jal</code> / <code>jr $ra</code> (<a href="m3-05-functions-stack.html">next page</a>)</td></tr>
+  <tr><td><code>arr[i]</code></td><td>"Element number i of the list (array) arr." Counting starts at 0: <code>arr[0]</code> is the first.</td><td><code>sll</code>, <code>add</code>, <code>lw</code></td></tr>
+  <tr><td><code>continue;</code> / <code>break;</code></td><td>"Skip to the next round of the loop" / "leave the loop now".</td><td><code>b next</code> / <code>b done</code></td></tr>
+  <tr><td><code>{ }</code></td><td>Braces group several lines into one block. <code>//</code> and <code>/* */</code> are comments.</td><td><code>#</code> is the MIPS comment</td></tr>
+  <tr><td><code>int sum(int a, int b) { return a + b; }</code></td><td>"A reusable mini-program called sum. It takes two ints a and b, and hands back (<b>returns</b>) a + b."</td><td><code>jal</code> / <code>jr $ra</code> (<a href="m3-05-functions-stack.html">next page</a>)</td></tr>
 </table></div>
 
 <h3>Registers we will use</h3>
-<p>By convention, C variables go in the <b>saved registers</b> <code>$s0</code>–<code>$s7</code>, and scratch results go in the <b>temporaries</b> <code>$t0</code>–<code>$t9</code>. <code>$zero</code> always holds 0. Full table: <a href="m3-03-mips-registers-formats.html">MIPS registers &amp; formats</a>.</p>
+<p>The lectures put variables in <b>temporaries</b> <code>$t0</code>–<code>$t9</code> (L12 uses <code>$t0=a</code>, <code>$t1=b</code>, <code>$t2=c</code>). Lab 12 goes further and fixes a <b>register plan</b> that every array program on this page follows:</p>
+<div class="scroll"><table>
+  <tr><th>Register</th><th>Role</th><th>Why</th></tr>
+  <tr><td><code>$t0</code></td><td>base, then the walking pointer</td><td><code>la</code> once; <code>addi $t0, $t0, 4</code> per pass</td></tr>
+  <tr><td><code>$t1</code></td><td><code>n</code>, the element count</td><td>the loop bound; from <code>lw n</code> or <code>syscall 5</code></td></tr>
+  <tr><td><code>$t2</code></td><td>accumulator / count / max</td><td>the one value the loop produces</td></tr>
+  <tr><td><code>$t3</code></td><td><code>i</code>, the counter</td><td>compared with <code>$t1</code> at the top</td></tr>
+  <tr><td><code>$t4</code></td><td>the loaded element</td><td><code>lw $t4, 0($t0)</code></td></tr>
+  <tr><td><code>$t5</code></td><td>scratch address</td><td>second pointer, or <code>sll</code>/<code>add</code> result</td></tr>
+  <tr><td><code>$v0</code>, <code>$a0</code></td><td>syscall only</td><td>overwritten by <i>every</i> syscall setup</td></tr>
+</table></div>
+<p class="idea">Naming the roles first (base, n, accumulator, i) makes every array program the <b>same program</b>. Textbook examples often use the saved registers <code>$s0</code>–<code>$s7</code> instead; both are fine, and the full table is on <a href="m3-03-mips-registers-formats.html">MIPS registers &amp; formats</a>.</p>
 
-<h2>1. Arithmetic</h2>
-<p><b>C:</b> <code>f = (g + h) - (i + j);</code> → "add g and h; add i and j; subtract the second from the first; store the result in f."<br>Variables f, g, h, i, j are in <code>$s0, $s1, $s2, $s3, $s4</code>.</p>
+<h2>1. The translation mindset</h2>
+<p>L12, slide 4. High-level code is <b>structured</b>; assembly is <b>flat</b>. Translation means flattening structure into labels and branches.</p>
+<ol class="flow arrows">
+  <li><b>Variables → registers</b>Each active C variable lives in a register (<code>$t</code>/<code>$s</code>). The compiler assigns them.</li>
+  <li><b>Structure → labels + branches</b><code>if</code>, <code>else</code>, loop bodies become labelled blocks; control flow becomes jumps between them.</li>
+  <li><b>Conditions → compare + branch</b>A test like <code>a &gt; b</code> becomes "set a flag, then branch on it" — usually <code>slt</code> then <code>bne</code>.</li>
+  <li><b>Reverse the condition</b><code>if (cond) do X</code> → "if NOT cond, skip X". You branch <b>AWAY</b> on the opposite test.</li>
+</ol>
+<div class="callout tip"><b>Keep "reverse the condition" in mind</b><p>It is the trick behind almost every <code>if</code> and loop translation on this page. The code you want to run sits <i>right after</i> the branch, so you want to <b>fall through</b> when the condition holds, and <b>branch away</b> when it fails.</p></div>
+
+<h2>2. The branch toolkit</h2>
+<p>MIPS keeps it minimal: <b>two branches and one set-less-than</b>. Everything else is built from these.</p>
+<div class="scroll"><table>
+  <tr><th>Instruction</th><th>What it does</th><th>Real?</th></tr>
+  <tr><td><code>beq $a, $b, L</code></td><td>Branch to L if <code>$a == $b</code> (branch if equal).</td><td>real</td></tr>
+  <tr><td><code>bne $a, $b, L</code></td><td>Branch to L if <code>$a != $b</code> (branch if not equal).</td><td>real</td></tr>
+  <tr><td><code>slt $d, $a, $b</code></td><td>Set <code>$d = 1</code> if <code>$a &lt; $b</code>, else 0 (set-less-than). It does <b>not</b> branch.</td><td>real</td></tr>
+  <tr><td><code>j L</code></td><td>Unconditional jump to label L.</td><td>real</td></tr>
+  <tr><td><code>b L</code></td><td>Branch always. The assembler writes <code>beq $zero, $zero, L</code>.</td><td>pseudo</td></tr>
+</table></div>
+<div class="callout tip"><b>There is no "branch if less-than" instruction</b><p>You build it: <code>slt</code> to set a flag, then <code>bne</code> (or <code>beq</code>) against <code>$zero</code>.</p></div>
+
+<h3>Every comparison, written out (Lab 13, slide 7)</h3>
+<p>This table is the one to memorise. The left column is the condition you want to branch <b>on</b>; the middle column is what MARS actually assembles.</p>
+<div class="scroll"><table>
+  <tr><th>Branch if…</th><th>Real instructions</th><th>Pseudo name</th></tr>
+  <tr><td><code>a == b</code></td><td><code>beq a, b, L</code></td><td>1 instruction</td></tr>
+  <tr><td><code>a != b</code></td><td><code>bne a, b, L</code></td><td>1 instruction</td></tr>
+  <tr><td><code>a &lt; b</code></td><td><code>slt $at, a, b</code> ; <code>bne $at, $zero, L</code></td><td><code>blt</code></td></tr>
+  <tr><td><code>a &gt;= b</code></td><td><code>slt $at, a, b</code> ; <code>beq $at, $zero, L</code></td><td><code>bge</code></td></tr>
+  <tr><td><code>a &gt; b</code></td><td><code>slt $at, b, a</code> ; <code>bne $at, $zero, L</code></td><td><code>bgt</code></td></tr>
+  <tr><td><code>a &lt;= b</code></td><td><code>slt $at, b, a</code> ; <code>beq $at, $zero, L</code></td><td><code>ble</code></td></tr>
+  <tr><td><code>a &lt; 5</code></td><td><code>slti $at, a, 5</code> ; <code>bne $at, $zero, L</code></td><td>immediate form</td></tr>
+  <tr><td><code>a == 0</code></td><td><code>beq a, $zero, L</code></td><td><code>$zero</code> is free</td></tr>
+</table></div>
+<p><b>Two shapes cover everything.</b> <i>Equality:</i> <code>beq</code>/<code>bne</code> compare two registers directly. <i>Order:</i> <code>slt</code> writes 1 or 0 into a register; <code>beq</code>/<code>bne</code> then test that register against <code>$zero</code>.</p>
+<div class="formula">The polarity decides the branch<small><code>bne $at, $zero, L</code> jumps when the condition <b>holds</b>. <code>beq $at, $zero, L</code> jumps when it <b>fails</b>. Loops branch out on the failing test.</small></div>
+<div class="callout trap"><b>Two things to notice about <code>$at</code></b>
+<ul>
+  <li><b><code>bge</code> costs two real instructions.</b> Count them when you count cycles, and expand them when an exam asks for "real MIPS instructions". MARS's Text Segment pane shows you exactly the expansion.</li>
+  <li><b><code>$at</code> is the assembler's own scratch register.</b> Every pseudo-branch clobbers it. So do not keep your own value in <code>$at</code> — use <code>$t8</code>/<code>$t9</code> if you need another temporary.</li>
+</ul></div>
+
+<h3>Signed vs unsigned: <code>slt</code> and <code>sltu</code> disagree on the same bits</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · same bits, two readings</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">li</span>   $t0, <span class="num">-1</span></td><td class="n">$t0 = 0xFFFFFFFF (all 32 bits set).</td></tr>
+    <tr><td class="c"><span class="kw">li</span>   $t1, <span class="num">1</span></td><td class="n">$t1 = 1.</td></tr>
+    <tr><td class="c"><span class="kw">slt</span>  $t2, $t0, $t1</td><td class="n">Signed: is −1 &lt; 1? Yes → $t2 = <b>1</b>.</td></tr>
+    <tr><td class="c"><span class="kw">sltu</span> $t3, $t0, $t1</td><td class="n">Unsigned: is 4,294,967,295 &lt; 1? No → $t3 = <b>0</b>.</td></tr>
+  </table>
+</div>
+<div class="scroll"><table>
+  <tr><th>Bit pattern</th><th>signed value</th><th>unsigned value</th></tr>
+  <tr><td><code>0x00000001</code></td><td>1</td><td>1</td></tr>
+  <tr><td><code>0x7FFFFFFF</code></td><td>2,147,483,647</td><td>2,147,483,647</td></tr>
+  <tr><td><code>0x80000000</code></td><td>−2,147,483,648</td><td>2,147,483,648</td></tr>
+  <tr><td><code>0xFFFFFFFF</code></td><td>−1</td><td>4,294,967,295</td></tr>
+</table></div>
+<p><code>slt</code> treats bit 31 as a <b>sign</b>; <code>sltu</code> treats it as a big magnitude bit. Use <code>sltu</code> for <b>addresses and lengths</b>, <code>slt</code> for <b>int values</b>. The pseudo-branches <code>blt</code>/<code>bge</code>/<code>bgt</code>/<code>ble</code> are all signed.</p>
+
+<h3>What a branch looks like in bits</h3>
+<p>A branch stores a <b>relative</b> offset, not an address. Lab 12 and Lab 13 use the same Sheet-K formula:</p>
+<div class="formula">BTA = PC + 4 + signext(imm) × 4<small>The 16-bit field counts <b>instructions</b>, measured from the instruction <i>after</i> the branch.</small></div>
+<div class="vs">
+  <div><h3>Forward (Lab 12)</h3><p><code>0x00400020: beq $t0, $t1, skip</code><br><code>skip</code> is at <code>0x0040002C</code>.<br>0x0040002C − 0x00400024 = 8 bytes = <b>imm 2</b>.<br>Encoding: <code>0x11090002</code>.</p></div>
+  <div><h3>Backward (Lab 13)</h3><p><code>0x00400030: bne $t0, $t5, loop</code><br><code>loop</code> is at <code>0x00400020</code>.<br>0x00400020 − 0x00400034 = −20 bytes = <b>imm −5</b> = <code>0xFFFB</code>.<br>Encoding: <code>0x150DFFFB</code>.</p></div>
+</div>
+<p>Same 16-bit field, +2 one way and −5 the other. It is sign-extended, then multiplied by 4. <b>Every loop's closing branch is a negative number.</b> Reach: 16-bit signed × 4 ≈ ±128&nbsp;KiB for branches; <code>j</code> keeps 26 bits, a 256&nbsp;MiB region.</p>
+
+<h2>3. Arithmetic (recap)</h2>
+<p><span class="tag book">Textbook support</span> Not re-taught in L12, but you need it for everything below.</p>
+<p><b>C:</b> <code>f = (g + h) - (i + j);</code> → "add g and h; add i and j; subtract the second from the first; store the result in f."<br>Here f, g, h, i, j are in <code>$s0, $s1, $s2, $s3, $s4</code>.</p>
 <div class="code">
   <div class="code-head"><span><b>mips</b> · arithmetic</span><span>code → what it means</span></div>
   <table class="ann">
@@ -65,167 +168,915 @@
 <p>Check with g = 10, h = 7, i = 4, j = 2: (10 + 7) − (4 + 2) = <b>11</b>. MARS prints 11.</p>
 <p>Adding a constant uses <code>addi</code>: <code>f = g + 5;</code> → <code>addi $s0, $s1, 5</code>. There is no <code>subi</code>; use a negative constant: <code>addi $s0, $s1, -5</code>.</p>
 
-<h2>2. Arrays</h2>
-<h3>Constant index: <code>A[8]</code></h3>
-<p>Each int is 4 bytes, so <code>A[8]</code> is <b>8 × 4 = 32 bytes</b> after the start. The base address of A is in <code>$s3</code>.</p>
-<p><b>C:</b> <code>g = h + A[8];</code> → "take element 8 of A, add h, store in g". (g in <code>$s1</code>, h in <code>$s2</code>.)</p>
+<h2>4. if and if / else</h2>
+<h3>A one-sided <code>if</code> (L12, slide 7)</h3>
+<p><b>C:</b> <code>if (a == b) { c = a + b; }</code> → "If a equals b, set c to a + b. Then carry on either way."<br>L12's register assumption: <code>$t0 = a</code>, <code>$t1 = b</code>, <code>$t2 = c</code>.</p>
 <div class="code">
-  <div class="code-head"><span><b>mips</b> · g = h + A[8]</span><span>code → what it means</span></div>
+  <div class="code-head"><span><b>mips</b> · if (a == b) c = a + b;</span><span>code → what it means</span></div>
   <table class="ann">
-    <tr><td class="c"><span class="kw">lw</span>  $t0, <span class="num">32</span>($s3)</td><td class="n">Load word: $t0 = memory[$s3 + 32] = A[8]. Maths can't use memory directly, so load it first.</td></tr>
-    <tr><td class="c"><span class="kw">add</span> $s1, $s2, $t0</td><td class="n">g = h + A[8]</td></tr>
+    <tr><td class="c">      <span class="kw">bne</span> $t0, $t1, Skip</td><td class="n">C says "if EQUAL, do the body". MIPS says "if NOT equal, <b>skip</b> the body". Reversed condition, same result.</td></tr>
+    <tr><td class="c">      <span class="kw">add</span> $t2, $t0, $t1</td><td class="n">The body. We only reach it by falling through, i.e. when a == b.</td></tr>
+    <tr><td class="c">Skip: <span class="com"># continue…</span></td><td class="n">Both paths meet here. <code>#</code> starts a comment in MIPS.</td></tr>
   </table>
 </div>
-<p><b>C:</b> <code>A[12] = h + A[8];</code> → "work out h + A[8] and store it into element 12".</p>
+<p><b>Verified:</b> a = b = 7 → c = 14. a = 7, b = 3 → c unchanged.</p>
+
+<h3>Two-sided: <code>if</code> / <code>else</code> (L12, slide 8)</h3>
+<p><b>C:</b> <code>if (a == b) { c = 1; } else { c = 0; }</code> → "If a equals b, set c to 1; otherwise set c to 0."</p>
 <div class="code">
-  <div class="code-head"><span><b>mips</b> · A[12] = h + A[8]</span><span>code → what it means</span></div>
+  <div class="code-head"><span><b>mips</b> · if / else</span><span>code → what it means</span></div>
   <table class="ann">
-    <tr><td class="c"><span class="kw">lw</span>  $t0, <span class="num">32</span>($s3)</td><td class="n">$t0 = A[8]</td></tr>
-    <tr><td class="c"><span class="kw">add</span> $t0, $s2, $t0</td><td class="n">$t0 = h + A[8]</td></tr>
-    <tr><td class="c"><span class="kw">sw</span>  $t0, <span class="num">48</span>($s3)</td><td class="n">Store word: memory[$s3 + 48] = $t0. 12 × 4 = 48, so this is A[12].</td></tr>
+    <tr><td class="c">      <span class="kw">bne</span> $t0, $t1, Else</td><td class="n">Opposite of <code>==</code>: if a ≠ b, go to the else-block.</td></tr>
+    <tr><td class="c">      <span class="kw">li</span>  $t2, <span class="num">1</span></td><td class="n">Then-block: c = 1. (<code>li</code> = load immediate, "put this constant in the register".)</td></tr>
+    <tr><td class="c">      <span class="kw">j</span>   Done</td><td class="n"><b>Essential.</b> Without it the then-block falls straight through into the else-block and both run.</td></tr>
+    <tr><td class="c">Else: <span class="kw">li</span>  $t2, <span class="num">0</span></td><td class="n">Else-block: c = 0.</td></tr>
+    <tr><td class="c">Done:</td><td class="n">The two paths merge. Everything after this runs either way.</td></tr>
+  </table>
+</div>
+<p><b>Verified:</b> a = b = 4 → 1. a = 4, b = 5 → 0.</p>
+
+<h2>5. Ordering: the <code>slt</code> idiom</h2>
+<p>For <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code> there is no direct branch — you set a flag with <code>slt</code>, then branch on it.</p>
+<p><b>C:</b> <code>if (a &lt; b) { /* body */ }</code></p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · if (a &lt; b)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">      <span class="kw">slt</span> $t3, $t0, $t1</td><td class="n">$t3 = 1 if a &lt; b, else 0. This is only a <i>flag</i>; nothing has branched yet.</td></tr>
+    <tr><td class="c">      <span class="kw">beq</span> $t3, $zero, Skip</td><td class="n">If the flag is 0 (meaning a ≥ b, the opposite), skip the body.</td></tr>
+    <tr><td class="c">      <span class="com"># body (runs when a &lt; b)</span></td><td class="n">$t3 = 1 means a &lt; b, so <code>beq … $zero</code> is false and we fall into the body.</td></tr>
+    <tr><td class="c">Skip:</td><td class="n">Continue.</td></tr>
   </table>
 </div>
 
-<h3>Variable index: <code>A[i]</code></h3>
-<p>Now the offset is 4 × i, which is only known at run time. Compute the address in three steps. Here i is in <code>$s1</code> and the base of A is in <code>$s6</code>.</p>
-<div class="code">
-  <div class="code-head"><span><b>mips</b> · $t0 = A[i]</span><span>code → what it means</span></div>
-  <table class="ann">
-    <tr><td class="c"><span class="kw">sll</span> $t1, $s1, <span class="num">2</span></td><td class="n">Shift left by 2 = multiply by 4. $t1 = 4 × i (the offset in bytes).</td></tr>
-    <tr><td class="c"><span class="kw">add</span> $t1, $t1, $s6</td><td class="n">$t1 = base + 4 × i = the address of A[i].</td></tr>
-    <tr><td class="c"><span class="kw">lw</span>  $t0, <span class="num">0</span>($t1)</td><td class="n">$t0 = memory[that address] = A[i].</td></tr>
-  </table>
-</div>
-<div class="callout tip"><b>Why shift instead of multiply?</b><p>Shifting a binary number left by 1 doubles it; by 2 multiplies by 4. For example, 3 = <code>0011</code> → <code>1100</code> = 12. A shift is just wiring, so it is much cheaper than a multiplier.</p></div>
-<div class="callout trap"><b>Common array bug</b><p>Writing <code>lw $t0, $s1($s6)</code> is illegal: the offset must be a constant. And forgetting the <code>sll</code> reads byte i instead of element i.</p></div>
-
-<h2>3. if / else</h2>
-<p><b>C:</b> <code>if (i == j) f = g + h; else f = g - h;</code> → "If i equals j, set f to g + h. Otherwise, set f to g − h." (f..j in <code>$s0..$s4</code>.)</p>
+<h3>Worked: max of two (L12, slide 10)</h3>
+<p><b>C:</b> <code>if (a &gt; b) c = a; else c = b;</code> → "c becomes the bigger of a and b."</p>
 <figure class="diagram">
-  <svg viewBox="0 0 600 290" width="600" role="img" aria-label="Flowchart for if-else: test i equals j; yes path computes g plus h then jumps to Exit; no path is where bne jumps and computes g minus h; both reach Exit">
+  <svg viewBox="0 0 600 290" width="600" role="img" aria-label="Flowchart for max of two: test a greater than b; yes path sets c to a then jumps to Done; no path is where beq jumps and sets c to b; both reach Done">
     <polygon points="300,20 390,60 300,100 210,60" class="box-hi"/>
-    <text x="300" y="65" class="m b" text-anchor="middle">i == j ?</text>
+    <text x="300" y="65" class="m b" text-anchor="middle">a &gt; b ?</text>
     <path class="w-g" d="M210 60 H160 V132"/>
     <polygon points="160,140 155,128 165,128" class="fill-ink"/>
     <text x="150" y="50" class="g" text-anchor="middle">yes: fall through</text>
     <path class="w-hi" d="M390 60 H440 V132"/>
     <polygon points="440,140 435,128 445,128" class="fill-hi"/>
-    <text x="460" y="50" class="hi" text-anchor="middle">no: bne jumps to Else</text>
+    <text x="462" y="50" class="hi" text-anchor="middle">no: beq jumps to Else</text>
     <rect x="70" y="140" width="180" height="48" rx="8" class="box-g"/>
-    <text x="160" y="160" class="m" text-anchor="middle">f = g + h</text>
-    <text x="160" y="178" class="m dim" text-anchor="middle">add $s0,$s1,$s2</text>
+    <text x="160" y="160" class="m" text-anchor="middle">c = a</text>
+    <text x="160" y="178" class="m dim" text-anchor="middle">move $t2,$t0</text>
     <rect x="350" y="140" width="180" height="48" rx="8" class="box-b"/>
     <text x="360" y="132" class="m b">Else:</text>
-    <text x="440" y="160" class="m" text-anchor="middle">f = g − h</text>
-    <text x="440" y="178" class="m dim" text-anchor="middle">sub $s0,$s1,$s2</text>
+    <text x="440" y="160" class="m" text-anchor="middle">c = b</text>
+    <text x="440" y="178" class="m dim" text-anchor="middle">move $t2,$t1</text>
     <path class="w" d="M160 188 V218 H440 M440 188 V218 M300 218 V238"/>
     <polygon points="300,246 295,234 305,234" class="fill-ink"/>
-    <text x="150" y="210" class="m dim" text-anchor="end">j Exit</text>
+    <text x="150" y="210" class="m dim" text-anchor="end">j Done</text>
     <rect x="230" y="246" width="140" height="36" rx="8" class="box"/>
-    <text x="300" y="269" class="m b" text-anchor="middle">Exit: …</text>
+    <text x="300" y="269" class="m b" text-anchor="middle">Done: …</text>
   </svg>
-  <figcaption>The "then" part comes first and must jump over the "else" part with <code>j Exit</code>.</figcaption>
+  <figcaption>Every if/else is this shape: a test that splits into two blocks that merge back. Branches are the arrows.</figcaption>
 </figure>
 <div class="code">
-  <div class="code-head"><span><b>mips</b> · if / else</span><span>code → what it means</span></div>
+  <div class="code-head"><span><b>mips</b> · max of two ($t0=a, $t1=b, $t2=c)</span><span>code → what it means</span></div>
   <table class="ann">
-    <tr><td class="c">      <span class="kw">bne</span> $s3, $s4, Else</td><td class="n">If i ≠ j, the "then" part must be skipped: go to Else. (Test the <b>opposite</b> of <code>i == j</code>.)</td></tr>
-    <tr><td class="c">      <span class="kw">add</span> $s0, $s1, $s2</td><td class="n">Then-part: f = g + h. We only get here when i == j.</td></tr>
-    <tr><td class="c">      <span class="kw">j</span>   Exit</td><td class="n">Skip the else-part. Without this, both parts would run.</td></tr>
-    <tr><td class="c">Else: <span class="kw">sub</span> $s0, $s1, $s2</td><td class="n">Else-part: f = g − h.</td></tr>
-    <tr><td class="c">Exit: <span class="com"># …next statement</span></td><td class="n">Both paths meet here. <code>#</code> starts a comment in MIPS.</td></tr>
+    <tr><td class="c">      <span class="kw">slt</span>  $t3, $t1, $t0</td><td class="n"><b>Operands flipped on purpose.</b> <code>a &gt; b</code> is the same question as <code>b &lt; a</code>, and <code>slt</code> only knows "&lt;". $t3 = 1 when a &gt; b.</td></tr>
+    <tr><td class="c">      <span class="kw">beq</span>  $t3, $zero, Else</td><td class="n">Flag 0 → a is not bigger → take the else path.</td></tr>
+    <tr><td class="c">      <span class="kw">move</span> $t2, $t0</td><td class="n">c = a. (<code>move</code> is a pseudo-instruction; the assembler writes <code>add $t2, $t0, $zero</code>.)</td></tr>
+    <tr><td class="c">      <span class="kw">j</span>    Done</td><td class="n">Skip the else-block.</td></tr>
+    <tr><td class="c">Else: <span class="kw">move</span> $t2, $t1</td><td class="n">c = b.</td></tr>
+    <tr><td class="c">Done:</td><td class="n">Merge point.</td></tr>
   </table>
 </div>
-<div class="callout tip"><b>Rule: branch on the opposite condition</b><p>The code under the <code>if</code> sits right after the branch, so we want to <b>fall through</b> when the condition is true, and <b>branch away</b> when it is false. So <code>==</code> becomes <code>bne</code>, and <code>!=</code> becomes <code>beq</code>. An <code>if</code> with no <code>else</code> needs no <code>j</code>: branch straight to Exit.</p></div>
+<p><b>Verified:</b> (12, 5) → 12 · (5, 12) → 12 · (7, 7) → 7 · (−4, −9) → −4. <code>slt</code> compares <b>signed</b> numbers, so −4 is correctly bigger than −9.</p>
+<div class="callout tip"><b>Flip the operands to turn <code>&gt;</code> into <code>&lt;</code></b><p>Only one ordering instruction exists. <code>a &gt; b</code> ⇔ <code>b &lt; a</code>; <code>a &lt;= b</code> ⇔ not <code>(b &lt; a)</code>. Between flipping the operands and flipping <code>beq</code>↔<code>bne</code>, you can express all four orderings.</p></div>
 
-<h2>4. Less-than and friends: <code>slt</code></h2>
-<p>MIPS has only two real branches (<code>beq</code>, <code>bne</code>). For &lt;, &gt;, ≤, ≥ we first use <b><code>slt</code></b> ("set on less than"):</p>
-<div class="formula">slt $t0, a, b &nbsp;→&nbsp; $t0 = 1 if a &lt; b, else 0<small><code>slti $t0, a, 10</code> does the same with a constant. Then test $t0 against $zero with beq/bne.</small></div>
-<div class="scroll"><table>
-  <tr><th>To jump to L when…</th><th>MIPS</th><th>Why</th></tr>
-  <tr><td><code>a &lt; b</code></td><td><code>slt $t0, a, b</code><br><code>bne $t0, $zero, L</code></td><td>$t0 is 1 exactly when a &lt; b</td></tr>
-  <tr><td><code>a &gt;= b</code></td><td><code>slt $t0, a, b</code><br><code>beq $t0, $zero, L</code></td><td>"not less than" = "greater or equal"</td></tr>
-  <tr><td><code>a &gt; b</code></td><td><code>slt $t0, b, a</code><br><code>bne $t0, $zero, L</code></td><td>a &gt; b is the same as b &lt; a (swap)</td></tr>
-  <tr><td><code>a &lt;= b</code></td><td><code>slt $t0, b, a</code><br><code>beq $t0, $zero, L</code></td><td>"not (b &lt; a)"</td></tr>
-</table></div>
-<p><b>Example:</b> <code>if (g &lt; h) f = h; else f = g;</code> ("f becomes the bigger of g and h"). We must skip the then-part when g ≥ h:</p>
+<h2>6. else-if chains, <code>&amp;&amp;</code> and <code>||</code></h2>
+<h3>Program I: an else-if chain (Lab 13) — negative, zero, positive</h3>
+<p>A chain is a <b>ladder of tests</b>: each failed test drops to the next rung.</p>
 <div class="code">
-  <div class="code-head"><span><b>mips</b> · if (g &lt; h)</span><span>code → what it means</span></div>
+  <div class="code-head"><span><b>mips</b> · Program I · negative / zero / positive</span><span>code → what it means</span></div>
   <table class="ann">
-    <tr><td class="c">      <span class="kw">slt</span>  $t0, $s1, $s2</td><td class="n">$t0 = 1 if g &lt; h</td></tr>
-    <tr><td class="c">      <span class="kw">beq</span>  $t0, $zero, Else</td><td class="n">If $t0 is 0 (g ≥ h, the opposite), go to Else.</td></tr>
-    <tr><td class="c">      <span class="kw">add</span>  $s0, $s2, $zero</td><td class="n">f = h (adding 0 just copies)</td></tr>
-    <tr><td class="c">      <span class="kw">j</span>    Exit</td><td class="n"></td></tr>
-    <tr><td class="c">Else: <span class="kw">add</span>  $s0, $s1, $zero</td><td class="n">f = g</td></tr>
-    <tr><td class="c">Exit:</td><td class="n"></td></tr>
+    <tr><td class="c">         .data</td><td class="n">Start of the data section (your values and text).</td></tr>
+    <tr><td class="c">neg_s:   .asciiz <span class="str">"negative\n"</span></td><td class="n">Text ending with a 0 byte (that is what the <b>z</b> means). <code>\n</code> is a newline.</td></tr>
+    <tr><td class="c">zer_s:   .asciiz <span class="str">"zero\n"</span></td><td class="n"></td></tr>
+    <tr><td class="c">pos_s:   .asciiz <span class="str">"positive\n"</span></td><td class="n"></td></tr>
+    <tr><td class="c">         .text</td><td class="n">Start of the code section.</td></tr>
+    <tr><td class="c">         .globl main</td><td class="n">Make the label <code>main</code> visible as the starting point.</td></tr>
+    <tr><td class="c">main:    <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Service 5 = read an integer the user types.</td></tr>
+    <tr><td class="c">         <span class="kw">syscall</span></td><td class="n">The typed number arrives in <code>$v0</code>.</td></tr>
+    <tr><td class="c">         <span class="kw">move</span> $t0, $v0</td><td class="n">Copy it out <b>at once</b> — the next syscall setup will overwrite <code>$v0</code>.</td></tr>
+    <tr><td class="c">         <span class="kw">bge</span>  $t0, $zero, not_neg</td><td class="n">Rung 1: if the number is ≥ 0 it is not negative, so drop to the next rung.</td></tr>
+    <tr><td class="c">         <span class="kw">la</span>   $a0, neg_s</td><td class="n">Otherwise point $a0 at "negative\n". (<code>la</code> = load address.)</td></tr>
+    <tr><td class="c">         <span class="kw">b</span>    show</td><td class="n">Jump to the single print block, so only one case prints.</td></tr>
+    <tr><td class="c">not_neg: <span class="kw">bne</span>  $t0, $zero, is_pos</td><td class="n">Rung 2: we know it is ≥ 0; if it is also ≠ 0 it must be positive.</td></tr>
+    <tr><td class="c">         <span class="kw">la</span>   $a0, zer_s</td><td class="n">≥ 0 and = 0 → "zero\n".</td></tr>
+    <tr><td class="c">         <span class="kw">b</span>    show</td><td class="n"></td></tr>
+    <tr><td class="c">is_pos:  <span class="kw">la</span>   $a0, pos_s</td><td class="n">Last case needs <b>no</b> jump: it falls straight into <code>show</code>.</td></tr>
+    <tr><td class="c">show:    <span class="kw">li</span>   $v0, <span class="num">4</span></td><td class="n">Service 4 = print the string whose address is in $a0.</td></tr>
+    <tr><td class="c">         <span class="kw">syscall</span></td><td class="n">Prints whichever string was selected.</td></tr>
+    <tr><td class="c">         <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">Service 10 = exit.</td></tr>
+    <tr><td class="c">         <span class="kw">syscall</span></td><td class="n">Program ends.</td></tr>
   </table>
 </div>
-<p>MARS also accepts <b>pseudo-instructions</b> <code>blt</code>, <code>bge</code>, <code>bgt</code>, <code>ble</code>. They are not real MIPS instructions: the assembler expands each into <code>slt</code> + <code>beq</code>/<code>bne</code> using <code>$at</code>. For example, <code>blt $t0, $t1, L</code> becomes <code>slt $at, $t0, $t1</code> + <code>bne $at, $zero, L</code>.</p>
+<div class="scroll"><table>
+  <tr><th>input</th><th><code>bge</code> ≥ 0?</th><th><code>bne</code> ≠ 0?</th><th>prints</th></tr>
+  <tr><td>−5</td><td>no</td><td>—</td><td><code>negative</code></td></tr>
+  <tr><td>0</td><td>yes</td><td>no</td><td><code>zero</code></td></tr>
+  <tr><td>12</td><td>yes</td><td>yes</td><td><code>positive</code></td></tr>
+</table></div>
+<p><b>Verified</b> on all three inputs.</p>
 
-<h2>5. while loop</h2>
-<p><b>C:</b> <code>while (save[i] == k) i += 1;</code> → "As long as element i of the array <code>save</code> equals k, add 1 to i." It finds the first element that is <b>not</b> k.<br>i is in <code>$s3</code>, k in <code>$s5</code>, and the base of <code>save</code> in <code>$s6</code>.</p>
+<h3><code>&amp;&amp;</code> and <code>||</code>: two tests, one target</h3>
+<div class="scroll"><table>
+  <tr><th>Operator</th><th>Shape</th></tr>
+  <tr><td><code>A &amp;&amp; B</code></td><td>branch to <i>skip</i> if A fails; branch to <i>skip</i> if B fails; else fall into the block</td></tr>
+  <tr><td><code>A || B</code></td><td>branch to the <i>block</i> if A holds; branch to <i>skip</i> if B fails; else fall into the block</td></tr>
+</table></div>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · if (x &gt;= 10 &amp;&amp; x &lt;= 20) count++;</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">      <span class="kw">slti</span> $t8, $t0, <span class="num">10</span></td><td class="n">$t8 = 1 if x &lt; 10 — that is the <b>failure</b> of the first test.</td></tr>
+    <tr><td class="c">      <span class="kw">bne</span>  $t8, $zero, skip</td><td class="n">First test failed → the whole <code>&amp;&amp;</code> is false, so skip.</td></tr>
+    <tr><td class="c">      <span class="kw">li</span>   $t9, <span class="num">20</span></td><td class="n">Put the second bound in a register, because <code>bgt</code> compares two registers.</td></tr>
+    <tr><td class="c">      <span class="kw">bgt</span>  $t0, $t9, skip</td><td class="n">Second test failed (x &gt; 20) → skip.</td></tr>
+    <tr><td class="c">      <span class="kw">addi</span> $t2, $t2, <span class="num">1</span></td><td class="n">Reached only when <b>both</b> hold: count++.</td></tr>
+    <tr><td class="c">skip:</td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · if (x &lt; 0 || x &gt; 100) bad++;</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">      <span class="kw">blt</span>  $t0, $zero, hit</td><td class="n">First test <b>holds</b> → the answer is already decided, jump straight into the block.</td></tr>
+    <tr><td class="c">      <span class="kw">li</span>   $t9, <span class="num">100</span></td><td class="n"></td></tr>
+    <tr><td class="c">      <span class="kw">ble</span>  $t0, $t9, skip</td><td class="n">Second test also fails (x ≤ 100) → skip the block.</td></tr>
+    <tr><td class="c">hit:  <span class="kw">addi</span> $t3, $t3, <span class="num">1</span></td><td class="n">bad++. Reached from the first branch, or by falling through.</td></tr>
+    <tr><td class="c">skip:</td><td class="n"></td></tr>
+  </table>
+</div>
+<p><b>Verified:</b> the <code>&amp;&amp;</code> version counts for x = 10, 15, 20 and not for 9 or 21. The <code>||</code> version fires for −1 and 101, not for 0 or 100.</p>
+<div class="callout tip"><b>Short-circuit for free</b><p>If A already decides the answer, B is never evaluated — the branch jumped past it. That is why C can safely write <code>if (p != 0 &amp;&amp; p-&gt;x &gt; 3)</code>: when <code>p</code> is 0 the second half never runs.</p>
+<p>Lab 13 also notes the compiler's trick: a range test <code>10 ≤ x ≤ 20</code> becomes a single <b>unsigned</b> compare of <code>x − 10 &lt; 11</code> (<code>sltiu</code>), because a negative <code>x − 10</code> reads as a huge unsigned number and fails too.</p></div>
+<div class="callout trap"><b>Slide note: use <code>$t8</code>, not <code>$at</code></b><p>The Lab 13 slide writes <code>slti $at, $t0, 10</code> and then uses <code>bgt</code>. That works here, but <code>bgt</code> is a pseudo-instruction that itself overwrites <code>$at</code>. Keeping your own values out of <code>$at</code> avoids a whole class of mystery bugs, so the version above uses <code>$t8</code>.</p></div>
+
+<h2>7. Loops</h2>
+<p>A loop is a conditional with a branch back to the top: <b>label → test → body → update → jump back</b>.</p>
+
+<h3>The <code>while</code> loop (L12, slide 13)</h3>
+<p><b>C:</b> <code>while (i &lt; n) { sum += i; i++; }</code> → "While i is less than n: add i onto sum, then add 1 to i."<br>Registers: <code>$t0 = i</code>, <code>$t1 = n</code>, <code>$s0 = sum</code>.</p>
+<div class="callout fix"><b>Slide correction</b>
+<p>L12 slide 13 writes the exit test as <code>blt $t1, $t0, End</code>. That reads "branch out when <b>n &lt; i</b>", so the loop keeps going while <code>i &lt;= n</code> — <b>one pass too many</b>. With i&nbsp;=&nbsp;0 and n&nbsp;=&nbsp;5 it computes 0+1+2+3+4+<b>5</b> = 15 instead of the C answer 10. (Tested.)</p>
+<p>The exit test must fire when the loop condition <code>i &lt; n</code> <b>fails</b>, i.e. when <code>i &gt;= n</code>. Write <code>bge $t0, $t1, End</code>, which is exactly the <code>slt</code> + <code>beq</code> the slide's own caption describes. The corrected version is below; everything else on the slide is right.</p></div>
 <figure class="diagram">
-  <svg viewBox="0 0 600 250" width="600" role="img" aria-label="While loop flowchart: load save of i, test equals k; if yes add 1 to i and jump back to Loop; if no bne goes to Exit">
-    <rect x="180" y="20" width="240" height="44" rx="8" class="box-b"/>
-    <text x="300" y="47" class="m" text-anchor="middle">Loop: $t0 = save[i]</text>
-    <path class="w" d="M300 64 V77"/>
-    <polygon points="300,85 295,73 305,73" class="fill-ink"/>
-    <polygon points="300,85 400,120 300,155 200,120" class="box-hi"/>
-    <text x="300" y="125" class="m b" text-anchor="middle">save[i] == k ?</text>
-    <path class="w-g" d="M300 155 V172"/>
-    <polygon points="300,180 295,168 305,168" class="fill-ink"/>
-    <text x="310" y="172" class="g">yes</text>
-    <rect x="180" y="180" width="240" height="40" rx="8" class="box-g"/>
-    <text x="300" y="205" class="m" text-anchor="middle">i = i + 1  (addi)</text>
-    <path class="w" d="M180 200 H120 V42 H172"/>
-    <polygon points="180,42 168,37 168,47" class="fill-ink"/>
-    <text x="112" y="125" class="m b" text-anchor="end">j Loop</text>
-    <path class="w-hi" d="M400 120 H515 V192"/>
-    <polygon points="515,200 510,188 520,188" class="fill-hi"/>
-    <text x="410" y="110" class="hi">no: bne Exit</text>
-    <rect x="450" y="200" width="130" height="40" rx="8" class="box"/>
-    <text x="515" y="225" class="m b" text-anchor="middle">Exit: …</text>
+  <svg viewBox="0 0 620 250" width="620" role="img" aria-label="While loop flowchart: at Loop test i less than n; if the test fails branch to End; otherwise add i to sum, increment i and jump back to Loop">
+    <rect x="175" y="18" width="250" height="40" rx="8" class="box-b"/>
+    <text x="300" y="43" class="m" text-anchor="middle">Loop:  i &lt; n ?</text>
+    <path class="w-g" d="M300 58 V84"/>
+    <polygon points="300,92 295,80 305,80" class="fill-ink"/>
+    <text x="312" y="78" class="g">yes</text>
+    <rect x="175" y="92" width="250" height="40" rx="8" class="box-g"/>
+    <text x="300" y="117" class="m" text-anchor="middle">sum = sum + i</text>
+    <path class="w" d="M300 132 V150"/>
+    <polygon points="300,158 295,146 305,146" class="fill-ink"/>
+    <rect x="175" y="158" width="250" height="40" rx="8" class="box-g"/>
+    <text x="300" y="183" class="m" text-anchor="middle">i = i + 1  (addi)</text>
+    <path class="w" d="M175 178 H110 V38 H167"/>
+    <polygon points="175,38 163,33 163,43" class="fill-ink"/>
+    <text x="102" y="112" class="m b" text-anchor="end">j Loop</text>
+    <path class="w-hi" d="M425 38 H535 V192"/>
+    <polygon points="535,200 530,188 540,188" class="fill-hi"/>
+    <text x="434" y="28" class="hi">no: bge → End</text>
+    <rect x="470" y="200" width="130" height="38" rx="8" class="box"/>
+    <text x="535" y="224" class="m b" text-anchor="middle">End: …</text>
   </svg>
   <figcaption>Test at the top, <code>j Loop</code> at the bottom. The loop ends when the test fails.</figcaption>
 </figure>
 <div class="code">
-  <div class="code-head"><span><b>mips</b> · while (save[i] == k) i += 1;</span><span>code → what it means</span></div>
+  <div class="code-head"><span><b>mips</b> · while (i &lt; n) { sum += i; i++; } — corrected</span><span>code → what it means</span></div>
   <table class="ann">
-    <tr><td class="c">Loop: <span class="kw">sll</span>  $t1, $s3, <span class="num">2</span></td><td class="n">$t1 = 4 × i</td></tr>
-    <tr><td class="c">      <span class="kw">add</span>  $t1, $t1, $s6</td><td class="n">$t1 = address of save[i]</td></tr>
-    <tr><td class="c">      <span class="kw">lw</span>   $t0, <span class="num">0</span>($t1)</td><td class="n">$t0 = save[i]</td></tr>
-    <tr><td class="c">      <span class="kw">bne</span>  $t0, $s5, Exit</td><td class="n">Opposite of <code>==</code>: if save[i] ≠ k, leave the loop.</td></tr>
-    <tr><td class="c">      <span class="kw">addi</span> $s3, $s3, <span class="num">1</span></td><td class="n">Loop body: i = i + 1</td></tr>
+    <tr><td class="c">Loop: <span class="kw">bge</span>  $t0, $t1, End</td><td class="n">Exit test, branching on the <b>opposite</b> of <code>i &lt; n</code>. Expands to <code>slt $at,$t0,$t1</code> + <code>beq $at,$zero,End</code>.</td></tr>
+    <tr><td class="c">      <span class="kw">add</span>  $s0, $s0, $t0</td><td class="n">Body: sum += i.</td></tr>
+    <tr><td class="c">      <span class="kw">addi</span> $t0, $t0, <span class="num">1</span></td><td class="n">Update: i++.</td></tr>
     <tr><td class="c">      <span class="kw">j</span>    Loop</td><td class="n">Go back and test again.</td></tr>
-    <tr><td class="c">Exit:</td><td class="n">Continue with the rest of the program.</td></tr>
+    <tr><td class="c">End:</td><td class="n">Continue with the rest of the program.</td></tr>
   </table>
 </div>
-<h3>Trace: save = {7, 7, 7, 3, 7}, k = 7, i starts at 0</h3>
-<div class="stepper" data-stepper>
-  <div class="stage"><p><b>Round 1:</b> i = 0 → $t1 = 0 + base → save[0] = 7. Is 7 ≠ 7? No, so don't branch. i becomes <b>1</b>. <code>j Loop</code>.</p></div>
-  <div class="stage"><p><b>Round 2:</b> i = 1 → $t1 = base + 4 → save[1] = 7. Equal, so i becomes <b>2</b>. <code>j Loop</code>.</p></div>
-  <div class="stage"><p><b>Round 3:</b> i = 2 → $t1 = base + 8 → save[2] = 7. Equal, so i becomes <b>3</b>. <code>j Loop</code>.</p></div>
-  <div class="stage"><p><b>Round 4:</b> i = 3 → $t1 = base + 12 → save[3] = 3. Is 3 ≠ 7? <b>Yes</b>, so <code>bne</code> jumps to Exit.</p></div>
-  <div class="stage"><p><b>Done:</b> <code>$s3</code> = <b>3</b>, the index of the first element that is not 7. The loop body ran 3 times; the test ran 4 times. (Tested in MARS.)</p></div>
-</div>
+<p><b>Verified:</b> i = 0, n = 5 → sum = <b>10</b>. The test runs n+1 = 6 times; the body runs 5 times.</p>
 
-<h2>6. for loop</h2>
-<p><b>C:</b> <code>for (i = 0; i &lt; n; i++) sum = sum + A[i];</code><br>Plain English: "Start i at 0. While i is less than n: add element i of A to sum, then add 1 to i." So it adds up the first n elements.</p>
-<p>A <code>for</code> loop is just a <code>while</code> loop with its three parts spread out:</p>
+<h3>The <code>for</code> loop (L12, slide 14)</h3>
+<p><b>C:</b> <code>for (i = 0; i &lt; 10; i++) { sum += i; }</code> → "Start i at 0. While i is less than 10: add i onto sum, then add 1 to i."</p>
 <div class="vs">
   <div><h3>for</h3><p><code>for (<b>init</b>; <b>test</b>; <b>step</b>) body;</code></p></div>
   <div><h3>same thing as while</h3><p><code><b>init</b>;<br>while (<b>test</b>) { body; <b>step</b>; }</code></p></div>
 </div>
-<ol class="flow arrows">
-  <li><b>init</b><code>li $t0, 0</code> (i = 0), before the label</li>
-  <li><b>Loop: test</b><code>slt</code> + <code>beq … done</code> (leave when i ≥ n)</li>
-  <li><b>body</b><code>sll · add · lw · add</code></li>
-  <li><b>step</b><code>addi $t0, $t0, 1</code></li>
-  <li><b>back</b><code>j Loop</code></li>
-</ol>
-<p>The full, runnable version is the array-sum program below.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · for (i = 0; i &lt; 10; i++) sum += i;</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">      <span class="kw">li</span>   $t0, <span class="num">0</span></td><td class="n"><b>init</b> — before the label, so it runs once.</td></tr>
+    <tr><td class="c">Loop: <span class="kw">slti</span> $t2, $t0, <span class="num">10</span></td><td class="n"><b>test</b> — $t2 = 1 if i &lt; 10. <code>slti</code> compares against a constant, so 10 needs no register.</td></tr>
+    <tr><td class="c">      <span class="kw">beq</span>  $t2, $zero, End</td><td class="n">Flag 0 (i ≥ 10) → leave the loop.</td></tr>
+    <tr><td class="c">      <span class="kw">add</span>  $s0, $s0, $t0</td><td class="n"><b>body</b> — sum += i.</td></tr>
+    <tr><td class="c">      <span class="kw">addi</span> $t0, $t0, <span class="num">1</span></td><td class="n"><b>step</b> — i++, placed just before the jump back.</td></tr>
+    <tr><td class="c">      <span class="kw">j</span>    Loop</td><td class="n"></td></tr>
+    <tr><td class="c">End:</td><td class="n"></td></tr>
+  </table>
+</div>
+<p><b>Verified:</b> prints <b>45</b> (0+1+…+9). Map the four for-parts: init before the label, condition at the top, body in the middle, increment before the jump-back.</p>
 
-<h2>7. Lab 3A: complete MARS programs</h2>
+<h3>Three loop shapes, and what each costs (Lab 13, slide 13)</h3>
+<div class="scroll"><table>
+  <tr><th>Shape</th><th>MIPS</th><th>Overhead per pass</th><th>1000 passes, 1-instruction body</th></tr>
+  <tr><td><b>while</b> — test at the top</td><td><code>loop: bge $t0,$t1,done</code><br><code>&nbsp; …body…</code><br><code>&nbsp; addi $t0,$t0,1</code><br><code>&nbsp; j loop</code></td><td>4 instructions (bge = 2, addi, j)</td><td>5 per pass · <b>53.3 µs</b></td></tr>
+  <tr><td><b>do-while</b> — test at the bottom</td><td><code>loop: …body…</code><br><code>&nbsp; addi $t0,$t0,1</code><br><code>&nbsp; blt $t0,$t1,loop</code></td><td>3 — the <code>j</code> is gone</td><td>4 per pass · <b>42.7 µs</b></td></tr>
+  <tr><td><b>count-down</b> to zero</td><td><code>loop: …body…</code><br><code>&nbsp; addi $t1,$t1,-1</code><br><code>&nbsp; bne $t1,$zero,loop</code></td><td>2 — the <code>slt</code> is gone too</td><td>3 per pass · <b>32.0 µs</b></td></tr>
+</table></div>
+<p>Timings assume 93.75&nbsp;MHz (the Nintendo 64's VR4300) and an ideal CPI of 1. Counting down is cheapest because <b>comparing with <code>$zero</code> is free</b> — <code>bne $t1, $zero, loop</code> is one real instruction, while <code>bge</code> is two.</p>
+<div class="callout trap"><b>A <code>do-while</code> runs the body at least once</b><p>So it is <b>wrong for n = 0</b>. Only use the bottom-tested shape when you know the loop runs at least one pass. <b>Verified:</b> all three shapes sum 1..5 to 15.</p></div>
+
+<h3>The counted-loop skeleton (Lab 12, slide 14)</h3>
+<p>This is <i>the</i> shape for the rest of the page. Learn it so you can write it from memory.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · counted-loop skeleton</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">      <span class="com"># INIT  i = 0, ptr = base, accumulator = identity</span></td><td class="n">Everything that must happen once, before the label.</td></tr>
+    <tr><td class="c">loop: <span class="kw">bge</span>  $t3, $t1, done</td><td class="n"><b>TEST</b>: i ≥ n? Yes → leave. Branches on the opposite of "i &lt; n".</td></tr>
+    <tr><td class="c">      <span class="com"># BODY  work on *ptr</span></td><td class="n">Load the element, use it.</td></tr>
+    <tr><td class="c">      <span class="kw">addi</span> $t0, $t0, <span class="num">4</span></td><td class="n"><b>UPDATE</b> the pointer: one word forward = 4 bytes.</td></tr>
+    <tr><td class="c">      <span class="kw">addi</span> $t3, $t3, <span class="num">1</span></td><td class="n"><b>UPDATE</b> the counter: one element forward = 1.</td></tr>
+    <tr><td class="c">      <span class="kw">j</span>    loop</td><td class="n"><b>JUMP BACK</b> to the test.</td></tr>
+    <tr><td class="c">done:</td><td class="n">Print, exit — the loop must fall through to here.</td></tr>
+  </table>
+</div>
+<div class="callout trap"><b>Four places loop bugs live</b>
+<ol>
+  <li><b>init</b> — accumulator or counter not zeroed (or a product not started at 1).</li>
+  <li><b>test</b> — <code>bge</code> is right; <code>bgt</code> or <code>ble</code> is off by one.</li>
+  <li><b>update</b> — the pointer strides by <b>4</b>, not 1. The counter strides by 1.</li>
+  <li><b>exit</b> — <code>done:</code> must fall through to the print.</li>
+</ol></div>
+
+<h3>Program J: a sentinel loop (Lab 13) — read until 0</h3>
+<p>Sometimes you don't know <code>n</code> in advance. A <b>sentinel</b> value ends the input.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · Program J · sum numbers until a 0 is typed</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .text</td><td class="n">No <code>.data</code> at all — this program keeps nothing in memory.</td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">li</span>   $t2, <span class="num">0</span></td><td class="n">sum = 0 (the identity of +).</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t3, <span class="num">0</span></td><td class="n">count = 0 — handy if you later want the average.</td></tr>
+    <tr><td class="c">loop:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Service 5 = read int.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">The value lands in $v0.</td></tr>
+    <tr><td class="c">        <span class="kw">beq</span>  $v0, $zero, done</td><td class="n">The exit test sits in the <b>middle</b>: read, test, then work. Testing $v0 directly avoids a <code>move</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">add</span>  $t2, $t2, $v0</td><td class="n">sum += value. The sentinel itself is never added — we branched out first.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t3, $t3, <span class="num">1</span></td><td class="n">count++.</td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n">Read the next number.</td></tr>
+    <tr><td class="c">done:   <span class="kw">move</span> $a0, $t2</td><td class="n">Put the sum where <code>print int</code> looks for it.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Service 1 = print int.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints the sum.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Exit.</td></tr>
+  </table>
+</div>
+<div class="scroll"><table>
+  <tr><th>read</th><th>0?</th><th>sum</th><th>count</th></tr>
+  <tr><td>5</td><td>no</td><td>5</td><td>1</td></tr>
+  <tr><td>3</td><td>no</td><td>8</td><td>2</td></tr>
+  <tr><td>8</td><td>no</td><td>16</td><td>3</td></tr>
+  <tr><td>0</td><td><b>yes</b></td><td>16</td><td>3</td></tr>
+</table></div>
+<p><b>Verified:</b> input <code>5 3 8 0</code> → prints <b>16</b>.</p>
+
+<h3><code>continue</code> and <code>break</code>: labels, nothing more</h3>
+<p><b>C:</b> count the multiples of 3 in 1..20 — "for each i, if i is not a multiple of 3, <code>continue</code> to the next i; otherwise count it."</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · count multiples of 3 in 1..20</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">      <span class="kw">li</span>   $t2, <span class="num">0</span></td><td class="n">count = 0.</td></tr>
+    <tr><td class="c">      <span class="kw">li</span>   $t3, <span class="num">1</span></td><td class="n">i = 1.</td></tr>
+    <tr><td class="c">      <span class="kw">li</span>   $t6, <span class="num">3</span></td><td class="n">The divisor. <code>div</code> needs it in a register.</td></tr>
+    <tr><td class="c">      <span class="kw">li</span>   $t7, <span class="num">20</span></td><td class="n">The upper bound.</td></tr>
+    <tr><td class="c">loop: <span class="kw">bgt</span>  $t3, $t7, done</td><td class="n">Test: leave once i passes 20. (Here the bound is inclusive, so <code>bgt</code> is correct.)</td></tr>
+    <tr><td class="c">      <span class="kw">div</span>  $t3, $t6</td><td class="n">Divide i by 3. The quotient goes to LO, the <b>remainder to HI</b>.</td></tr>
+    <tr><td class="c">      <span class="kw">mfhi</span> $t4</td><td class="n">$t4 = i mod 3. (<b>m</b>ove <b>f</b>rom <b>HI</b>.)</td></tr>
+    <tr><td class="c">      <span class="kw">bne</span>  $t4, $zero, next</td><td class="n"><b>continue</b>: remainder not 0 → skip the count, jump to the update.</td></tr>
+    <tr><td class="c">      <span class="kw">addi</span> $t2, $t2, <span class="num">1</span></td><td class="n">It is a multiple of 3: count++.</td></tr>
+    <tr><td class="c">next: <span class="kw">addi</span> $t3, $t3, <span class="num">1</span></td><td class="n">The update line. <b>Both</b> paths pass through it.</td></tr>
+    <tr><td class="c">      <span class="kw">j</span>    loop</td><td class="n"></td></tr>
+    <tr><td class="c">done: <span class="com"># $t2 = 6 : 3 6 9 12 15 18</span></td><td class="n"><b>break</b> would be <code>b done</code> — the first line after the loop.</td></tr>
+  </table>
+</div>
+<p><b>Verified:</b> $t2 = <b>6</b>.</p>
+<div class="callout trap"><b>Where the update sits decides whether <code>continue</code> works</b><p>The pointer/counter update must sit <b>after</b> the <code>next:</code> label. Put it before, and <code>continue</code> skips the update — an infinite loop. A parity test is the same idea without <code>div</code>: <code>andi $t4, $t3, 1</code>.</p></div>
+
+<h2>8. Arrays (Lab 12)</h2>
+<h3>An array is consecutive words</h3>
+<div class="formula">address(arr[i]) = base + 4i<small>A word is 4 bytes and memory is byte-addressable. The label <code>arr</code> <i>is</i> the address of element 0.</small></div>
+<figure class="diagram">
+  <svg viewBox="0 0 620 160" width="620" role="img" aria-label="Five boxes labelled arr 0 to arr 4 holding 10 20 30 40 50, at byte offsets 0 4 8 12 and 16 from the base register t0">
+    <text x="60" y="68" class="m b">$t0 →</text>
+    <g>
+      <rect x="100" y="44" width="100" height="44" rx="6" class="box-b"/><text x="150" y="72" class="m" text-anchor="middle">10</text>
+      <text x="150" y="34" class="m dim" text-anchor="middle">B+0</text><text x="150" y="106" class="m b" text-anchor="middle">arr[0]</text><text x="150" y="124" class="m hi" text-anchor="middle">0($t0)</text>
+    </g>
+    <g>
+      <rect x="204" y="44" width="100" height="44" rx="6" class="box"/><text x="254" y="72" class="m" text-anchor="middle">20</text>
+      <text x="254" y="34" class="m dim" text-anchor="middle">B+4</text><text x="254" y="106" class="m b" text-anchor="middle">arr[1]</text><text x="254" y="124" class="m hi" text-anchor="middle">4($t0)</text>
+    </g>
+    <g>
+      <rect x="308" y="44" width="100" height="44" rx="6" class="box"/><text x="358" y="72" class="m" text-anchor="middle">30</text>
+      <text x="358" y="34" class="m dim" text-anchor="middle">B+8</text><text x="358" y="106" class="m b" text-anchor="middle">arr[2]</text><text x="358" y="124" class="m hi" text-anchor="middle">8($t0)</text>
+    </g>
+    <g>
+      <rect x="412" y="44" width="100" height="44" rx="6" class="box"/><text x="462" y="72" class="m" text-anchor="middle">40</text>
+      <text x="462" y="34" class="m dim" text-anchor="middle">B+12</text><text x="462" y="106" class="m b" text-anchor="middle">arr[3]</text><text x="462" y="124" class="m hi" text-anchor="middle">12($t0)</text>
+    </g>
+    <g>
+      <rect x="516" y="44" width="100" height="44" rx="6" class="box"/><text x="566" y="72" class="m" text-anchor="middle">50</text>
+      <text x="566" y="34" class="m dim" text-anchor="middle">B+16</text><text x="566" y="106" class="m b" text-anchor="middle">arr[4]</text><text x="566" y="124" class="m hi" text-anchor="middle">16($t0)</text>
+    </g>
+  </svg>
+  <figcaption>Base register + byte offset. <code>la $t0, arr</code> puts B in <code>$t0</code>; the offset in brackets does the rest.</figcaption>
+</figure>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · declaring data</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n">Everything below here is data, not instructions.</td></tr>
+    <tr><td class="c">arr:    .word <span class="num">10</span>, <span class="num">20</span>, <span class="num">30</span>, <span class="num">40</span>, <span class="num">50</span></td><td class="n">Five 32-bit ints, laid out back to back. 5 words = 20 bytes.</td></tr>
+    <tr><td class="c">buf:    .space <span class="num">40</span></td><td class="n">40 <b>bytes</b> of blank room = 10 words. Use this when you will fill the array yourself.</td></tr>
+    <tr><td class="c">chars:  .byte <span class="str">'a'</span>, <span class="str">'b'</span>, <span class="str">'c'</span></td><td class="n">Three single bytes. A byte array has <b>stride 1</b> and uses <code>lb</code>/<code>sb</code>.</td></tr>
+    <tr><td class="c">        .align <span class="num">2</span></td><td class="n">Push the next item to a multiple of 2² = 4 bytes, so a following <code>.word</code> stays aligned.</td></tr>
+    <tr><td class="c">        .text</td><td class="n">Back to instructions.</td></tr>
+    <tr><td class="c">        <span class="kw">la</span> $t0, arr</td><td class="n">$t0 = B = the address of arr[0]. <code>la</code> gives the <b>address</b>; <code>lw $t0, arr</code> would give the <b>value</b> stored there.</td></tr>
+  </table>
+</div>
+
+<h3>Program E: reading elements at constant offsets</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · Program E · print arr[0] then arr[2]</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n"></td></tr>
+    <tr><td class="c">arr:    .word <span class="num">10</span>, <span class="num">20</span>, <span class="num">30</span>, <span class="num">40</span>, <span class="num">50</span></td><td class="n"></td></tr>
+    <tr><td class="c">nl:     .asciiz <span class="str">"\n"</span></td><td class="n">A one-character string: a newline.</td></tr>
+    <tr><td class="c">        .text</td><td class="n"></td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">la</span>   $t0, arr</td><td class="n">$t0 = &amp;arr[0].</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $a0, <span class="num">0</span>($t0)</td><td class="n"><b>Load word</b>: $a0 = memory[$t0 + 0] = arr[0] = 10. Arithmetic can't touch memory directly, so you load first.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Service 1 = print int.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>10</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">la</span>   $a0, nl</td><td class="n">Point $a0 at the newline string.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">4</span></td><td class="n">Service 4 = print string.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Moves to the next line.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $a0, <span class="num">8</span>($t0)</td><td class="n">arr[2] is 2 × 4 = 8 bytes past the base.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>30</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Exit.</td></tr>
+  </table>
+</div>
+<p><b>Verified output:</b> <code>10</code>, newline, <code>30</code>.</p>
+<p>The offset is a <b>constant written into the instruction</b> (I-type, 16 bits, signed), so this works only when the index is known while you are writing the code. Note that the syscall setup overwrites <code>$a0</code> and <code>$v0</code>, never <code>$t0</code> — the base survives.</p>
+
+<h3>Writing into an array, and the bound nobody checks</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · arr[1] = 99</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">la</span>   $t0, arr</td><td class="n">$t0 = base.</td></tr>
+    <tr><td class="c"><span class="kw">li</span>   $t1, <span class="num">99</span></td><td class="n">The value to store.</td></tr>
+    <tr><td class="c"><span class="kw">sw</span>   $t1, <span class="num">4</span>($t0)</td><td class="n"><b>Store word</b>: memory[$t0 + 4] = $t1. That is arr[1]. Note the register is still written <i>first</i>, even though it is the source.</td></tr>
+    <tr><td class="c"><span class="kw">lw</span>   $a0, <span class="num">4</span>($t0)</td><td class="n">Read it straight back to prove it stuck.</td></tr>
+    <tr><td class="c"><span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c"><span class="kw">syscall</span></td><td class="n">Prints <code>99</code>. <b>Verified.</b></td></tr>
+  </table>
+</div>
+<div class="scroll"><table>
+  <tr><th>Address</th><th>B</th><th>B+4</th><th>B+8</th><th>B+12</th><th>B+16</th></tr>
+  <tr><td>before</td><td>10</td><td>20</td><td>30</td><td>40</td><td>50</td></tr>
+  <tr><td>after</td><td>10</td><td><b>99</b></td><td>30</td><td>40</td><td>50</td></tr>
+</table></div>
+<div class="callout trap"><b>Arrays are where programs fail: there is no hardware bound check</b>
+<p><code>lw $t2, 20($t0)</code> on a 5-element array reads <code>arr[5]</code>, one past the end. <b>It succeeds.</b> MIPS raises no exception; you get whatever word follows <code>arr</code> in <code>.data</code>. An <code>sw</code> there silently corrupts another variable.</p>
+<p><b>Only alignment is checked.</b> <code>lw $t2, 2($t0)</code> raises an address error, because 2 is not a multiple of 4. Reading past the end does not.</p>
+<p>The loop bound is the <b>only</b> guard, and it is three things: the value of <code>n</code>, the test (<code>bge</code>, not <code>ble</code>), and the size you gave <code>.space</code>.</p></div>
+<div class="scroll"><table>
+  <tr><th>When</th><th>Incident</th><th>The array view of the bug</th><th>Scale</th></tr>
+  <tr><td>2 Nov 1988</td><td><b>Morris worm</b></td><td><code>fingerd</code> read input with <code>gets()</code> into a fixed-size buffer: no limit on how many bytes were stored.</td><td>Overwrote memory past the end of the array.</td></tr>
+  <tr><td>7 Apr 2014</td><td><b>Heartbleed</b> (CVE-2014-0160)</td><td>OpenSSL's heartbeat reply copied a length taken from the request and never checked it against the real data: a missing bounds check.</td><td>Up to ~64&nbsp;KB of process memory per request; fixed in OpenSSL 1.0.1g.</td></tr>
+</table></div>
+
+<h3>Three ways to reach <code>arr[i]</code></h3>
+<div class="scroll"><table>
+  <tr><th>Method</th><th>Code</th><th>Instructions per element</th><th>Use when</th></tr>
+  <tr><td><b>1. Constant offset</b></td><td><code>lw $t4, 8($t0)</code></td><td>1</td><td>the index is known as you write the code</td></tr>
+  <tr><td><b>2. Index scaling</b></td><td><code>sll $t5,$t3,2</code> ; <code>add $t5,$t5,$t0</code> ; <code>lw $t4,0($t5)</code></td><td>3</td><td>the index sits in a register — random access</td></tr>
+  <tr><td><b>3. Pointer stride</b></td><td><code>lw $t4,0($t0)</code> ; <code>addi $t0,$t0,4</code></td><td>2</td><td>walking the array in order</td></tr>
+</table></div>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · method 2: arr[i], with i in $t3</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">sll</span> $t5, $t3, <span class="num">2</span></td><td class="n">Shift left by 2 = multiply by 4. $t5 = i × 4, the offset in bytes.</td></tr>
+    <tr><td class="c"><span class="kw">add</span> $t5, $t5, $t0</td><td class="n">$t5 = B + 4i = the address of arr[i].</td></tr>
+    <tr><td class="c"><span class="kw">lw</span>  $t4, <span class="num">0</span>($t5)</td><td class="n">$t4 = memory[that address] = arr[i].</td></tr>
+  </table>
+</div>
+<p><b>Verified:</b> with the array {10,20,30,40,50} and i = 3, this loads <b>40</b>.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 600 170" width="600" role="img" aria-label="Index scaling pipeline: i equals 3 goes through shift left by 2 giving offset 12, then add base giving address B plus 12, then load word giving arr index 3 equals 40">
+    <rect x="20" y="20" width="110" height="38" rx="8" class="box"/><text x="75" y="44" class="m" text-anchor="middle">i = 3</text>
+    <path class="w" d="M130 39 H160"/><polygon points="168,39 156,34 156,44" class="fill-ink"/>
+    <rect x="175" y="20" width="165" height="38" rx="8" class="box-hi"/><text x="257" y="44" class="m" text-anchor="middle">sll $t5,$t3,2</text>
+    <path class="w" d="M340 39 H370"/><polygon points="378,39 366,34 366,44" class="fill-ink"/>
+    <rect x="385" y="20" width="140" height="38" rx="8" class="box"/><text x="455" y="44" class="m" text-anchor="middle">offset = 12</text>
+    <path class="w" d="M455 58 V82 H110 V98"/><polygon points="110,106 105,94 115,94" class="fill-ink"/>
+    <rect x="20" y="106" width="180" height="38" rx="8" class="box-b"/><text x="110" y="130" class="m" text-anchor="middle">add $t5,$t5,$t0</text>
+    <path class="w" d="M200 125 H230"/><polygon points="238,125 226,120 226,130" class="fill-ink"/>
+    <rect x="245" y="106" width="160" height="38" rx="8" class="box-g"/><text x="325" y="130" class="m" text-anchor="middle">address = B+12</text>
+    <path class="w" d="M405 125 H435"/><polygon points="443,125 431,120 431,130" class="fill-ink"/>
+    <text x="424" y="100" class="m dim" text-anchor="middle">lw 0($t5)</text>
+    <rect x="450" y="106" width="135" height="38" rx="8" class="box-g"/><text x="517" y="130" class="m b" text-anchor="middle">arr[3] = 40</text>
+  </svg>
+  <figcaption>Shifting left by k multiplies by 2<sup>k</sup>: one cycle, versus a multi-cycle <code>mult</code>.</figcaption>
+</figure>
+<div class="scroll"><table>
+  <tr><th>i</th><th>binary</th><th>i &lt;&lt; 2</th><th>byte offset</th></tr>
+  <tr><td>0</td><td><code>000</code></td><td><code>00000</code></td><td>0</td></tr>
+  <tr><td>1</td><td><code>001</code></td><td><code>00100</code></td><td>4</td></tr>
+  <tr><td>2</td><td><code>010</code></td><td><code>01000</code></td><td>8</td></tr>
+  <tr><td>3</td><td><code>011</code></td><td><code>01100</code></td><td>12</td></tr>
+  <tr><td>4</td><td><code>100</code></td><td><code>10000</code></td><td>16</td></tr>
+</table></div>
+<div class="callout trap"><b>Array bug number one</b><p><code>lw $t4, 0($t3)</code> uses the <b>index</b> as an <b>address</b>. For i = 3 that is address 3: not a multiple of 4, so MARS raises an address error. <b>The hardware does no scaling</b> — MIPS has no "base + index×4" addressing mode (x86 and Arm do). You must write the <code>sll</code> yourself.</p>
+<p>Also illegal: <code>lw $t0, $t3($t0)</code>. The offset must be a <b>constant</b>, never a register.</p></div>
+
+<h3>Why walking in order is fast</h3>
+<p>One 64-byte cache line holds <b>16 ints</b> on Intel and AMD cores.</p>
+<div class="scroll"><table>
+  <tr><th>Access pattern</th><th>What the cache sees</th><th>Result</th></tr>
+  <tr><td>Pointer stride 4 bytes (this page's loops)</td><td>the first access loads the whole line; the next 15 hit</td><td>cold scan: 1 miss per 16 = <b>93.75% hits</b></td></tr>
+  <tr><td>Stride 64 bytes (every 16th word)</td><td>every access lands in a new line</td><td>no reuse: <b>every access is a miss</b></td></tr>
+</table></div>
+<p><b>Spatial locality</b> is why the arrays in Lab 12 are cheap to walk in order. Module 5 quantifies it: <a href="m5-01-memory-wall-locality.html">memory wall &amp; locality</a>, <a href="m5-04-amat.html">AMAT</a>.</p>
+
+<h3>Program F: copy an array (two pointers, one loop)</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · Program F · copy src into dst</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n"></td></tr>
+    <tr><td class="c">src:    .word <span class="num">5</span>, <span class="num">13</span>, <span class="num">-7</span>, <span class="num">22</span></td><td class="n">The source array: 4 words.</td></tr>
+    <tr><td class="c">dst:    .space <span class="num">16</span></td><td class="n">16 bytes = exactly 4 words of blank room.</td></tr>
+    <tr><td class="c">n:      .word <span class="num">4</span></td><td class="n">The element count, stored in memory.</td></tr>
+    <tr><td class="c">        .text</td><td class="n"></td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">la</span>   $t0, src</td><td class="n">Source pointer.</td></tr>
+    <tr><td class="c">        <span class="kw">la</span>   $t5, dst</td><td class="n">Destination pointer.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t1, n</td><td class="n">$t1 = 4. Note <code>lw</code> with a bare label fetches the <b>value</b> at that label.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t3, <span class="num">0</span></td><td class="n">i = 0.</td></tr>
+    <tr><td class="c">loop:   <span class="kw">bge</span>  $t3, $t1, done</td><td class="n">Test: i ≥ n → finished.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t4, <span class="num">0</span>($t0)</td><td class="n">Load src[i] into a register.</td></tr>
+    <tr><td class="c">        <span class="kw">sw</span>   $t4, <span class="num">0</span>($t5)</td><td class="n">Store it into dst[i]. <b>Memory → register → memory</b>: there is no memory-to-memory move.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t0, $t0, <span class="num">4</span></td><td class="n">Advance the source pointer one word.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t5, $t5, <span class="num">4</span></td><td class="n">Advance the destination pointer one word.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t3, $t3, <span class="num">1</span></td><td class="n">i++. Three updates per pass.</td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n"></td></tr>
+    <tr><td class="c">done:   <span class="kw">la</span>   $t5, dst</td><td class="n"><b>Reload</b> the base — $t5 walked all the way to the end.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $a0, <span class="num">12</span>($t5)</td><td class="n">dst[3] is at offset 3 × 4 = 12.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>22</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Exit.</td></tr>
+  </table>
+</div>
+<p><b>Verified output:</b> <code>22</code>. Note <code>.space 16</code> is exactly 4 words — copying 5 would overwrite <code>n</code>, which sits right after it.</p>
+
+<h4>Trace it: the loop lives in the table</h4>
+<div class="scroll"><table>
+  <tr><th>Pass</th><th>i at test</th><th>Test i ≥ 4</th><th>$t4 loaded</th><th>$t0 src ptr after</th><th>$t5 dst ptr after</th><th>dst so far</th></tr>
+  <tr><td>0</td><td>0</td><td>no</td><td>5</td><td>S+4</td><td>D+4</td><td>5, _, _, _</td></tr>
+  <tr><td>1</td><td>1</td><td>no</td><td>13</td><td>S+8</td><td>D+8</td><td>5, 13, _, _</td></tr>
+  <tr><td>2</td><td>2</td><td>no</td><td>−7</td><td>S+12</td><td>D+12</td><td>5, 13, −7, _</td></tr>
+  <tr><td>3</td><td>3</td><td>no</td><td>22</td><td>S+16</td><td>D+16</td><td>5, 13, −7, 22</td></tr>
+  <tr><td><b>exit</b></td><td>4</td><td><b>yes → done</b></td><td>—</td><td>S+16</td><td>D+16</td><td>5, 13, −7, 22</td></tr>
+</table></div>
+<div class="callout tip"><b>The habit for the whole MIPS block: write the trace before you run</b><p>Both pointers end at <b>base + 4n</b>, one past the last element — that address is the natural loop bound. The test runs <b>n+1</b> times (4 passes plus the exit test). Off-by-one bugs live in that extra test.</p></div>
+
+<h4>What a copy loop costs: 9, 8 or 5 instructions per element</h4>
+<div class="scroll"><table>
+  <tr><th>Loop style</th><th>Instructions per pass</th><th>1000 elements @ 93.75 MHz, CPI 1</th></tr>
+  <tr><td>index method (<code>sll</code> + <code>add</code> per array)</td><td>9</td><td>96.0 µs</td></tr>
+  <tr><td>pointers + counter (Program F)</td><td>8 = <code>bge</code>(2) + <code>lw</code> + <code>sw</code> + 3 <code>addi</code> + <code>j</code></td><td>85.3 µs</td></tr>
+  <tr><td><b>end-pointer, one <code>bne</code></b></td><td>5 = <code>lw</code> + <code>sw</code> + 2 <code>addi</code> + <code>bne</code></td><td><b>53.3 µs</b> — 37% fewer</td></tr>
+</table></div>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · the end-pointer copy (what an optimising compiler emits)</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">      <span class="kw">la</span>   $t0, src</td><td class="n"></td></tr>
+    <tr><td class="c">      <span class="kw">la</span>   $t5, dst</td><td class="n"></td></tr>
+    <tr><td class="c">      <span class="kw">sll</span>  $t6, $t1, <span class="num">2</span></td><td class="n">4n bytes.</td></tr>
+    <tr><td class="c">      <span class="kw">add</span>  $t6, $t6, $t0</td><td class="n">$t6 = src + 4n = the address one past the last element.</td></tr>
+    <tr><td class="c">      <span class="kw">beq</span>  $t0, $t6, done</td><td class="n"><b>n = 0 guard.</b> A bottom-tested loop would otherwise copy one element from an empty array.</td></tr>
+    <tr><td class="c">loop: <span class="kw">lw</span>   $t4, <span class="num">0</span>($t0)</td><td class="n"></td></tr>
+    <tr><td class="c">      <span class="kw">sw</span>   $t4, <span class="num">0</span>($t5)</td><td class="n"></td></tr>
+    <tr><td class="c">      <span class="kw">addi</span> $t0, $t0, <span class="num">4</span></td><td class="n"></td></tr>
+    <tr><td class="c">      <span class="kw">addi</span> $t5, $t5, <span class="num">4</span></td><td class="n">No counter at all: the pointer <i>is</i> the counter.</td></tr>
+    <tr><td class="c">      <span class="kw">bne</span>  $t0, $t6, loop</td><td class="n">One real instruction, and it closes the loop — no separate <code>j</code>.</td></tr>
+    <tr><td class="c">done:</td><td class="n"></td></tr>
+  </table>
+</div>
+<p><b>Verified:</b> same output, <code>22</code>.</p>
+
+<h3>Program G: fill an array from input</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · Program G · read n, then n values, print the last</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n"></td></tr>
+    <tr><td class="c">arr:    .space <span class="num">400</span></td><td class="n">400 bytes = room for 100 words.</td></tr>
+    <tr><td class="c">        .text</td><td class="n"></td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Read how many numbers are coming.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $t1, $v0</td><td class="n">n. <b>Copy $v0 out immediately</b> — the next read overwrites it.</td></tr>
+    <tr><td class="c">        <span class="kw">la</span>   $t0, arr</td><td class="n">The walking pointer.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t3, <span class="num">0</span></td><td class="n">i = 0.</td></tr>
+    <tr><td class="c">rd:     <span class="kw">bge</span>  $t3, $t1, done</td><td class="n">Same counted-loop test as Program F.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">The value arrives in $v0.</td></tr>
+    <tr><td class="c">        <span class="kw">sw</span>   $v0, <span class="num">0</span>($t0)</td><td class="n">arr[i] = value. The body of the loop is just "syscall 5, then sw".</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t0, $t0, <span class="num">4</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t3, $t3, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    rd</td><td class="n"></td></tr>
+    <tr><td class="c">done:   <span class="kw">lw</span>   $a0, <span class="num">-4</span>($t0)</td><td class="n">After the loop $t0 = B + 4n, one past the end, so <b>−4</b> is the last element. Offsets can be negative.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<p><b>Verified:</b> input <code>3 7 8 9</code> → prints <b>9</b>.</p>
+<div class="callout trap"><b>Two bounds, neither of them checked</b><p><code>.space 400</code> is 100 words: n = 150 overwrites whatever follows <code>arr</code>. And n = 0 makes <code>-4($t0)</code> read <code>arr[-1]</code>. Guarding both takes two extra branches.</p></div>
+
+<h3>Program H: a condition inside the loop (count negatives)</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · Program H · how many elements are negative?</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n"></td></tr>
+    <tr><td class="c">arr:    .word <span class="num">3</span>, <span class="num">-5</span>, <span class="num">17</span>, <span class="num">-2</span>, <span class="num">41</span>, <span class="num">-9</span></td><td class="n">Six values, three of them negative.</td></tr>
+    <tr><td class="c">n:      .word <span class="num">6</span></td><td class="n"></td></tr>
+    <tr><td class="c">        .text</td><td class="n"></td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">la</span>   $t0, arr</td><td class="n">base → walking pointer.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t1, n</td><td class="n">n = 6.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t2, <span class="num">0</span></td><td class="n">count = 0 — the accumulator, zeroed before the loop.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t3, <span class="num">0</span></td><td class="n">i = 0.</td></tr>
+    <tr><td class="c">loop:   <span class="kw">bge</span>  $t3, $t1, done</td><td class="n">Exit test.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t4, <span class="num">0</span>($t0)</td><td class="n">$t4 = the current element.</td></tr>
+    <tr><td class="c">        <span class="kw">bge</span>  $t4, $zero, skip</td><td class="n"><b>One-sided if.</b> Element ≥ 0 → it is not negative → skip the count. Opposite condition again.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t2, $t2, <span class="num">1</span></td><td class="n">count++.</td></tr>
+    <tr><td class="c">skip:   <span class="kw">addi</span> $t0, $t0, <span class="num">4</span></td><td class="n">The updates sit <b>after</b> <code>skip:</code>, so they run on every pass whichever way the branch went.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t3, $t3, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n"></td></tr>
+    <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $t2</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>3</code>. <b>Verified.</b></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="scroll"><table>
+  <tr><th>Pass</th><th>$t4</th><th>negative?</th><th>count</th></tr>
+  <tr><td>0</td><td>3</td><td>no</td><td>0</td></tr>
+  <tr><td>1</td><td>−5</td><td>yes</td><td>1</td></tr>
+  <tr><td>2</td><td>17</td><td>no</td><td>1</td></tr>
+  <tr><td>3</td><td>−2</td><td>yes</td><td>2</td></tr>
+  <tr><td>4</td><td>41</td><td>no</td><td>2</td></tr>
+  <tr><td>5</td><td>−9</td><td>yes</td><td><b>3</b></td></tr>
+</table></div>
+
+<h3>The running maximum: keep the best so far</h3>
+<p>Same skeleton as Program H. Only the condition and the update change.</p>
+<div class="scroll"><table>
+  <tr><th>Initial max</th><th>Verdict</th></tr>
+  <tr><td><code>arr[0]</code></td><td><b>correct</b> for every non-empty array</td></tr>
+  <tr><td><code>0</code></td><td><b>wrong</b> for {−5, −2, −9}: nothing ever beats 0, so it prints 0</td></tr>
+  <tr><td><code>0x80000000</code></td><td>correct: −2,147,483,648, the smallest 32-bit int</td></tr>
+</table></div>
+<div class="callout tip"><b>Every accumulator needs its identity</b><p>Sum starts at <b>0</b>. Product starts at <b>1</b>. Maximum starts at <b>arr[0]</b>. Get this wrong and the loop is silently wrong on a whole class of inputs.</p></div>
+
+<h2>9. Multiply, and the 32-bit wall</h2>
+<h3>Program K: a running product (3 to the power 4)</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · Program K · 3⁴</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">main:   <span class="kw">li</span>   $t0, <span class="num">3</span></td><td class="n">base.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t1, <span class="num">4</span></td><td class="n">exponent = how many times to multiply.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t2, <span class="num">1</span></td><td class="n">result = <b>1</b>, not 0 — the identity of ×.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t3, <span class="num">0</span></td><td class="n">i = 0.</td></tr>
+    <tr><td class="c">loop:   <span class="kw">bge</span>  $t3, $t1, done</td><td class="n">The usual counted-loop test.</td></tr>
+    <tr><td class="c">        <span class="kw">mult</span> $t2, $t0</td><td class="n">HI:LO = result × base. <b><code>mult</code> writes HI and LO, never a normal register.</b> It takes only two operands for that reason.</td></tr>
+    <tr><td class="c">        <span class="kw">mflo</span> $t2</td><td class="n">result = LO. Forget this line and $t2 never changes.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t3, $t3, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n"></td></tr>
+    <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $t2</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>81</code>. <b>Verified.</b></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="scroll"><table>
+  <tr><th>pass</th><th>i at test</th><th>result after</th></tr>
+  <tr><td>init</td><td>0</td><td>1</td></tr>
+  <tr><td>0</td><td>0</td><td>3</td></tr>
+  <tr><td>1</td><td>1</td><td>9</td></tr>
+  <tr><td>2</td><td>2</td><td>27</td></tr>
+  <tr><td>3</td><td>3</td><td><b>81</b></td></tr>
+  <tr><td>exit</td><td>4</td><td>81</td></tr>
+</table></div>
+
+<h3>Factorial meets the 32-bit wall at 13!</h3>
+<div class="scroll"><table>
+  <tr><th>n!</th><th>value</th><th>32-bit result</th><th>Reading</th></tr>
+  <tr><td>12!</td><td>479,001,600</td><td><code>0x1C8CFC00</code></td><td>correct, HI = 0</td></tr>
+  <tr><td><b>13!</b></td><td>6,227,020,800</td><td>HI = 1, LO = <code>0x7328CC00</code></td><td>LO alone reads as <b>1,932,053,504</b> — a plausible-looking wrong answer</td></tr>
+</table></div>
+<p>The signed 32-bit maximum is 2<sup>31</sup> − 1 = <b>2,147,483,647</b>. 12! fits; 13! does not.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · the general signed overflow check after mult</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">mult</span> $t1, $t2</td><td class="n">The full 64-bit product lands in HI:LO.</td></tr>
+    <tr><td class="c"><span class="kw">mfhi</span> $t5</td><td class="n">$t5 = the top 32 bits.</td></tr>
+    <tr><td class="c"><span class="kw">mflo</span> $t1</td><td class="n">$t1 = the bottom 32 bits — the candidate answer.</td></tr>
+    <tr><td class="c"><span class="kw">sra</span>  $t6, $t1, <span class="num">31</span></td><td class="n">Arithmetic shift right by 31 copies the sign bit into all 32 bits: <b>0</b> for a positive LO, <b>−1</b> (all ones) for a negative one.</td></tr>
+    <tr><td class="c"><span class="kw">bne</span>  $t5, $t6, ovf</td><td class="n">If HI is not that sign extension, the product did <b>not</b> fit in 32 bits.</td></tr>
+  </table>
+</div>
+<p><b>Verified:</b> 100000 × 100000 is flagged; (−3) × (−4) and 1000 × (−1000) are not.</p>
+<div class="callout tip"><b>For factorial, <code>HI != 0</code> is enough</b><p>No factorial lands between 2<sup>31</sup> and 2<sup>32</sup> (12! &lt; 2<sup>31</sup>, 13! &gt; 2<sup>32</sup>), so a simple <code>bne $t3, $zero, ovf</code> after <code>mfhi $t3</code> catches it.</p></div>
+<div class="callout trap"><b><code>mul rd, rs, rt</code> discards HI</b><p>The three-operand <code>mul</code> is convenient but it <b>cannot detect overflow</b> — the top half is thrown away. Use <code>mult</code> + <code>mfhi</code> whenever the result might be large.</p></div>
+<div class="scroll"><table>
+  <tr><th>When</th><th>Incident</th><th>What overflowed</th><th>Consequence</th></tr>
+  <tr><td>4 Jun 1996</td><td><b>Ariane 5, flight 501</b></td><td>a 64-bit float (horizontal velocity) converted to a 16-bit signed integer, range −32,768 … 32,767; the conversion was unprotected</td><td>Inertial software shut down 37 s after ignition; breakup at T+39 s; loss of about $370–500 million</td></tr>
+  <tr><td>1 May 2015</td><td><b>Boeing 787</b>, FAA directive</td><td>a software counter in the generator control units overflowed after 248 days of continuous power</td><td>All four units could fail-safe together: loss of all AC power. Fix: power-cycle</td></tr>
+  <tr><td>19 Jan 2038</td><td><b>Y2038</b> (predicted)</td><td>signed 32-bit seconds since 1970: 2<sup>31</sup> − 1 = 2,147,483,647</td><td>At 03:14:07 UTC the counter wraps negative</td></tr>
+</table></div>
+<p class="idea">Lab 13's arithmetic check on the 787: 2<sup>31</sup> ÷ 100 ÷ 86400 ≈ <b>248.55 days</b> — exactly a signed 32-bit counter ticking every 10 ms. (That is an inference; the FAA notice says only "software counter".) <b>A branch on HI is the guard the Ariane code lacked.</b></p>
+
+<h2>10. Lab 12 portal problems — full solutions</h2>
+<div class="scroll"><table>
+  <tr><th>#</th><th>Portal problem</th><th>Skills</th><th>Test cases</th></tr>
+  <tr><td>1</td><td>Access First Element of an Array</td><td><code>la</code>, <code>lw 0($t0)</code>, print</td><td>{10,20,30,40,50} → 10; {−7} → −7</td></tr>
+  <tr><td>2</td><td>Sum of Array Elements</td><td>counted loop, accumulator</td><td>{5,13,−7,22} → 33; {−1,−2,−3} → −6</td></tr>
+  <tr><td>3</td><td>Maximum Element in an Array</td><td>running best, <code>ble</code></td><td>{3,41,−5,17,41} → 41; {−5,−2,−9} → −2</td></tr>
+</table></div>
+
+<h3>1. Access First Element</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · first element</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n"></td></tr>
+    <tr><td class="c">arr:    .word <span class="num">10</span>,<span class="num">20</span>,<span class="num">30</span>,<span class="num">40</span>,<span class="num">50</span></td><td class="n"></td></tr>
+    <tr><td class="c">        .text</td><td class="n"></td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">la</span>   $t0, arr</td><td class="n">The label is an <b>address</b>, not a value — that is the whole point of this problem.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t1, <span class="num">0</span>($t0)</td><td class="n">First element = offset 0.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $t1</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>10</code>. <b>Verified.</b></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<p><b>Input variant:</b> use <code>.space 400</code>, Program G's read loop, then <code>la $t0, arr</code> again and <code>lw $a0, 0($t0)</code>.</p>
+
+<h3>2. Sum of Array Elements (pointer method)</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · sum</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n"></td></tr>
+    <tr><td class="c">arr:    .word <span class="num">5</span>, <span class="num">13</span>, <span class="num">-7</span>, <span class="num">22</span></td><td class="n"></td></tr>
+    <tr><td class="c">n:      .word <span class="num">4</span></td><td class="n"></td></tr>
+    <tr><td class="c">        .text</td><td class="n"></td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">la</span>   $t0, arr</td><td class="n">base → walking pointer.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t1, n</td><td class="n">n.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t2, <span class="num">0</span></td><td class="n">sum = 0 — zeroed <b>before</b> the loop.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t3, <span class="num">0</span></td><td class="n">i = 0.</td></tr>
+    <tr><td class="c">loop:   <span class="kw">bge</span>  $t3, $t1, done</td><td class="n">Exit when i ≥ n. With n = 0 the body never runs and the program prints 0, which is right.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t4, <span class="num">0</span>($t0)</td><td class="n">Load arr[i].</td></tr>
+    <tr><td class="c">        <span class="kw">add</span>  $t2, $t2, $t4</td><td class="n">sum += arr[i].</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t0, $t0, <span class="num">4</span></td><td class="n">Stride <b>4</b>, not 1.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t3, $t3, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n"></td></tr>
+    <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $t2</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<p><b>Verified:</b> {5,13,−7,22} → <b>33</b> · {−1,−2,−3} → <b>−6</b> · n = 0 → <b>0</b>.</p>
+
+<h3>3. Maximum Element in an Array</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · running maximum</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n"></td></tr>
+    <tr><td class="c">arr:    .word <span class="num">3</span>, <span class="num">41</span>, <span class="num">-5</span>, <span class="num">17</span>, <span class="num">41</span></td><td class="n">Note the repeated 41 — it tests how ties behave.</td></tr>
+    <tr><td class="c">n:      .word <span class="num">5</span></td><td class="n"></td></tr>
+    <tr><td class="c">        .text</td><td class="n"></td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">la</span>   $t0, arr</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t1, n</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t2, <span class="num">0</span>($t0)</td><td class="n"><b>max = arr[0].</b> Never start at 0 — see the identity table above.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t0, $t0, <span class="num">4</span></td><td class="n">Move the pointer to arr[1], since arr[0] is already counted.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t3, <span class="num">1</span></td><td class="n">i = 1, matching the pointer.</td></tr>
+    <tr><td class="c">loop:   <span class="kw">bge</span>  $t3, $t1, done</td><td class="n">With n = 1 the body never runs and max stays arr[0] — correct.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t4, <span class="num">0</span>($t0)</td><td class="n">The candidate.</td></tr>
+    <tr><td class="c">        <span class="kw">ble</span>  $t4, $t2, skip</td><td class="n">Candidate <b>not greater</b> than max → skip the update. The opposite of "cand &gt; max".</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $t2, $t4</td><td class="n">New max.</td></tr>
+    <tr><td class="c">skip:   <span class="kw">addi</span> $t0, $t0, <span class="num">4</span></td><td class="n">Updates after the label, so both paths run them.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t3, $t3, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n"></td></tr>
+    <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $t2</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="scroll"><table>
+  <tr><th>i</th><th>cand</th><th>cand &gt; max?</th><th>max after</th></tr>
+  <tr><td>init</td><td>—</td><td>—</td><td>3</td></tr>
+  <tr><td>1</td><td>41</td><td>yes</td><td><b>41</b></td></tr>
+  <tr><td>2</td><td>−5</td><td>no</td><td>41</td></tr>
+  <tr><td>3</td><td>17</td><td>no</td><td>41</td></tr>
+  <tr><td>4</td><td>41</td><td>no (=)</td><td>41</td></tr>
+</table></div>
+<p><b>Verified:</b> {3,41,−5,17,41} → <b>41</b> · {−5,−2,−9} → <b>−2</b> · {7} → <b>7</b>.</p>
+<div class="callout tip"><b>Ties: <code>ble</code> means the <i>first</i> maximum wins</b><p><code>ble</code> skips equal values, so the earliest 41 keeps the title. That is the right rule for the "Index of the Maximum" finisher. Change <code>ble</code> to <code>blt</code> and the <b>last</b> one wins instead.</p></div>
+
+<h3>Lab 12 finishers (all verified)</h3>
+<div class="scroll"><table>
+  <tr><th>Finisher</th><th>Idea</th><th>Key lines</th><th>Checked</th></tr>
+  <tr><td><b>Copy an array</b></td><td>two pointers, one loop</td><td>Program F above</td><td>dst[3] → 22</td></tr>
+  <tr><td><b>Reverse in place</b></td><td>two pointers walking <i>towards</i> each other; swap and stop when they meet</td><td><code>sll $t5,$t1,2</code> · <code>add $t5,$t5,$t0</code> · <code>addi $t5,$t5,-4</code> (last element)<br><code>rev: bge $t0,$t5,pr</code> · load both · store crossed · <code>addi $t0,4</code> · <code>addi $t5,-4</code></td><td>{1,2,3,4,5} → 5 4 3 2 1</td></tr>
+  <tr><td><b>Dot product</b></td><td>walk two arrays together; <code>mult</code> each pair, <code>mflo</code>, accumulate</td><td><code>mult $t4,$t6</code> · <code>mflo $t7</code> · <code>add $t2,$t2,$t7</code></td><td>{1,2,3}·{4,5,6} → 32</td></tr>
+  <tr><td><b>Index of the maximum</b></td><td>the running-max loop plus one more register that remembers <code>i</code></td><td><code>ble $t4,$t2,skip</code> · <code>move $t2,$t4</code> · <code>move $t7,$t3</code></td><td>{3,41,−5,17,41} → 1</td></tr>
+</table></div>
+
+<h2>11. Lab 13 portal problems — full solutions</h2>
+<div class="scroll"><table>
+  <tr><th>#</th><th>Portal problem</th><th>Skills</th><th>Test cases</th></tr>
+  <tr><td>1</td><td>A Number Is Even or Odd</td><td><code>syscall 5</code>, <code>andi</code>, <code>beq</code></td><td>0 Even; 7 Odd; −4 Even; −3 Odd</td></tr>
+  <tr><td>2</td><td>Find the Sum from 0 to 9</td><td>counted loop, accumulator</td><td>45</td></tr>
+  <tr><td>3</td><td>Iterative Factorial of 5</td><td>loop, <code>mult</code>/<code>mflo</code></td><td>120</td></tr>
+  <tr><td>4</td><td>Iterative Factorial of Any Number</td><td>read n, edge cases, HI</td><td>0 → 1; 1 → 1; 5 → 120; 12 → 479001600; 13 → overflow</td></tr>
+</table></div>
+
+<h3>1. A Number Is Even or Odd</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · even or odd</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n"></td></tr>
+    <tr><td class="c">even_s: .asciiz <span class="str">"Even\n"</span></td><td class="n">Match the portal's expected text <b>exactly</b>, capitals and all.</td></tr>
+    <tr><td class="c">odd_s:  .asciiz <span class="str">"Odd\n"</span></td><td class="n"></td></tr>
+    <tr><td class="c">        .text</td><td class="n"></td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $t0, $v0</td><td class="n">Copy out of $v0 at once.</td></tr>
+    <tr><td class="c">        <span class="kw">andi</span> $t1, $t0, <span class="num">1</span></td><td class="n">Keep only <b>bit 0</b>. A number is odd exactly when bit 0 is 1. This works for negatives too, because two's complement keeps the same low bit: −3 is <code>…11101</code>, bit 0 = 1.</td></tr>
+    <tr><td class="c">        <span class="kw">beq</span>  $t1, $zero, is_even</td><td class="n"><b>Polarity:</b> bit 0 is <b>zero</b> → even. Branch on <code>beq</code>, not <code>bne</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">la</span>   $a0, odd_s</td><td class="n">Fell through → bit 0 was 1 → odd.</td></tr>
+    <tr><td class="c">        <span class="kw">b</span>    show</td><td class="n">Jump over the even case.</td></tr>
+    <tr><td class="c">is_even: <span class="kw">la</span>  $a0, even_s</td><td class="n"></td></tr>
+    <tr><td class="c">show:   <span class="kw">li</span>   $v0, <span class="num">4</span></td><td class="n">One print block shared by both paths.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<p><b>Verified:</b> 0 → Even · 7 → Odd · −4 → Even · −3 → Odd.</p>
+
+<h3>2. Find the Sum from 0 to 9</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · sum 0..9</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">main:   <span class="kw">li</span>   $t0, <span class="num">0</span></td><td class="n">i = 0.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t1, <span class="num">0</span></td><td class="n">sum = 0.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t2, <span class="num">10</span></td><td class="n">The limit. 0..9 is <b>ten</b> terms, so the bound is 10 and the test is "≥".</td></tr>
+    <tr><td class="c">loop:   <span class="kw">bge</span>  $t0, $t2, done</td><td class="n">Exit when i ≥ 10.</td></tr>
+    <tr><td class="c">        <span class="kw">add</span>  $t1, $t1, $t0</td><td class="n">sum += i.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t0, $t0, <span class="num">1</span></td><td class="n">i++.</td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n"></td></tr>
+    <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $t1</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>45</code>. <b>Verified.</b></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<p>Sums after each pass: 0, 1, 3, 6, 10, 15, 21, 28, 36, <b>45</b>. The closed form <i>n</i>(<i>n</i>−1)/2 with <i>n</i> = 10 also gives 45, in a handful of instructions instead of ~40.</p>
+
+<h3>3. Iterative Factorial of 5</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · 5!</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">main:   <span class="kw">li</span>   $t0, <span class="num">5</span></td><td class="n">n = 5.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t1, <span class="num">1</span></td><td class="n">result = 1 (identity of ×).</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t2, <span class="num">2</span></td><td class="n">i starts at <b>2</b>: multiplying by 1 changes nothing.</td></tr>
+    <tr><td class="c">loop:   <span class="kw">bgt</span>  $t2, $t0, done</td><td class="n">Exit when i &gt; n. The bound is <b>inclusive</b> here (we want to multiply by n itself), so <code>bgt</code> is correct — unlike the array loops, which use <code>bge</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">mult</span> $t1, $t2</td><td class="n">HI:LO = result × i.</td></tr>
+    <tr><td class="c">        <span class="kw">mflo</span> $t1</td><td class="n">result = LO.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t2, $t2, <span class="num">1</span></td><td class="n">i++.</td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n"></td></tr>
+    <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $t1</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>120</code>. <b>Verified.</b></td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="scroll"><table>
+  <tr><th>i at test</th><th>i &gt; 5?</th><th>result after pass</th></tr>
+  <tr><td>2</td><td>no</td><td>2</td></tr>
+  <tr><td>3</td><td>no</td><td>6</td></tr>
+  <tr><td>4</td><td>no</td><td>24</td></tr>
+  <tr><td>5</td><td>no</td><td><b>120</b></td></tr>
+  <tr><td>6</td><td><b>yes</b></td><td>120</td></tr>
+</table></div>
+<div class="callout tip"><b>Starting i at 2 makes 0! and 1! fall out for free</b><p>With n = 0 or n = 1 the test <code>i &gt; n</code> is true immediately, the body never runs, and <code>result</code> stays 1 — which is the right answer. No special case needed.</p>
+<p><b>Count-down variant:</b> <code>result = 1; while (n &gt; 1) { result *= n; n--; }</code> — same answer, one fewer register, and the cheapest loop shape.</p></div>
+
+<h3>4. Iterative Factorial of Any Number (with the overflow guard)</h3>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · n! for a typed n</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .data</td><td class="n"></td></tr>
+    <tr><td class="c">ovf_s:  .asciiz <span class="str">"Overflow\n"</span></td><td class="n">The exact wording is the portal's choice — check its expected output.</td></tr>
+    <tr><td class="c">        .text</td><td class="n"></td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $t0, $v0</td><td class="n">n.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t1, <span class="num">1</span></td><td class="n">result = 1.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t2, <span class="num">2</span></td><td class="n">i = 2.</td></tr>
+    <tr><td class="c">loop:   <span class="kw">bgt</span>  $t2, $t0, done</td><td class="n">Exit when i &gt; n.</td></tr>
+    <tr><td class="c">        <span class="kw">mult</span> $t1, $t2</td><td class="n">The 64-bit product sits in HI:LO.</td></tr>
+    <tr><td class="c">        <span class="kw">mfhi</span> $t3</td><td class="n">Look at the <b>top</b> half <i>before</i> committing to the bottom one.</td></tr>
+    <tr><td class="c">        <span class="kw">bne</span>  $t3, $zero, ovf</td><td class="n">HI ≠ 0 → the answer does not fit in 32 bits.</td></tr>
+    <tr><td class="c">        <span class="kw">mflo</span> $t1</td><td class="n">Safe: result = LO.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t2, $t2, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n"></td></tr>
+    <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $t1</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Print n!</td></tr>
+    <tr><td class="c">        <span class="kw">b</span>    exit</td><td class="n">Skip the overflow message.</td></tr>
+    <tr><td class="c">ovf:    <span class="kw">li</span>   $v0, <span class="num">4</span></td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">la</span>   $a0, ovf_s</td><td class="n"></td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Print the message instead.</td></tr>
+    <tr><td class="c">exit:   <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">The two exits <b>share</b> this label, so the program has exactly one <code>syscall 10</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+  </table>
+</div>
+<div class="scroll"><table>
+  <tr><th>n</th><th>result</th><th>why</th></tr>
+  <tr><td>0, 1</td><td>1</td><td>empty product; the loop body never runs</td></tr>
+  <tr><td>5</td><td>120</td><td>2·3·4·5</td></tr>
+  <tr><td>12</td><td>479,001,600</td><td>the largest that fits in a signed 32-bit word</td></tr>
+  <tr><td>13</td><td><code>Overflow</code></td><td>the HI branch fires at i = 13</td></tr>
+  <tr><td>&lt; 0</td><td>prints 1</td><td>the loop never runs — <b>the portal decides</b> whether that is acceptable or needs a guard</td></tr>
+</table></div>
+<p><b>Verified:</b> 0 → 1 · 1 → 1 · 5 → 120 · 10 → 3628800 · 12 → 479001600 · 13 → Overflow · 20 → Overflow · −3 → 1.</p>
+
+<h3>Lab 13 finishers (all verified)</h3>
+<div class="scroll"><table>
+  <tr><th>Finisher</th><th>Idea</th><th>Key lines</th><th>Checked</th></tr>
+  <tr><td><b>GCD (Euclid)</b></td><td>repeatedly replace (a, b) with (b, a mod b) until b is 0</td><td><code>loop: beq $t1,$zero,done</code> · <code>div $t0,$t1</code> · <code>mfhi $t2</code> · <code>move $t0,$t1</code> · <code>move $t1,$t2</code> · <code>j loop</code></td><td>(48,18) → 6; (17,5) → 1</td></tr>
+  <tr><td><b>Collatz steps</b></td><td>while n ≠ 1: if n is odd, n = 3n+1, else n = n/2; count the steps</td><td><code>andi $t1,$t0,1</code> · <code>beq $t1,$zero,ev</code> · <code>mult</code>/<code>mflo</code> + <code>addi 1</code> · <code>ev: srl $t0,$t0,1</code></td><td>6 → 8; 27 → 111</td></tr>
+  <tr><td><b>Iterative Fibonacci</b></td><td>keep two values and slide them forward n times</td><td><code>add $t4,$t1,$t2</code> · <code>move $t1,$t2</code> · <code>move $t2,$t4</code></td><td>F(10) → 55; F(0) → 0</td></tr>
+  <tr><td><b>Digit sum</b></td><td>while n ≠ 0: add n mod 10, then n = n / 10</td><td><code>div $t0,$t5</code> · <code>mfhi $t4</code> (digit) · <code>mflo $t0</code> (rest) · <code>add $t2,$t2,$t4</code></td><td>1234 → 10</td></tr>
+</table></div>
+<p class="idea"><code>srl</code> (shift right <b>logical</b>) halves a <b>positive</b> number in one instruction — that is why the Collatz loop uses it rather than <code>div</code>. For a possibly-negative value you need <code>sra</code> or a real divide.</p>
+
+<h2>12. Bug hunt</h2>
+<p>Both labs run the same drill: <b>find the bug, state the symptom, fix it in one line.</b> The debugging order used all semester: (1) read the symptom, (2) write the trace table, (3) find the first row that differs from what you expect, (4) fix <i>that</i> line only.</p>
+
+<h3>Lab 12: five broken array snippets</h3>
+<div data-practice>
+  <details class="q"><summary><b>S1</b> — first element right, then crash. <code>loop: lw $t4,0($t0)</code> / <code>add $t2,$t2,$t4</code> / <code>addi $t0,$t0,<b>1</b></code> / <code>addi $t3,$t3,1</code></summary><div class="a"><p><b>Stride 1, not 4.</b> The second <code>lw</code> reads B+1, which is not a multiple of 4 → address error.</p><p><b>Fix:</b> <code>addi $t0, $t0, 4</code></p></div></details>
+  <details class="q"><summary><b>S2</b> — sums n+1 elements. The loop closes with <code>ble $t3, $t1, loop</code>.</summary><div class="a"><p><code>ble</code> keeps looping while <b>i ≤ n</b>, so it runs passes 0…n — one element too many, reading <code>arr[n]</code>, which is past the end.</p><p><b>Fix:</b> use <code>blt</code> at the bottom, or move the test to the top as <code>bge $t3,$t1,done</code>.</p></div></details>
+  <details class="q"><summary><b>S3</b> — prints 0 for <code>arr = {-5, -2, -9}</code>, but −2 is wanted. It starts with <code>li $t2, 0 # max</code>.</summary><div class="a"><p>The max starts at <b>0</b>, which is bigger than every element of an all-negative array, so nothing ever beats it.</p><p><b>Fix:</b> <code>lw $t2, 0($t0)</code> first — start at <code>arr[0]</code>.</p></div></details>
+  <details class="q"><summary><b>S4</b> — the sum comes out as <code>arr[0] × n</code>. The loop body is <code>lw</code> / <code>add</code> / <code>addi $t3,$t3,1</code> / <code>j loop</code>.</summary><div class="a"><p>The <b>pointer is never advanced</b>: every pass loads <code>arr[0]</code>. The counter moves, the data does not.</p><p><b>Fix:</b> add <code>addi $t0, $t0, 4</code>.</p></div></details>
+  <details class="q"><summary><b>S5</b> — address error. <code># arr[i], i in $t3</code> then <code>lw $t4, 0($t3)</code>.</summary><div class="a"><p>The <b>index</b> is being used as an <b>address</b>: i = 3 means address 3, which is misaligned.</p><p><b>Fix:</b> <code>sll</code> by 2, <code>add</code> the base, then <code>lw</code>.</p></div></details>
+</div>
+
+<h3>Lab 13: five broken branch and loop snippets</h3>
+<div data-practice>
+  <details class="q"><summary><b>S1</b> — the loop body never runs. <code>li $t0,0</code> / <code>li $t1,10</code> / <code>loop: ble $t0,$t1,done</code></summary><div class="a"><p><b>The exit test is inverted.</b> <code>i &lt;= n</code> is already true at i = 0, so the loop exits on the first test. The exit branch must fire when the loop condition <b>fails</b>.</p><p><b>Fix:</b> <code>bge $t0, $t1, done</code>.</p></div></details>
+  <details class="q"><summary><b>S2</b> — the sum is only the first term. <code>loop: bge $t0,$t2,done</code> / <code>add</code> / <code>addi</code> / <code>done: …</code></summary><div class="a"><p><b>No <code>j loop</code>:</b> after one pass control simply falls through into <code>done:</code>.</p><p><b>Fix:</b> add <code>j loop</code> before <code>done:</code>.</p></div></details>
+  <details class="q"><summary><b>S3</b> — an even number prints "Odd". <code>andi $t1,$t0,1</code> / <code>bne $t1,$zero,even_l</code></summary><div class="a"><p><b>Branch polarity.</b> <code>bne</code> fires when bit 0 is 1 — that is <i>odd</i> — but it jumps to the <i>even</i> label.</p><p><b>Fix:</b> <code>beq $t1, $zero, even_l</code>.</p></div></details>
+  <details class="q"><summary><b>S4</b> — 5! prints 1. <code>loop: bgt $t2,$t0,done</code> / <code>mult $t1,$t2</code> / <code>addi $t2,$t2,1</code> / <code>j loop</code></summary><div class="a"><p><b><code>mult</code> without <code>mflo</code>.</b> The product sits in LO; the register <code>$t1</code> is never updated, so it stays 1.</p><p><b>Fix:</b> <code>mflo $t1</code> after the <code>mult</code>.</p></div></details>
+  <details class="q"><summary><b>S5</b> — 5! prints 0. <code>li $t1, 0 # result</code> / <code>li $t2, 2 # i</code> / … / <code>mult $t1,$t2</code> / <code>mflo $t1</code></summary><div class="a"><p>The product is initialised to <b>0</b> — the identity of <b>+</b>, not of <b>×</b>. Every product is then 0.</p><p><b>Fix:</b> <code>li $t1, 1</code>.</p></div></details>
+</div>
+
+<h2>13. MARS how-to</h2>
 <p>A MARS program has two parts. <code>.data</code> holds your values (arrays, text). <code>.text</code> holds the instructions. Output and input use <b>syscall</b>: put the service number in <code>$v0</code>, put the argument in <code>$a0</code>, then write <code>syscall</code>.</p>
 <div class="scroll"><table>
   <tr><th><code>$v0</code></th><th>Service</th><th>Argument / result</th></tr>
@@ -233,99 +1084,9 @@
   <tr><td>4</td><td>print string</td><td>address of the text in <code>$a0</code></td></tr>
   <tr><td>5</td><td>read int</td><td>the typed number comes back in <code>$v0</code></td></tr>
   <tr><td>10</td><td>exit</td><td>stop the program</td></tr>
+  <tr><td>11</td><td>print char</td><td>the character code in <code>$a0</code></td></tr>
 </table></div>
-<p>A few MARS <b>pseudo-instructions</b> make programs easier to write: <code>li $t0, 5</code> (load immediate: $t0 = 5), <code>la $a0, msg</code> (load the address of label msg), <code>move $a0, $s2</code> (copy $s2 into $a0).</p>
-
-<h3>Program 1: array sum</h3>
-<p>C idea: <code>sum = 0; for (i = 0; i &lt; n; i++) sum = sum + arr[i]; print sum;</code></p>
-<ol class="flow arrows">
-  <li><b>Setup</b>base, n, sum = 0, i = 0</li>
-  <li><b>Test</b>i &lt; n? If not, go to done</li>
-  <li><b>Body</b>sum += arr[i]</li>
-  <li><b>Step</b>i++ and jump back</li>
-  <li><b>done</b>print "Sum = " and sum, exit</li>
-</ol>
-<div class="code">
-  <div class="code-head"><span><b>mips</b> · array_sum.asm</span><span>code → what it means</span></div>
-  <table class="ann">
-    <tr><td class="c">        .data</td><td class="n">Start of the data section.</td></tr>
-    <tr><td class="c">arr:    .word <span class="num">5</span>, <span class="num">12</span>, <span class="num">-3</span>, <span class="num">8</span>, <span class="num">20</span></td><td class="n">An array of five 32-bit ints. <code>arr</code> labels the address of arr[0].</td></tr>
-    <tr><td class="c">n:      .word <span class="num">5</span></td><td class="n">The number of elements.</td></tr>
-    <tr><td class="c">msg:    .asciiz <span class="str">"Sum = "</span></td><td class="n">Text ending with a 0 byte (that is what the z means).</td></tr>
-    <tr><td class="c">        .text</td><td class="n">Start of the code section.</td></tr>
-    <tr><td class="c">        .globl main</td><td class="n">Make the label <code>main</code> visible as the start point.</td></tr>
-    <tr><td class="c">main:   <span class="kw">la</span>   $s0, arr</td><td class="n">$s0 = base address of arr</td></tr>
-    <tr><td class="c">        <span class="kw">lw</span>   $s1, n</td><td class="n">$s1 = n = 5 (load the word stored at label n)</td></tr>
-    <tr><td class="c">        <span class="kw">li</span>   $s2, <span class="num">0</span></td><td class="n">sum = 0</td></tr>
-    <tr><td class="c">        <span class="kw">li</span>   $t0, <span class="num">0</span></td><td class="n">i = 0</td></tr>
-    <tr><td class="c">loop:   <span class="kw">slt</span>  $t1, $t0, $s1</td><td class="n">$t1 = 1 if i &lt; n</td></tr>
-    <tr><td class="c">        <span class="kw">beq</span>  $t1, $zero, done</td><td class="n">If not (i ≥ n), leave the loop.</td></tr>
-    <tr><td class="c">        <span class="kw">sll</span>  $t2, $t0, <span class="num">2</span></td><td class="n">$t2 = 4 × i</td></tr>
-    <tr><td class="c">        <span class="kw">add</span>  $t2, $t2, $s0</td><td class="n">$t2 = address of arr[i]</td></tr>
-    <tr><td class="c">        <span class="kw">lw</span>   $t3, <span class="num">0</span>($t2)</td><td class="n">$t3 = arr[i]</td></tr>
-    <tr><td class="c">        <span class="kw">add</span>  $s2, $s2, $t3</td><td class="n">sum = sum + arr[i]</td></tr>
-    <tr><td class="c">        <span class="kw">addi</span> $t0, $t0, <span class="num">1</span></td><td class="n">i = i + 1</td></tr>
-    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n">Back to the test.</td></tr>
-    <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">4</span></td><td class="n">Service 4 = print string</td></tr>
-    <tr><td class="c">        <span class="kw">la</span>   $a0, msg</td><td class="n">…the text at msg</td></tr>
-    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>Sum = </code></td></tr>
-    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Service 1 = print int</td></tr>
-    <tr><td class="c">        <span class="kw">move</span> $a0, $s2</td><td class="n">…the value of sum</td></tr>
-    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>42</code></td></tr>
-    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">Service 10 = exit</td></tr>
-    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Program ends.</td></tr>
-  </table>
-</div>
-<p><b>Output:</b> <code>Sum = 42</code> (5 + 12 − 3 + 8 + 20 = 42).</p>
-
-<h3>Program 2: find the maximum</h3>
-<p>C idea: <code>max = arr[0]; for (i = 1; i &lt; n; i++) { if (max &lt; arr[i]) max = arr[i]; } print max;</code><br>Plain English: "Guess that the first element is the biggest. Look at every other element; if it is bigger than the current guess, it becomes the new guess."</p>
-<ol class="flow arrows">
-  <li><b>Setup</b>max = arr[0], i = 1</li>
-  <li><b>Test</b>i &lt; n? If not, go to done</li>
-  <li><b>Load</b>$t3 = arr[i]</li>
-  <li><b>Compare</b>max &lt; arr[i]? If not, go to skip</li>
-  <li><b>Update</b>max = arr[i]</li>
-  <li><b>skip</b>i++ and jump back</li>
-  <li><b>done</b>print max, exit</li>
-</ol>
-<div class="code">
-  <div class="code-head"><span><b>mips</b> · find_max.asm</span><span>code → what it means</span></div>
-  <table class="ann">
-    <tr><td class="c">        .data</td><td class="n"></td></tr>
-    <tr><td class="c">arr:    .word <span class="num">5</span>, <span class="num">12</span>, <span class="num">-3</span>, <span class="num">27</span>, <span class="num">20</span>, <span class="num">9</span></td><td class="n">Six values; the biggest (27) is in the middle.</td></tr>
-    <tr><td class="c">n:      .word <span class="num">6</span></td><td class="n"></td></tr>
-    <tr><td class="c">msg:    .asciiz <span class="str">"Max = "</span></td><td class="n"></td></tr>
-    <tr><td class="c">        .text</td><td class="n"></td></tr>
-    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
-    <tr><td class="c">main:   <span class="kw">la</span>   $s0, arr</td><td class="n">$s0 = base address</td></tr>
-    <tr><td class="c">        <span class="kw">lw</span>   $s1, n</td><td class="n">$s1 = n</td></tr>
-    <tr><td class="c">        <span class="kw">lw</span>   $s2, <span class="num">0</span>($s0)</td><td class="n">max = arr[0]</td></tr>
-    <tr><td class="c">        <span class="kw">li</span>   $t0, <span class="num">1</span></td><td class="n">i = 1 (arr[0] is already counted)</td></tr>
-    <tr><td class="c">loop:   <span class="kw">slt</span>  $t1, $t0, $s1</td><td class="n">i &lt; n ?</td></tr>
-    <tr><td class="c">        <span class="kw">beq</span>  $t1, $zero, done</td><td class="n">No → finished.</td></tr>
-    <tr><td class="c">        <span class="kw">sll</span>  $t2, $t0, <span class="num">2</span></td><td class="n">$t2 = 4 × i</td></tr>
-    <tr><td class="c">        <span class="kw">add</span>  $t2, $t2, $s0</td><td class="n">$t2 = address of arr[i]</td></tr>
-    <tr><td class="c">        <span class="kw">lw</span>   $t3, <span class="num">0</span>($t2)</td><td class="n">$t3 = arr[i]</td></tr>
-    <tr><td class="c">        <span class="kw">slt</span>  $t4, $s2, $t3</td><td class="n">$t4 = 1 if max &lt; arr[i]</td></tr>
-    <tr><td class="c">        <span class="kw">beq</span>  $t4, $zero, skip</td><td class="n">Not bigger → don't update (opposite condition).</td></tr>
-    <tr><td class="c">        <span class="kw">move</span> $s2, $t3</td><td class="n">max = arr[i]</td></tr>
-    <tr><td class="c">skip:   <span class="kw">addi</span> $t0, $t0, <span class="num">1</span></td><td class="n">i = i + 1</td></tr>
-    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n"></td></tr>
-    <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">4</span></td><td class="n">print string "Max = "</td></tr>
-    <tr><td class="c">        <span class="kw">la</span>   $a0, msg</td><td class="n"></td></tr>
-    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
-    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">print int max</td></tr>
-    <tr><td class="c">        <span class="kw">move</span> $a0, $s2</td><td class="n"></td></tr>
-    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
-    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">exit</td></tr>
-    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
-  </table>
-</div>
-<p><b>Output:</b> <code>Max = 27</code>. <code>slt</code> compares <b>signed</b> numbers, so −3 is correctly treated as smaller.</p>
-<div class="callout tip"><b>Want the user to type the numbers?</b><p>Use service 5: <code>li $v0, 5</code> then <code>syscall</code>. The typed int arrives in <code>$v0</code>; copy it with <code>move $s1, $v0</code> before the next syscall overwrites <code>$v0</code>.</p></div>
-
-<h2>8. MARS how-to</h2>
+<p>A few MARS <b>pseudo-instructions</b> make programs easier to write: <code>li $t0, 5</code> (load immediate), <code>la $a0, msg</code> (load the address of label msg), <code>move $a0, $t2</code> (copy), <code>b L</code> (branch always), and the comparison branches <code>blt</code> / <code>bgt</code> / <code>ble</code> / <code>bge</code>.</p>
 <ol class="flow arrows">
   <li><b>Edit</b>File → New, type the program, save as <code>.asm</code></li>
   <li><b>Assemble (F3)</b>Converts to machine code. Errors show in the Messages pane.</li>
@@ -334,35 +1095,63 @@
   <li><b>Watch</b>Registers pane and Data Segment pane</li>
 </ol>
 <ul>
-  <li><b>Registers pane</b> (right side): all 32 registers plus PC, HI and LO. The one that just changed is highlighted. Watch <code>$t0</code> (i) and <code>$s2</code> (sum) climb as you step.</li>
-  <li><b>Text Segment</b> (Execute tab, top): each instruction's address, machine code (hex), the real ("Basic") instruction, and your source line.</li>
+  <li><b>Registers pane</b> (right side): all 32 registers plus PC, HI and LO. The one that just changed is highlighted. Watch <code>$t3</code> (i) and <code>$t2</code> (sum) climb as you step.</li>
+  <li><b>Text Segment</b> (Execute tab, top): each instruction's address, machine code (hex), the real ("Basic") instruction, and your source line. <b>This is where you see <code>bge</code> expand into <code>slt</code> + <code>beq</code>.</b></li>
   <li><b>Data Segment</b> (Execute tab, bottom): memory from <code>0x10010000</code>. Your <code>arr</code> values appear there, 4 bytes each. Untick "Hexadecimal Values" to see them in decimal.</li>
   <li>Set a <b>breakpoint</b> by ticking the "Bkpt" box next to a line; F5 then stops there.</li>
 </ul>
 
 <h2>Common mistakes &amp; exam traps</h2>
-<div class="callout trap"><b>Slips that cost marks</b>
+<div class="callout trap"><b>From L12 slide 30 and both bug hunts</b>
 <ul>
-  <li>Branching on the <b>same</b> condition as the C code. Use the opposite, so the "then" code can fall through.</li>
-  <li>Forgetting <code>j Exit</code> after the then-part, so the else-part runs too.</li>
-  <li>Array index without <code>×4</code>: <code>A[8]</code> is <code>32($s3)</code>, not <code>8($s3)</code>.</li>
-  <li>Mixing up <code>lw</code> and <code>sw</code>: <code>lw</code> reads memory into a register; <code>sw</code> writes a register into memory. Both write the register first.</li>
-  <li>Forgetting the loop's <code>j Loop</code>, or putting the <code>i++</code> before the body in a <code>for</code> loop.</li>
-  <li>Using <code>=</code> vs <code>==</code> wrongly when reading C: <code>=</code> stores, <code>==</code> compares.</li>
-  <li>Loading into <code>$v0</code> for a syscall and then losing a value you still needed there.</li>
-  <li><code>blt</code>/<code>bgt</code>/<code>li</code>/<code>la</code>/<code>move</code> are pseudo-instructions. In an exam asking for "real MIPS instructions", expand them.</li>
+  <li><b>Not reversing the condition.</b> <code>if (cond) body</code> → branch AWAY on <code>!cond</code>. Branching on <code>cond</code> itself inverts your logic.</li>
+  <li><b>Forgetting <code>j Done</code></b> after the then-block, so the else-block runs too.</li>
+  <li><b>Wrong array scaling.</b> <code>arr[i]</code> is at base + i×4. Forgetting the ×4 (<code>sll</code> by 2) reads the wrong memory; using the index as the address raises an alignment error.</li>
+  <li><b>Using <code>blt</code>/<code>bgt</code> when the question says "real MIPS".</b> Base MIPS has no <code>blt</code>. Expand to <code>slt</code> + <code>beq</code>/<code>bne</code> with <code>$zero</code>, and count it as <b>two</b> instructions.</li>
+  <li><b>Inverted exit test.</b> <code>ble</code> where <code>bge</code> belongs runs one extra pass (or none at all). This is the single most common loop bug — and it is the bug on L12 slide 13.</li>
+  <li><b>Missing <code>j loop</code></b>, so the loop runs exactly once.</li>
+  <li><b>Stride 1 instead of 4</b>, or a pointer that is never advanced.</li>
+  <li><b>Wrong accumulator identity.</b> Sum must start at 0, product at 1, max at <code>arr[0]</code>.</li>
+  <li><b><code>mult</code> without <code>mflo</code></b> — the register never changes. And <code>mul rd,rs,rt</code> cannot detect overflow.</li>
+  <li><b>Losing <code>$v0</code>.</b> Copy a value out of <code>$v0</code> immediately after <code>syscall 5</code>; the next syscall setup overwrites it.</li>
+  <li><b>Keeping your own value in <code>$at</code>.</b> Every pseudo-branch clobbers it.</li>
+  <li><b>Reading C punctuation wrongly:</b> <code>=</code> stores, <code>==</code> compares.</li>
+  <li><b>(Lab 14 / next page)</b> Forgetting to save <code>$ra</code>, unbalanced <code>$sp</code>, clobbering an <code>$s</code> register without saving it.</li>
 </ul></div>
+
+<h2>Key takeaways (L12, slide 31)</h2>
+<ol class="flow arrows">
+  <li><b>01</b>if/else translates to compare-and-branch: use <code>beq</code>/<code>bne</code>, and branch AWAY on the reversed condition.</li>
+  <li><b>02</b>Ordering (&lt; &gt; ≤ ≥) uses the <code>slt</code> idiom — set a flag, then branch on it with <code>beq</code>/<code>bne</code> + <code>$zero</code>.</li>
+  <li><b>03</b>Loops are a label, a condition test at the top, a body, and a <code>j</code> back — <code>while</code> and <code>for</code> share this skeleton.</li>
+  <li><b>04</b>Arrays are base + 4i: <code>sll</code>, <code>add</code>, <code>lw</code>. Nothing checks the bound but your loop test.</li>
+  <li><b>05</b>Every accumulator has an identity, and every <code>mult</code> that might be large needs a HI check.</li>
+</ol>
 
 <h2>Practice</h2>
 <div data-practice>
-  <details class="q"><summary>Translate <code>f = g - (h + 5);</code> with f, g, h in <code>$s0, $s1, $s2</code>.</summary><div class="a"><p><code>addi $t0, $s2, 5</code> ($t0 = h + 5)<br><code>sub $s0, $s1, $t0</code> (f = g − $t0)</p></div></details>
-  <details class="q"><summary>Translate <code>A[3] = A[2] + h;</code> (A base in <code>$s3</code>, h in <code>$s2</code>).</summary><div class="a"><p><code>lw $t0, 8($s3)</code> (A[2] is at 2×4 = 8)<br><code>add $t0, $t0, $s2</code><br><code>sw $t0, 12($s3)</code> (A[3] is at 12)</p></div></details>
-  <details class="q"><summary>Translate <code>if (i != j) f = f + 1;</code> (no else). f in <code>$s0</code>, i, j in <code>$s3, $s4</code>.</summary><div class="a"><p>Opposite of <code>!=</code> is <code>==</code>:<br><code>beq $s3, $s4, Exit</code><br><code>addi $s0, $s0, 1</code><br><code>Exit:</code><br>No <code>j</code> is needed because there is no else-part.</p></div></details>
-  <details class="q"><summary>Translate <code>if (a &gt;= b) x = 1;</code> with a, b, x in <code>$s0, $s1, $s2</code>.</summary><div class="a"><p>Skip when a &lt; b:<br><code>slt $t0, $s0, $s1</code> ($t0 = 1 if a &lt; b)<br><code>bne $t0, $zero, Exit</code><br><code>addi $s2, $zero, 1</code><br><code>Exit:</code></p></div></details>
-  <details class="q"><summary>Translate <code>while (i &lt; 10) i = i + 2;</code> with i in <code>$s0</code>.</summary><div class="a"><p><code>Loop: slti $t0, $s0, 10</code><br><code>      beq  $t0, $zero, Exit</code> (leave when i ≥ 10)<br><code>      addi $s0, $s0, 2</code><br><code>      j    Loop</code><br><code>Exit:</code></p></div></details>
-  <details class="q"><summary>In the while-loop trace, how many times does the test run if save = {7, 7, 7, 7, 3} and k = 7?</summary><div class="a"><p>It passes for i = 0, 1, 2, 3 and fails at i = 4. So the test runs <b>5 times</b>, the body 4 times, and i ends at <b>4</b>.</p></div></details>
-  <details class="q"><summary>Rewrite <code>for (i = 0; i &lt; n; i++) A[i] = 0;</code> in MIPS. i in <code>$t0</code>, n in <code>$s1</code>, base in <code>$s0</code>.</summary><div class="a"><p><code>      li   $t0, 0</code><br><code>Loop: slt  $t1, $t0, $s1</code><br><code>      beq  $t1, $zero, Done</code><br><code>      sll  $t2, $t0, 2</code><br><code>      add  $t2, $t2, $s0</code><br><code>      sw   $zero, 0($t2)</code> (store 0 into A[i])<br><code>      addi $t0, $t0, 1</code><br><code>      j    Loop</code><br><code>Done:</code></p></div></details>
-  <details class="q"><summary>What does <code>blt $t0, $t1, L</code> become in real instructions?</summary><div class="a"><p><code>slt $at, $t0, $t1</code> then <code>bne $at, $zero, L</code>. (MARS's Text Segment shows exactly this.)</p></div></details>
+  <details class="q"><summary>Translate <code>if (a == b) { c = a + b; }</code> with <code>$t0=a, $t1=b, $t2=c</code>.</summary><div class="a"><p><code>      bne $t0, $t1, Skip</code><br><code>      add $t2, $t0, $t1</code><br><code>Skip:</code></p><p>Branch on the <b>opposite</b> of <code>==</code>. No <code>j</code> is needed because there is no else-block.</p></div></details>
+  <details class="q"><summary>Translate <code>if (a == b) c = 1; else c = 0;</code>. Show your labels. <i>(L12 homework 1)</i></summary><div class="a"><p><code>      bne $t0, $t1, Else</code><br><code>      li  $t2, 1</code><br><code>      j   Done</code><br><code>Else: li  $t2, 0</code><br><code>Done:</code></p><p>The <code>j Done</code> is what stops the then-block falling into the else-block.</p></div></details>
+  <details class="q"><summary>Translate <code>int sum(int n) { int s = 0; for (i = 1; i &lt;= n; i++) s += i; return s; }</code> as a loop. <i>(L12 homework 2)</i></summary><div class="a"><p>With n in <code>$t0</code>, s in <code>$t1</code>, i in <code>$t2</code>. The bound is <b>inclusive</b>, so exit on <code>i &gt; n</code>:</p><p><code>      li   $t1, 0</code><br><code>      li   $t2, 1</code><br><code>loop: bgt  $t2, $t0, done</code><br><code>      add  $t1, $t1, $t2</code><br><code>      addi $t2, $t2, 1</code><br><code>      j    loop</code><br><code>done:</code></p><p>For n = 10 this gives 55. Compare with "Sum 0 to 9", where the bound is <b>exclusive</b> and the test is <code>bge $t0, $t2, done</code>.</p></div></details>
+  <details class="q"><summary>What does <code>bge $t3, $t1, done</code> become in real instructions, and how many cycles does it cost?</summary><div class="a"><p><code>slt $at, $t3, $t1</code> then <code>beq $at, $zero, done</code>. <b>Two</b> real instructions — MARS's Text Segment pane shows exactly this. Count both when you count cycles.</p></div></details>
+  <details class="q"><summary>Base = <code>0x1000</code>. What is the address of <code>arr[5]</code>? And from <code>0x10010000</code>, <code>arr[6]</code>? <i>(Lab 12 cold call / exit ticket)</i></summary><div class="a"><p><code>arr[5]</code> = 0x1000 + 5×4 = 0x1000 + 20 = <b>0x1014</b>.<br><code>arr[6]</code> = 0x10010000 + 24 = <b>0x10010018</b>.</p></div></details>
+  <details class="q"><summary>Why does the loop add 4 to the pointer, not 1? And why does the pointer end at <code>base + 4n</code>?</summary><div class="a"><p>Memory is <b>byte</b>-addressable and a word is 4 bytes, so consecutive elements are 4 bytes apart. After n passes the pointer has advanced 4n bytes, landing one past the last element — which is why <code>-4($t0)</code> is the last element and why <code>base + 4n</code> makes a natural end-pointer bound.</p></div></details>
+  <details class="q"><summary><code>lw $t4, 0($t3)</code> with <code>$t3 = 3</code>: what happens?</summary><div class="a"><p>It tries to read address <b>3</b>, which is not a multiple of 4 → MARS raises an <b>address error</b>. The index was used as an address; it needed <code>sll $t5,$t3,2</code> then <code>add $t5,$t5,$t0</code> first.</p></div></details>
+  <details class="q"><summary>Which of the index, pointer and end-pointer copy loops is fastest, and why?</summary><div class="a"><p>The <b>end-pointer</b> loop: 5 instructions per element versus 8 and 9. It has no counter (the pointer <i>is</i> the counter) and closes with a single real <code>bne</code> instead of a two-instruction <code>bge</code> plus a <code>j</code>. At 93.75 MHz with CPI 1 and 1000 elements: 53.3 µs vs 85.3 and 96.0.</p></div></details>
+  <details class="q"><summary>Why must a running maximum start at <code>arr[0]</code> and not 0?</summary><div class="a"><p>Because 0 beats every element of an all-negative array. On {−5, −2, −9} a max that starts at 0 prints <b>0</b>; starting at <code>arr[0]</code> correctly prints <b>−2</b>. (<code>0x80000000</code>, the smallest 32-bit int, also works.)</p></div></details>
+  <details class="q"><summary>How many ints fit in <code>.space 400</code>? What breaks if n = 150? What if n = 0?</summary><div class="a"><p>400 bytes ÷ 4 = <b>100</b> words. n = 150 writes 200 bytes past the end of the buffer, silently corrupting whatever follows it in <code>.data</code>. n = 0 makes <code>lw $a0, -4($t0)</code> read <code>arr[-1]</code> — the word <i>before</i> the array.</p></div></details>
+  <details class="q"><summary>A 64-byte cache line holds how many ints, and what is the hit rate of a cold sequential scan?</summary><div class="a"><p>64 ÷ 4 = <b>16</b> ints. The first access misses and loads the whole line; the next 15 hit. So 1 miss per 16 = <b>93.75% hits</b>.</p></div></details>
+  <details class="q"><summary>Write <code>x &gt;= 10 &amp;&amp; x &lt;= 20</code> in MIPS. <i>(Lab 13 cold call 6)</i></summary><div class="a"><p><code>      slti $t8, $t0, 10</code> (1 if the first test fails)<br><code>      bne  $t8, $zero, skip</code><br><code>      li   $t9, 20</code><br><code>      bgt  $t0, $t9, skip</code> (second test fails)<br><code>      addi $t2, $t2, 1</code><br><code>skip:</code></p><p>Both tests branch to the <b>same</b> skip label; the body is reached only by falling through both.</p></div></details>
+  <details class="q"><summary>Which loop shape has the least overhead, and why?</summary><div class="a"><p><b>Count-down to zero</b>: 2 instructions of overhead per pass. The bottom test removes the <code>j</code>, and comparing against <code>$zero</code> removes the <code>slt</code>, leaving one real <code>bne</code>. Caveat: like any bottom-tested loop it runs the body at least once, so it is wrong for n = 0.</p></div></details>
+  <details class="q"><summary><code>slt</code> vs <code>sltu</code> on −1 and 1 — what does each give?</summary><div class="a"><p><code>slt</code> is <b>signed</b>: −1 &lt; 1 → <b>1</b>.<br><code>sltu</code> is <b>unsigned</b>: 0xFFFFFFFF = 4,294,967,295, which is not less than 1 → <b>0</b>.<br>Use <code>sltu</code> for addresses and lengths, <code>slt</code> for int values.</p></div></details>
+  <details class="q"><summary>Why does <code>andi $t1, $t0, 1</code> correctly detect that −3 is odd?</summary><div class="a"><p><code>andi</code> keeps only bit 0, and two's complement does not change the low bits of odd numbers: −3 is <code>0xFFFFFFFD</code>, whose bit 0 is <b>1</b>. So $t1 = 1 → odd. (Note <code>andi</code> <b>zero</b>-extends its immediate, so the upper bits are masked away cleanly.)</p></div></details>
+  <details class="q"><summary>A backward branch whose target is 5 instructions up: what is the immediate?</summary><div class="a"><p><b>−5</b>, stored as <code>0xFFFB</code>. BTA = PC + 4 + signext(imm)×4, so going back 20 bytes from the instruction after the branch needs imm×4 = −20. Example encoding: <code>bne $t0, $t5, loop</code> → <code>0x150DFFFB</code>.</p></div></details>
+  <details class="q"><summary>After <code>mult</code>, where is the product? And what does <code>beq $v0, $zero, done</code> do after <code>syscall 5</code>?</summary><div class="a"><p>The full 64-bit product is in <b>HI:LO</b> — <code>mflo</code> gets the low 32 bits, <code>mfhi</code> the high 32. No general register is touched.</p><p><code>beq $v0, $zero, done</code> is the <b>sentinel test</b>: the number just typed arrived in <code>$v0</code>, so this leaves the loop when the user types 0.</p></div></details>
+  <details class="q"><summary>12! vs 13! in a signed 32-bit word — and why does <code>HI != 0</code> catch 13!?</summary><div class="a"><p>12! = 479,001,600 = <code>0x1C8CFC00</code>, comfortably under 2³¹−1 = 2,147,483,647, so HI = 0.<br>13! = 6,227,020,800 needs 33 bits: HI = 1, LO = <code>0x7328CC00</code> = 1,932,053,504 — a plausible-looking wrong answer.</p><p>No factorial lands between 2³¹ and 2³², so for factorial a plain <code>HI != 0</code> is a complete test. The general signed rule is <code>HI == (LO &gt;&gt; 31 arithmetic)</code>, i.e. HI must equal LO's sign extension.</p></div></details>
+  <details class="q"><summary>Why is 0! = 1 with no special case in the loop?</summary><div class="a"><p>Because <code>result</code> is initialised to the multiplicative identity <b>1</b> and the counter starts at <b>2</b>. With n = 0 (or 1) the test <code>bgt $t2, $t0, done</code> is true on the very first check, the body never runs, and 1 is printed. The empty product is 1 by definition.</p></div></details>
+  <details class="q"><summary>Where must the update sit for <code>continue</code> to work?</summary><div class="a"><p><b>After</b> the <code>next:</code> label that <code>continue</code> jumps to. Put the <code>addi</code> before it and <code>continue</code> skips the update — an infinite loop.</p></div></details>
+  <details class="q"><summary>Rewrite <code>for (i = 0; i &lt; n; i++) arr[i] = 0;</code> in MIPS, pointer style.</summary><div class="a"><p><code>      la   $t0, arr</code><br><code>      li   $t3, 0</code><br><code>loop: bge  $t3, $t1, done</code><br><code>      sw   $zero, 0($t0)</code> (store 0 — <code>$zero</code> is always 0, so no <code>li</code> is needed)<br><code>      addi $t0, $t0, 4</code><br><code>      addi $t3, $t3, 1</code><br><code>      j    loop</code><br><code>done:</code></p></div></details>
+  <details class="q"><summary>What is wrong with L12 slide 13's <code>while</code> loop, and what should it say?</summary><div class="a"><p>It writes <code>blt $t1, $t0, End</code>, i.e. "leave when n &lt; i". The loop then continues while <code>i &lt;= n</code> — one pass too many. For i = 0, n = 5 it gives 15 instead of 10.</p><p>It should be <code>bge $t0, $t1, End</code> ("leave when i ≥ n") = <code>slt $at, $t0, $t1</code> + <code>beq $at, $zero, End</code>, which is what the slide's own caption describes.</p></div></details>
 </div>
 
 <h2>Watch</h2>

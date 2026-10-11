@@ -15,10 +15,11 @@
 
 <main>
 <section class="hero">
-  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag book">From syllabus · textbook-based</span></div>
+  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag class">From class notes · L10</span></div>
   <h1>CISC vs RISC, and RISC-V's modular design</h1>
-  <p class="idea">There are two ways to design a CPU's instruction set. <b>CISC</b> offers many powerful instructions of different lengths. <b>RISC</b> offers a small set of simple instructions, all the same length, that are easy to run fast. <b>RISC-V</b> is a free RISC design: a small base plus optional add-on "extensions".</p>
+  <p class="idea">L9 gave us the <em>organisation</em> — how CPU, memory and buses connect. The missing piece is the <em>language</em>: what set of commands does the hardware actually accept? That is the <b>ISA</b>. There are two philosophies for designing one. <b>CISC</b> packs power into each instruction. <b>RISC</b> keeps every instruction simple. <b>RISC-V</b> is a free, modular RISC design.</p>
   <div class="analogy"><b>Think of it like this:</b> a CISC kitchen has a machine for every dish: press one button for "make pizza". A RISC kitchen has a few simple tools (knife, pan, oven) and a fast cook who chains simple steps. The RISC cook needs more steps, but each step is quick and predictable, so several cooks can work in an assembly line. RISC-V is like a basic kitchen kit where you add only the extra modules you need (a pizza oven, a mixer).</div>
+  <div class="callout tip"><b>The lecture's one-line thesis</b><p>"The trade never disappears — <b>it just moves</b>. CISC asks more of the chip; RISC asks more of the compiler." And the big reveal at the end: the RISC-vs-CISC war ended in a <b>truce</b>. Modern CPUs borrow from both.</p></div>
 </section>
 
 <h2>Key terms</h2>
@@ -33,27 +34,78 @@
   <div class="term"><dt>CPI</dt><dd>Cycles Per Instruction: the average number of clock cycles one instruction takes.</dd></div>
   <div class="term"><dt>Royalty-free</dt><dd>Anyone can build and sell chips using it without paying a licence fee.</dd></div>
   <div class="term"><dt>Extension</dt><dd>An optional add-on group of instructions in RISC-V, named by a letter (M, A, F, D, C, V…).</dd></div>
+  <div class="term"><dt>Code density</dt><dd>How much work a program does per byte of machine code. Denser code = a smaller program file.</dd></div>
+  <div class="term"><dt>Microarchitecture</dt><dd>How an ISA is actually <em>built</em> in silicon: the pipeline, caches and predictors. Two chips can share one ISA and have completely different microarchitectures.</dd></div>
+  <div class="term"><dt>Domain-specific ISA</dt><dd>An instruction set designed for one job (graphics, neural networks) instead of for general-purpose programs.</dd></div>
 </dl>
 
-<h2>1. CISC: powerful, variable-length instructions</h2>
-<p>In the 1970s memory was tiny and expensive. Designers wanted programs to be <b>short</b>, so each instruction did a lot of work. That is the CISC idea. x86 is the main CISC family today.</p>
-<ul>
-  <li><b>Variable length:</b> an x86 instruction is anywhere from <b>1 to 15 bytes</b> long. The CPU must decode the first bytes just to find where the instruction ends.</li>
-  <li><b>Complex, memory-to-memory instructions:</b> one instruction can read memory, compute, and write memory back, e.g. <code>add dword [ebx], 5</code>. <code>rep movsb</code> copies a whole block of memory.</li>
-  <li><b>Microcode:</b> complex instructions are run by an internal micro-program.</li>
-  <li><b>Fewer instructions per program</b> (dense code), but each one can take many clock cycles (high CPI).</li>
-  <li>Few general-purpose registers (8 in 32-bit x86, 16 in x86-64).</li>
-</ul>
+<h2>1. The ISA: the hardware/software contract</h2>
+<p>Before comparing the two philosophies, be clear what an ISA <em>is</em>. The lecture draws it as a sandwich: the ISA is the agreed interface in the middle, and <b>the boundary the whole industry builds around</b>.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 620 230" width="620" role="img" aria-label="Three stacked bars: software on top compiles to the ISA in the middle, and hardware at the bottom executes the ISA">
+    <rect x="150" y="20" width="330" height="48" rx="8" class="box-g"/>
+    <text x="315" y="42" class="b" text-anchor="middle">SOFTWARE</text>
+    <text x="315" y="60" class="m dim" text-anchor="middle">compilers · OS · your programs</text>
+    <text x="140" y="38" class="dim" text-anchor="end">everything above</text>
+    <text x="140" y="56" class="dim" text-anchor="end">compiles TO the ISA</text>
+    <path class="w-hi" d="M315 68 V88"/>
+    <polygon points="315,98 310,86 320,86" class="fill-hi"/>
+    <rect x="150" y="98" width="330" height="48" rx="8" class="box-hi"/>
+    <text x="315" y="128" class="b" text-anchor="middle">◆ THE ISA — the instruction set ◆</text>
+    <path class="w-hi" d="M315 146 V166"/>
+    <polygon points="315,176 310,164 320,164" class="fill-hi"/>
+    <rect x="150" y="176" width="330" height="48" rx="8" class="box-b"/>
+    <text x="315" y="198" class="b" text-anchor="middle">HARDWARE</text>
+    <text x="315" y="216" class="m dim" text-anchor="middle">the CPU that implements it</text>
+    <text x="490" y="194" class="dim">everything below</text>
+    <text x="490" y="212" class="dim">EXECUTES the ISA</text>
+  </svg>
+  <figcaption>Why this is powerful: as long as both sides honour the ISA, hardware and software teams can innovate independently. Intel can redesign a chip and your old programs still run.</figcaption>
+</figure>
 
-<h2>2. RISC: simple, fixed-length instructions</h2>
-<p>In the 1980s, researchers (Patterson at Berkeley, Hennessy at Stanford) found that programs mostly use simple instructions. So they made those simple ones very fast.</p>
-<ul>
-  <li><b>Fixed length:</b> every MIPS instruction is exactly <b>32 bits (4 bytes)</b>. The next instruction is always at PC + 4.</li>
-  <li><b>Load/store:</b> only <code>lw</code>/<code>sw</code> touch memory. <code>add</code> works only on registers.</li>
-  <li><b>Simple instructions</b> with only a few formats (MIPS has 3: R, I, J), so decoding is quick. Control can be plain hard-wired logic, not microcode.</li>
-  <li><b>Easy to pipeline:</b> every instruction takes about the same steps, so they flow smoothly through an assembly line.</li>
-  <li><b>More registers:</b> 32 in MIPS and RISC-V, so fewer slow memory trips.</li>
-</ul>
+<h2>2. CISC: powerful, variable-length instructions</h2>
+<p>The class's one-sentence philosophy: <b>one instruction can do a whole task — even memory-to-memory arithmetic in a single line.</b> Born when memory was scarce and expensive, so fewer, denser instructions saved precious space.</p>
+<div class="vs">
+  <div>
+    <h3>The philosophy</h3>
+    <p>Instructions are variable-length: simple ones are short, complex ones are long. One CISC instruction can replace several RISC ones:</p>
+    <div class="formula" style="margin-bottom:0">add [mem1], [mem2]<small>The lecture's example: read two memory locations, add them, write the answer back — one instruction.</small></div>
+  </div>
+  <div>
+    <h3>Character (the slide's list)</h3>
+    <ul style="margin-bottom:0">
+      <li>Hundreds of instructions</li>
+      <li>Variable length (<b>1–15 bytes</b> on x86)</li>
+      <li>Instructions can touch memory directly</li>
+      <li>Complex hardware decoder</li>
+      <li>Fewer lines of assembly</li>
+      <li>e.g. <b>x86, VAX, 68000</b></li>
+    </ul>
+  </div>
+</div>
+<p>Two more consequences the slides lean on later: complex instructions are run by an internal <b>micro-program</b> (microcode), and each one can take many clock cycles (<b>high CPI</b>). x86 also has few general-purpose registers — 8 in 32-bit x86, 16 in x86-64.</p>
+
+<h2>3. RISC: simple, fixed-length instructions</h2>
+<p>In the 1980s, researchers (Patterson at Berkeley, Hennessy at Stanford) found that programs mostly use simple instructions. So they made those simple ones very fast. The class's philosophy line: <b>each instruction does ONE simple thing, in one cycle where possible</b>, and <b>only load and store touch memory</b>.</p>
+<div class="vs">
+  <div>
+    <h3>The philosophy</h3>
+    <p>All instructions are the same fixed length — easy to fetch, decode and pipeline. The same work as the CISC line above:</p>
+    <div class="formula" style="margin-bottom:0">lw r1,m1 · lw r2,m2<br>add r1,r1,r2 · sw r1,m1<small>Four simple steps instead of one complex one. Load both values into registers, add in registers, store the answer.</small></div>
+  </div>
+  <div>
+    <h3>Character (the slide's list)</h3>
+    <ul style="margin-bottom:0">
+      <li>Few, simple instructions</li>
+      <li>Fixed length (e.g. <b>32 bits</b>)</li>
+      <li>Only load/store touch memory</li>
+      <li>Simple, fast hardware decoder</li>
+      <li>More instructions per task</li>
+      <li>e.g. <b>MIPS, ARM, RISC-V, SPARC</b></li>
+    </ul>
+  </div>
+</div>
+<p>Two more: only a few instruction formats (MIPS has 3 — R, I, J), so control can be plain hard-wired logic instead of microcode; and <b>32 general-purpose registers</b> in MIPS and RISC-V, so fewer slow memory trips. The next instruction is always at <b>PC + 4</b>.</p>
 
 <figure class="diagram">
   <svg viewBox="0 0 640 340" width="640" role="img" aria-label="Instruction length: x86 instructions take 1, 2, 3, 5 or up to 15 bytes; every MIPS instruction takes exactly 4 bytes">
@@ -121,8 +173,79 @@
   <figcaption>Real encodings. An x86 decoder must read the bytes to find where each instruction ends. A MIPS decoder always knows: 4 bytes.</figcaption>
 </figure>
 
-<h2>3. Same task in x86 and MIPS</h2>
-<p><b>Task:</b> a number <code>x</code> is stored in memory. Add 5 to it. The address of <code>x</code> is already in a register (<code>ebx</code> on x86, <code>$s0</code> on MIPS). In MIPS, <code>$s0</code> and <code>$t0</code> are two of the 32 registers: <code>$s</code> registers hold our variables and <code>$t</code> registers hold temporary scratch values (full list on the <a href="m3-03-mips-registers-formats.html">next page</a>).</p>
+<h3>Inside the 32 bits: fields, not just length</h3>
+<p>The class slide goes one level deeper. It is not only that RISC instructions are all the same <em>length</em> — their <b>fields always sit in the same bit positions</b>, so the decoder can pull out the register numbers before it even knows which instruction it has. (Field names here are the RISC-V ones the lecture uses: <code>rd</code> = destination register, <code>rs1</code>/<code>rs2</code> = source registers, <code>funct</code> = "which exact operation". MIPS calls them <code>rd</code>, <code>rs</code>, <code>rt</code>, <code>funct</code>; same idea. Full detail on the <a href="m3-03-mips-registers-formats.html">next page</a>.)</p>
+<figure class="diagram">
+  <svg viewBox="0 0 640 300" width="640" role="img" aria-label="Top: two RISC 32-bit formats with fields opcode rd rs1 rs2 funct and opcode rd rs1 immediate, both the same total width. Bottom: three x86 instructions of different byte counts made of prefix, op, modRM, disp and imm fields">
+    <text x="10" y="18" class="g b">RISC — fixed 32 bits (every instruction identical width)</text>
+    <rect x="10" y="30" width="120" height="32" rx="4" class="box-g"/><text x="70" y="51" class="m" text-anchor="middle">opcode</text>
+    <rect x="132" y="30" width="110" height="32" rx="4" class="box-g"/><text x="187" y="51" class="m" text-anchor="middle">rd</text>
+    <rect x="244" y="30" width="110" height="32" rx="4" class="box-g"/><text x="299" y="51" class="m" text-anchor="middle">rs1</text>
+    <rect x="356" y="30" width="110" height="32" rx="4" class="box-g"/><text x="411" y="51" class="m" text-anchor="middle">rs2</text>
+    <rect x="468" y="30" width="110" height="32" rx="4" class="box-g"/><text x="523" y="51" class="m" text-anchor="middle">funct</text>
+    <rect x="10" y="70" width="120" height="32" rx="4" class="box-g"/><text x="70" y="91" class="m" text-anchor="middle">opcode</text>
+    <rect x="132" y="70" width="110" height="32" rx="4" class="box-g"/><text x="187" y="91" class="m" text-anchor="middle">rd</text>
+    <rect x="244" y="70" width="110" height="32" rx="4" class="box-g"/><text x="299" y="91" class="m" text-anchor="middle">rs1</text>
+    <rect x="356" y="70" width="222" height="32" rx="4" class="box-g"/><text x="467" y="91" class="m" text-anchor="middle">immediate</text>
+    <path class="grid" d="M578 26 V106"/>
+    <text x="10" y="122" class="dim">Same length every time → trivial to find where the next instruction starts.</text>
+
+    <path class="grid" d="M10 140 H630"/>
+    <text x="10" y="166" class="r b">CISC — variable length (1 to 15 bytes on x86)</text>
+    <rect x="10" y="178" width="90" height="32" rx="4" class="box-r"/><text x="55" y="199" class="m" text-anchor="middle">op</text>
+    <text x="112" y="199" class="m dim">← one instruction (1 byte)</text>
+    <rect x="10" y="218" width="78" height="32" rx="4" class="box-r"/><text x="49" y="239" class="m" text-anchor="middle">prefix</text>
+    <rect x="90" y="218" width="78" height="32" rx="4" class="box-r"/><text x="129" y="239" class="m" text-anchor="middle">op</text>
+    <rect x="170" y="218" width="88" height="32" rx="4" class="box-r"/><text x="214" y="239" class="m" text-anchor="middle">modRM</text>
+    <text x="270" y="239" class="m dim">← another (3 bytes)</text>
+    <rect x="10" y="258" width="78" height="32" rx="4" class="box-r"/><text x="49" y="279" class="m" text-anchor="middle">prefix</text>
+    <rect x="90" y="258" width="78" height="32" rx="4" class="box-r"/><text x="129" y="279" class="m" text-anchor="middle">op</text>
+    <rect x="170" y="258" width="88" height="32" rx="4" class="box-r"/><text x="214" y="279" class="m" text-anchor="middle">modRM</text>
+    <rect x="260" y="258" width="78" height="32" rx="4" class="box-r"/><text x="299" y="279" class="m" text-anchor="middle">disp</text>
+    <rect x="340" y="258" width="78" height="32" rx="4" class="box-r"/><text x="379" y="279" class="m" text-anchor="middle">imm</text>
+    <text x="430" y="279" class="m dim">← and another</text>
+  </svg>
+  <figcaption>The slide's punchline: "this single difference is why RISC pipelines so much more easily — predictable fetch and decode." The x86 decoder must work out one instruction before it knows where the next begins.</figcaption>
+</figure>
+
+<h2>4. Activity 1 — one task, two styles</h2>
+<p>This is the class's own worked exercise. <b>Task:</b> compute <code>C = A + B</code>, then <code>D = C × 2</code>, where A, B, C and D all live in memory. Count the instructions each way.</p>
+<div class="vs">
+  <div>
+    <h3>CISC style — about 5 instructions</h3>
+    <div class="code" style="margin:0">
+      <div class="code-head"><span><b>x86</b></span><span>code → what it means</span></div>
+      <table class="ann">
+        <tr><td class="c"><span class="kw">mov</span> ax, [A]</td><td class="n">Copy the value stored at address <code>A</code> into register <code>ax</code>. Square brackets mean "the contents of memory at".</td></tr>
+        <tr><td class="c"><span class="kw">add</span> ax, [B]</td><td class="n">Add the value at address <code>B</code> straight onto <code>ax</code>. <b>This instruction reads memory and does arithmetic</b> — impossible in RISC.</td></tr>
+        <tr><td class="c"><span class="kw">mov</span> [C], ax</td><td class="n">Write <code>ax</code> (now A + B) out to address <code>C</code>.</td></tr>
+        <tr><td class="c"><span class="kw">shl</span> ax, <span class="num">1</span></td><td class="n">"Shift left by 1" — doubles the number, so <code>ax</code> = C × 2. (<a href="m2-03-registers-shift.html">Shifting left by 1 is multiply by 2</a>.) <code>ax</code> still held C, so no reload is needed.</td></tr>
+        <tr><td class="c"><span class="kw">mov</span> [D], ax</td><td class="n">Write the doubled value out to address <code>D</code>.</td></tr>
+      </table>
+    </div>
+    <p style="font-size:15px;margin-bottom:0">Richer operations · direct memory operands.</p>
+  </div>
+  <div>
+    <h3>RISC style — about 6 instructions</h3>
+    <div class="code" style="margin:0">
+      <div class="code-head"><span><b>risc</b></span><span>code → what it means</span></div>
+      <table class="ann">
+        <tr><td class="c"><span class="kw">lw</span>  r1, A</td><td class="n">Load word: copy the value at address <code>A</code> into register <code>r1</code>.</td></tr>
+        <tr><td class="c"><span class="kw">lw</span>  r2, B</td><td class="n">Same for <code>B</code> into <code>r2</code>. Memory can only be reached this way.</td></tr>
+        <tr><td class="c"><span class="kw">add</span> r3, r1, r2</td><td class="n">Register-only arithmetic: <code>r3 = r1 + r2</code>, i.e. C = A + B.</td></tr>
+        <tr><td class="c"><span class="kw">sw</span>  r3, C</td><td class="n">Store word: write <code>r3</code> back out to address <code>C</code>.</td></tr>
+        <tr><td class="c"><span class="kw">add</span> r4, r3, r3</td><td class="n">Doubling trick: adding a number to itself is × 2, so <code>r4</code> = C × 2 = D. No multiply instruction needed.</td></tr>
+        <tr><td class="c"><span class="kw">sw</span>  r4, D</td><td class="n">Write the answer out to address <code>D</code>.</td></tr>
+      </table>
+    </div>
+    <p style="font-size:15px;margin-bottom:0">Each simple &amp; one cycle · load/store only.</p>
+  </div>
+</div>
+<div class="callout tip"><b>What to actually notice</b><p>5 vs 6 is a <b>tiny</b> difference, and that is the point. CISC's instruction-count win is real but modest, while each CISC instruction is harder to decode and takes more cycles. Count the <em>memory touches</em> instead: both do four (read A, read B, write C, write D). The work is the same — only the packaging differs.</p></div>
+<div class="callout fix"><b>Slide correction</b><p>The slide writes <code>lw r1, A</code>, as if a label fits inside the instruction. In real MIPS or RISC-V a 32-bit address does <b>not</b> fit in a 32-bit instruction, so an assembler expands <code>lw r1, A</code> into two instructions (load the top half of the address, then <code>lw r1, 0(reg)</code>). It is a fine shorthand for counting instructions in a comparison — just don't write it in an exam answer that asks for real machine instructions. Use the <code>lw $t0, 0($s0)</code> form below instead.</p></div>
+
+<h2>5. The same story, one line shorter</h2>
+<p><b>Task:</b> a number <code>x</code> is stored in memory. Add 5 to it. The address of <code>x</code> is already in a register (<code>ebx</code> on x86, <code>$s0</code> on MIPS). In MIPS, <code>$s0</code> and <code>$t0</code> are two of the 32 registers: <code>$s</code> registers hold our variables and <code>$t</code> registers hold temporary scratch values (full list on the <a href="m3-03-mips-registers-formats.html">next page</a>). Keep this one in mind — it comes back when we open up a modern x86 chip.</p>
 <div class="vs">
   <div>
     <h3>x86 (CISC): 1 instruction</h3>
@@ -147,7 +270,80 @@
 </div>
 <p>The class example from L01 is the same story. Python's <code>A[i] = B[i] + C[i]</code> becomes <b><code>lw · lw · add · sw</code></b> in MIPS: load both values, add in registers, store the result.</p>
 
-<h2>4. The iron law ties it together</h2>
+<h2>6. The decoder tells the story</h2>
+<p>This is the slide the lecture builds everything else on. The two philosophies need the <em>same</em> total amount of cleverness — they just put it in different places.</p>
+<div class="vs">
+  <div>
+    <h3>CISC decoder</h3>
+    <p style="color:var(--ink-2);font-family:var(--mono);font-size:13px;margin-top:-6px">complexity in HARDWARE</p>
+    <ul style="margin-bottom:0">
+      <li>Must handle variable-length instructions.</li>
+      <li>Often uses <b>microcode</b> — a mini-program per instruction.</li>
+      <li>Large, power-hungry, hard to pipeline.</li>
+      <li><b>But:</b> shorter programs, denser code.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>RISC decoder</h3>
+    <p style="color:var(--ink-2);font-family:var(--mono);font-size:13px;margin-top:-6px">complexity in the COMPILER</p>
+    <ul style="margin-bottom:0">
+      <li>Fixed length → decode is almost trivial.</li>
+      <li>One instruction = one simple action.</li>
+      <li>Small, fast, easy to pipeline &amp; replicate.</li>
+      <li><b>But:</b> the compiler works harder to sequence more instructions.</li>
+    </ul>
+  </div>
+</div>
+<div class="callout tip"><b>Say it in the exam like this</b><p>"The trade never disappears — it just moves. CISC asks more of the chip; RISC asks more of the compiler." That single sentence answers half the CISC/RISC essay questions.</p></div>
+
+<h2>7. Each side's edge: density vs pipelining</h2>
+<h3>Code density — CISC's edge</h3>
+<p>CISC programs are often <b>smaller in bytes</b>, because one instruction does more work. Smaller code means fewer bytes to fetch and less pressure on the L1 <em>instruction</em> cache. In memory-constrained or cache-sensitive settings, density is a real, measurable advantage.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 560 120" width="560" role="img" aria-label="Two bars comparing illustrative program size: the CISC bar is shorter than the RISC bar">
+    <text x="10" y="20" class="dim">Program size (illustrative — not measured)</text>
+    <text x="10" y="52" class="b">CISC</text>
+    <rect x="70" y="34" width="240" height="26" rx="5" class="box-b"/>
+    <text x="320" y="52" class="dim">smaller</text>
+    <text x="10" y="94" class="b">RISC</text>
+    <rect x="70" y="76" width="370" height="26" rx="5" class="box-g"/>
+    <text x="450" y="94" class="dim">more instrs</text>
+  </svg>
+  <figcaption>But it is not the whole story: RISC's fixed 32-bit instructions waste some space, yet uniformity buys huge pipelining gains — and <b>compressed</b> RISC encodings (ARM Thumb, RISC-V "C") close much of the density gap.</figcaption>
+</figure>
+<h3>Pipelining — RISC's edge</h3>
+<p>Uniform instructions flow through a pipeline like clockwork. The lecture gives four reasons, each tied to a concrete instruction property — worth memorising, because homework question 2 asks for exactly three of them.</p>
+<div class="scroll"><table>
+  <tr><th>Property</th><th>Why the pipeline likes it</th></tr>
+  <tr><td><b>Fixed length</b></td><td>Easy fetch: the CPU always knows where the next instruction is (PC + 4) — no decode needed first.</td></tr>
+  <tr><td><b>Uniform format</b></td><td>Simple decode: every instruction decodes the same way, in one stage, at one speed.</td></tr>
+  <tr><td><b>One cycle each</b></td><td>Smooth flow: simple ops rarely stall the pipeline, so stages stay full and throughput stays high.</td></tr>
+  <tr><td><b>Load/store only</b></td><td>Predictable memory: only two instructions touch memory, so <a href="m4-03-hazards-forwarding.html">hazards</a> are easier to detect and handle.</td></tr>
+</table></div>
+<h3>The trade-off in one view</h3>
+<p>Every RISC strength has a matching CISC strength. Because <em>both</em> lists are real, the industry never picked a winner — it learned to combine them.</p>
+<div class="vs">
+  <div>
+    <h3>CISC strengths</h3>
+    <ul style="margin-bottom:0">
+      <li>Denser code (smaller programs)</li>
+      <li>Fewer instructions per task</li>
+      <li>Less instruction-fetch bandwidth</li>
+      <li>Rich, expressive operations</li>
+    </ul>
+  </div>
+  <div>
+    <h3>RISC strengths</h3>
+    <ul style="margin-bottom:0">
+      <li>Simple, fast, cheap decoder</li>
+      <li>Easy, efficient pipelining</li>
+      <li>Higher clock speeds possible</li>
+      <li>Simpler to design &amp; verify</li>
+    </ul>
+  </div>
+</div>
+
+<h2>8. The iron law ties it together</h2>
 <div class="formula">CPU time = Instruction count × CPI × Cycle time<small>How many instructions × how many clock cycles each takes (on average) × how long one clock cycle lasts</small></div>
 <ul>
   <li><b>CISC</b> makes the <b>instruction count</b> small, but CPI is high and decoding is slow.</li>
@@ -160,8 +356,61 @@
   <li><b>Result:</b> 3.0 / 1.44 ≈ <b>2.08× faster</b> for RISC, even with 50% more instructions. More in <a href="m4-04-performance.html">Performance: CPI, IPC &amp; Amdahl's Law</a>.</li>
 </ol>
 
-<h2>5. Today: the two ideas have merged</h2>
-<p>Modern x86 chips (Intel Core, AMD Ryzen) keep the x86 instruction set for old software. But inside, a decoder turns each x86 instruction into simple <b>RISC-like micro-ops</b>. A fast RISC-style core then runs those µops with pipelining.</p>
+<h2>9. History: two lineages, two empires</h2>
+<p>The lecture sketches a family tree. Note the dates — this split defined 40 years of chips.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 620 250" width="620" role="img" aria-label="Family tree: the CISC branch holds x86 1978, x86-64 2003, VAX and 68000; the RISC branch holds IBM 801 to MIPS, SPARC, ARM 1985 and RISC-V 2010">
+    <rect x="20" y="14" width="250" height="36" rx="8" class="box-b"/>
+    <text x="145" y="38" class="b" text-anchor="middle">CISC</text>
+    <path class="w" d="M45 50 V221"/>
+    <path class="w" d="M45 83 H70"/>
+    <path class="w" d="M45 129 H70"/>
+    <path class="w" d="M45 175 H70"/>
+    <path class="w" d="M45 221 H70"/>
+    <rect x="70" y="66" width="200" height="34" rx="6" class="box"/><text x="170" y="88" class="m" text-anchor="middle">x86 (1978)</text>
+    <rect x="70" y="112" width="200" height="34" rx="6" class="box"/><text x="170" y="134" class="m" text-anchor="middle">x86-64 (2003)</text>
+    <rect x="70" y="158" width="200" height="34" rx="6" class="box"/><text x="170" y="180" class="m" text-anchor="middle">VAX</text>
+    <rect x="70" y="204" width="200" height="34" rx="6" class="box"/><text x="170" y="226" class="m" text-anchor="middle">68000</text>
+
+    <rect x="350" y="14" width="250" height="36" rx="8" class="box-g"/>
+    <text x="475" y="38" class="b" text-anchor="middle">RISC</text>
+    <path class="w" d="M375 50 V221"/>
+    <path class="w" d="M375 83 H400"/>
+    <path class="w" d="M375 129 H400"/>
+    <path class="w" d="M375 175 H400"/>
+    <path class="w" d="M375 221 H400"/>
+    <rect x="400" y="66" width="200" height="34" rx="6" class="box"/><text x="500" y="88" class="m" text-anchor="middle">IBM 801 → MIPS</text>
+    <rect x="400" y="112" width="200" height="34" rx="6" class="box"/><text x="500" y="134" class="m" text-anchor="middle">SPARC</text>
+    <rect x="400" y="158" width="200" height="34" rx="6" class="box"/><text x="500" y="180" class="m" text-anchor="middle">ARM (1985)</text>
+    <rect x="400" y="204" width="200" height="34" rx="6" class="box-hi"/><text x="500" y="226" class="m" text-anchor="middle">RISC-V (2010)</text>
+  </svg>
+  <figcaption>Two lineages. The next sections show how they converged.</figcaption>
+</figure>
+<h3>1990s–2000s: two empires</h3>
+<div class="vs">
+  <div>
+    <h3>ARM — RISC wins mobile</h3>
+    <ul style="margin-bottom:0">
+      <li>Simple = low power = long battery life.</li>
+      <li>Licensable design → everyone builds ARM chips.</li>
+      <li>Billions of phones, tablets, embedded devices.</li>
+      <li>Now in Apple Silicon laptops too.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>x86 — CISC holds the desktop</h3>
+    <ul style="margin-bottom:0">
+      <li>Backward compatibility: decades of software.</li>
+      <li>Intel &amp; AMD poured R&amp;D into raw speed.</li>
+      <li>The whole PC &amp; server ecosystem locked in.</li>
+      <li>Still dominant in desktops &amp; data centres.</li>
+    </ul>
+  </div>
+</div>
+<div class="callout tip"><b>The lesson the lecturer wants you to write down</b><p>"<b>Best ISA</b> rarely decides the winner — <b>ecosystems, power budgets and compatibility</b> do."</p></div>
+
+<h2>10. Today: the two ideas have merged</h2>
+<p>Modern x86 chips (Intel Core, AMD Ryzen) keep the x86 instruction set for old software. But inside, a decoder turns each x86 instruction into simple <b>RISC-like micro-ops</b>. A fast RISC-style core then runs those µops with pipelining — and <em>renames</em> them, exactly like a RISC machine. The CISC part is, in the lecture's words, "just a compatibility skin".</p>
 <figure class="diagram">
   <svg viewBox="0 0 640 170" width="640" role="img" aria-label="Modern x86: a complex x86 instruction goes into a decoder and comes out as three simple micro-ops that a RISC-like core runs">
     <rect x="10" y="50" width="160" height="60" rx="8" class="box-r"/>
@@ -190,7 +439,18 @@
   <figcaption>The x86 "add to memory" instruction becomes three µops, the same shape as the MIPS lw · addi · sw version.</figcaption>
 </figure>
 
-<h2>6. CISC vs RISC comparison table</h2>
+<h3>The boundary has blurred — both directions</h3>
+<p>It is not only CISC that moved. The class lists four ways the labels stopped meaning much:</p>
+<div class="scroll"><table>
+  <tr><th></th><th>What happened</th></tr>
+  <tr><td><b>CISC went RISC inside</b></td><td>x86 decodes to RISC-like µops, then pipelines and reorders them. The CISC is just a compatibility skin.</td></tr>
+  <tr><td><b>RISC added complexity</b></td><td>Modern ARM and RISC-V have hundreds of instructions, SIMD and vector extensions — not so "reduced" any more.</td></tr>
+  <tr><td><b>Compressed instructions</b></td><td>ARM Thumb and RISC-V "C" add 16-bit encodings for density — a very CISC-like concern.</td></tr>
+  <tr><td><b>It's about implementation now</b></td><td>What matters today is the <b>microarchitecture</b> — caches, pipelines, predictors — more than the ISA label.</td></tr>
+</table></div>
+<div class="callout tip"><b>So who won? Both — and neither.</b><p><b>The modern consensus:</b> a RISC-like execution core is the way to go for performance, so keep a clean, pipelineable core and put whatever instruction "skin" the market needs on the front. <b>x86</b>: CISC skin for compatibility, RISC core inside. <b>ARM</b>: RISC through and through, the efficiency king. <b>RISC-V</b>: clean RISC, open to all, modular extensions.</p></div>
+
+<h2>11. CISC vs RISC comparison table</h2>
 <div class="scroll"><table>
   <tr><th></th><th>CISC (x86)</th><th>RISC (MIPS, ARM, RISC-V)</th></tr>
   <tr><td>Instruction length</td><td>Variable, 1–15 bytes</td><td>Fixed, 32 bits (RISC-V "C" adds 16-bit)</td></tr>
@@ -205,10 +465,12 @@
   <tr><td>Where used</td><td>Desktops, laptops, servers</td><td>Phones, embedded, Apple M-series, many servers, microcontrollers</td></tr>
 </table></div>
 
-<h2>7. RISC-V: an open, modular ISA</h2>
-<p>RISC-V (say "risk five") started at UC Berkeley in 2010. It is <b>open and royalty-free</b>: anyone can design a RISC-V chip without asking permission or paying a fee. (x86 is made only by Intel and AMD; ARM designs require a paid licence.)</p>
+<h2>12. RISC-V: an open, modular ISA</h2>
+<p>RISC-V (say "risk five") started at UC Berkeley in 2010, created by the same research lineage that gave us RISC in the first place. It is <b>open and royalty-free</b>: anyone — students, startups, giants — can design a RISC-V chip without asking permission or paying a fee. (x86 is made only by Intel and AMD; ARM designs require a paid licence.) Adoption is exploding, from university teaching to microcontrollers to data-centre and AI chips.</p>
 <p>It looks a lot like MIPS: 32 registers (<code>x0</code>–<code>x31</code>), <code>x0</code> hardwired to 0 (just like <code>$zero</code>), fixed 32-bit instructions, load/store.</p>
-<h3>The modular extension model</h3>
+<div class="callout fix"><b>Slide correction</b><p>The L10 slide closes with "we'll use RISC-V assembly in the coming lectures". In this course it turned out to be <b>MIPS</b> — L11 (registers and instruction formats), L12 (C to MIPS) and Labs 11–13 are all MIPS, and MARS is the simulator. Nothing is lost: MIPS and RISC-V are the same RISC ideas with different register spellings (<code>$t0</code> vs <code>x5</code>). Learn the ideas, and the notation swap is ten minutes' work.</p></div>
+<h3>The modular extension model <span class="tag book">textbook extra</span></h3>
+<p style="font-size:15px;color:var(--ink-2)">The lecture says only "a small base ISA plus optional extensions (multiply, float, vector, atomic) — take only what you need". The letter-by-letter detail below is from the textbook, in case an exam asks you to read a name like RV64GC.</p>
 <p>Instead of one huge fixed instruction set, RISC-V has a <b>small base</b> that every chip must have, plus <b>optional extensions</b>. A tiny sensor chip takes only what it needs. A laptop chip takes much more.</p>
 <div class="scroll"><table>
   <tr><th>Name</th><th>What it adds</th><th>Plain meaning</th></tr>
@@ -257,19 +519,104 @@
 </ol>
 <p>So <b>RV64GC</b> = RV64IMAFDC (+Zicsr, Zifencei). It is the usual target for Linux-capable RISC-V chips. A small microcontroller might be <b>RV32IMC</b>: 32-bit, multiply, compressed, and nothing else.</p>
 
+<h2>13. Beyond CPUs: domain-specific ISAs</h2>
+<p>The newest frontier: instruction sets built for <em>one job</em>, especially AI. The class flags this as the door into Module 6.</p>
+<div class="scroll"><table>
+  <tr><th></th><th>What it is</th></tr>
+  <tr><td><b>GPU ISAs</b> (NVIDIA PTX)</td><td>Thousands of simple cores with their own instruction set, built for massive parallelism. See <a href="m6-06-simd-gpu-tpu.html">SIMD, GPUs &amp; TPUs</a>.</td></tr>
+  <tr><td><b>TPU / AI accelerators</b></td><td>Google's TPU has an ISA centred on <b>matrix multiply</b> — the core operation of neural networks.</td></tr>
+  <tr><td><b>Why specialise?</b></td><td>A fixed workload lets you strip away generality and win huge efficiency — the exact opposite of general-purpose.</td></tr>
+</table></div>
+
+<h2>Key takeaways</h2>
+<ol class="steps">
+  <li>The <b>ISA is the hardware/software contract</b> — the instruction set both compilers and chips agree to.</li>
+  <li><b>CISC</b> uses rich, variable-length instructions (x86, VAX): dense code, complex decoder, harder to pipeline.</li>
+  <li><b>RISC</b> uses simple, fixed-length, load/store instructions (MIPS, ARM, RISC-V): easy to pipeline, simpler chips.</li>
+  <li>The trade-off just <b>moves complexity between hardware and compiler</b> — neither philosophy escapes it.</li>
+  <li>Modern x86 decodes CISC into RISC-like <b>micro-ops</b>; RISC-V opens the ISA to all — the two worlds have merged.</li>
+</ol>
+
 <h2>Common mistakes &amp; exam traps</h2>
-<div class="callout trap"><b>Slips that cost marks</b>
+<div class="callout trap"><b>The six the lecturer called out</b>
 <ul>
-  <li>RISC does <b>not</b> mean "fewer instructions per program". It means simpler instructions, so programs usually need <b>more</b> of them.</li>
+  <li><b>"RISC is always faster."</b> Not inherently. RISC eases pipelining, but real speed depends on the whole microarchitecture.</li>
+  <li><b>"CISC is obsolete."</b> x86 still dominates desktops and servers. It just runs RISC-like µops inside.</li>
+  <li><b>"RISC = fewer instructions run."</b> RISC has fewer instruction <b>types</b>, but often runs <b>more</b> instructions per task.</li>
+  <li><b>Forgetting load/store.</b> It is RISC's defining feature — only load and store touch memory.</li>
+  <li><b>"The ISA determines speed."</b> The implementation (pipeline, caches, predictors) matters far more than the ISA label.</li>
+  <li><b>Mixing up length rules.</b> RISC = fixed length. CISC = variable length. This is what drives decoder complexity.</li>
+</ul></div>
+<div class="callout trap"><b>Extra slips worth avoiding</b>
+<ul>
   <li>x86 length is <b>1 to 15 bytes</b>, not "up to 16".</li>
-  <li>"Load/store" means only load/store instructions touch memory. <code>add $t0, 0($s0)</code> is not legal MIPS.</li>
-  <li>Don't say "x86 is pure CISC inside". Modern x86 translates to RISC-like µops.</li>
+  <li><code>add $t0, 0($s0)</code> is not legal MIPS — that is the load/store rule in action.</li>
   <li><b>G</b> is not a single extension. It is shorthand for IMAFD (+Zicsr, Zifencei). <b>C</b> is not part of G, which is why names say "GC".</li>
   <li>RISC-V is an open <b>specification</b>. Being royalty-free does not mean every chip design is free or open-source.</li>
 </ul></div>
 
 <h2>Practice</h2>
 <div data-practice>
+  <details class="q"><summary><b>Homework 1 (class):</b> write a 3-element vector add in (a) x86-style CISC and (b) RISC style. Count the instructions.</summary><div class="a">
+    <p>The job is <code>C[i] = A[i] + B[i]</code> for i = 0, 1, 2. Written straight out (no loop), so the instruction counts are honest. <code>A0</code> means "the memory location holding element 0 of A".</p>
+    <div class="vs">
+      <div>
+        <h3>(a) CISC — 9 instructions</h3>
+        <pre class="plain"><code>mov ax, [A0]
+add ax, [B0]
+mov [C0], ax
+mov ax, [A1]
+add ax, [B1]
+mov [C1], ax
+mov ax, [A2]
+add ax, [B2]
+mov [C2], ax</code></pre>
+        <p style="font-size:15px;margin-bottom:0"><b>3 per element.</b> The <code>add</code> reads memory and computes in one instruction.</p>
+      </div>
+      <div>
+        <h3>(b) RISC — 12 instructions</h3>
+        <pre class="plain"><code>lw  r1, A0
+lw  r2, B0
+add r3, r1, r2
+sw  r3, C0
+lw  r1, A1
+lw  r2, B1
+add r3, r1, r2
+sw  r3, C1
+lw  r1, A2
+lw  r2, B2
+add r3, r1, r2
+sw  r3, C2</code></pre>
+        <p style="font-size:15px;margin-bottom:0"><b>4 per element:</b> load, load, add, store.</p>
+      </div>
+    </div>
+    <p><b>Count: 9 vs 12</b> — CISC wins on instruction count by 25%, exactly the pattern the lecture predicts. But both versions perform the same <b>9 memory accesses</b> (6 reads, 3 writes) and the same 3 additions. The work is identical; only the packaging differs. And each RISC instruction is a single predictable pipeline step, while <code>add ax, [B0]</code> is really a load plus an add hiding in one opcode.</p>
+    <p style="font-size:15px"><b>If you wrote it as a loop instead:</b> both shrink to roughly 4–6 instructions in the loop body plus 3–4 for the counter and branch, and the gap nearly vanishes — another reminder not to read too much into raw instruction counts.</p>
+  </div></details>
+  <details class="q"><summary><b>Homework 2 (class):</b> list 3 reasons RISC is friendlier to pipelining. Tie each to a concrete instruction property.</summary><div class="a">
+    <ol>
+      <li><b>Fixed length → easy fetch.</b> The next instruction is always at PC + 4, so the fetch stage never has to decode anything first to know where to look.</li>
+      <li><b>Uniform format → simple decode.</b> The register fields sit in the same bit positions in every instruction, so one decode stage at one speed handles them all. No microcode, no multi-cycle decode.</li>
+      <li><b>Load/store only → predictable memory.</b> Exactly one pipeline stage touches memory, and only two instruction types use it, so data hazards and memory stalls are easy to detect and forward around.</li>
+    </ol>
+    <p>A fair fourth, if you want it: <b>one simple action per instruction</b> means roughly equal work per stage, so no single instruction clogs the pipeline.</p>
+  </div></details>
+  <details class="q"><summary><b>Exit ticket 1:</b> name the two hallmarks of RISC (hint: instruction length + memory access).</summary><div class="a"><p><b>Fixed instruction length</b> (every instruction the same width, e.g. 32 bits) and <b>load/store architecture</b> (only <code>lw</code> and <code>sw</code> touch memory; everything else works on registers).</p></div></details>
+  <details class="q"><summary><b>Exit ticket 2:</b> what are micro-ops, and why does x86 use them?</summary><div class="a">
+    <p>Micro-ops (µops) are simple, RISC-like internal steps. The x86 front-end decoder <b>splits</b> each complex x86 instruction into several of them — <code>add [mem], 5</code> becomes load · add · store.</p>
+    <p><b>Why:</b> so Intel and AMD can keep the x86 instruction set for backward compatibility (decades of software must still run) while the back end is a clean, pipelined, out-of-order <b>RISC-style core</b> that renames and reorders those µops. CISC skin outside, RISC engine inside.</p>
+  </div></details>
+  <details class="q"><summary><b>Exit ticket 3:</b> why can Apple use ARM (RISC) for laptops while x86 still thrives on the desktop?</summary><div class="a">
+    <p><b>Apple could switch</b> because it controls its own whole software stack: it recompiled macOS and its apps for ARM and shipped Rosetta 2 to translate old x86 binaries, so the compatibility problem was solvable in one company. ARM's performance-per-watt advantage then pays off directly in battery life and in fanless designs.</p>
+    <p><b>x86 still thrives</b> because the rest of the PC and server world cannot do that: decades of binary-only Windows software, an entire ecosystem of drivers and tooling, and Intel/AMD's enormous investment in making those same instructions run fast.</p>
+    <p><b>The point of the question:</b> this is the lecture's "best ISA rarely decides the winner" lesson. <b>Ecosystems, power budgets and compatibility</b> decided both outcomes — not the ISA.</p>
+  </div></details>
+  <details class="q"><summary><b>Rapid-fire recap</b> (shout the answers): RISC instruction length? In RISC, what touches memory? x86 decodes into…?</summary><div class="a"><p><b>Fixed.</b> · <b>load / store.</b> · <b>micro-ops.</b></p></div></details>
+  <details class="q"><summary><b>Mini debate prep (class):</b> one strong argument for "RISC won" and one for "CISC won".</summary><div class="a">
+    <p><b>RISC won:</b> every high-performance chip on earth, x86 included, now executes a RISC-like instruction stream internally. The execution core the industry settled on is RISC's. Add that ARM ships in billions of devices and Apple put it in laptops.</p>
+    <p><b>CISC won:</b> the x86 <em>interface</em> is still what desktops and data centres run, 45 years on; the market never abandoned it. And RISC ISAs grew hundreds of instructions, SIMD, vectors and compressed 16-bit encodings — they became what they set out to replace.</p>
+    <p><b>The debrief answer:</b> neither. The war ended in a truce — a RISC core with whatever instruction skin the market needs on the front.</p>
+  </div></details>
   <details class="q"><summary>Give four features that make an ISA "RISC".</summary><div class="a"><p>Fixed-length instructions; load/store architecture; few simple instructions and formats; many general-purpose registers (and hence easy pipelining and hard-wired control).</p></div></details>
   <details class="q"><summary>Why is a fixed instruction length good for pipelining?</summary><div class="a"><p>The CPU always knows the next instruction starts at PC + 4, and every field sits in the same bit position. So fetch and decode are quick and take the same time for every instruction, which lets them move through pipeline stages evenly.</p></div></details>
   <details class="q"><summary>Program P: CISC needs 2 M instructions, CPI 4, cycle 1.2 ns. RISC needs 3 M instructions, CPI 1.5, cycle 1 ns. Which is faster, and by how much?</summary><div class="a"><p>CISC: 2×10⁶ × 4 × 1.2 ns = 9.6 ms. RISC: 3×10⁶ × 1.5 × 1 ns = 4.5 ms. <b>RISC is faster</b>, by 9.6 / 4.5 ≈ <b>2.13×</b>.</p></div></details>

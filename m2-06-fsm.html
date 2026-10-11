@@ -15,7 +15,7 @@
 
 <main>
 <section class="hero">
-  <div class="eyebrow">Module 2 · Sequential Logic &amp; Memory <span class="tag class">From class notes · L06/L07 &amp; FSM exercise</span></div>
+  <div class="eyebrow">Module 2 · Sequential Logic &amp; Memory <span class="tag class">From class notes · L06/L07 &amp; Lab 8</span></div>
   <h1>Finite state machines: Moore vs Mealy</h1>
   <p class="idea">A finite state machine (FSM) is a circuit that is always in <strong>exactly one</strong> of a fixed list of situations, called <em>states</em>. On each clock edge it looks at its inputs and decides which state to move to next.</p>
   <div class="analogy"><b>Think of it like this:</b> a board game. Your token sits on exactly one square (the state). Each turn you roll the dice (the input), and the rules say which square you move to (the transition). Some squares say "collect a prize" (the output).</div>
@@ -30,6 +30,10 @@
   <div class="term"><dt>State table</dt><dd>The same information as the diagram, written as a table: current state + input → next state + output.</dd></div>
   <div class="term"><dt>State encoding</dt><dd>Giving each state a binary number so it can be stored in flip-flops.</dd></div>
   <div class="term"><dt>Reset state</dt><dd>The state the machine starts in (S0) when reset is 1.</dd></div>
+  <div class="term"><dt>Sequence detector</dt><dd>An FSM that watches a serial bit stream and raises an output whenever a fixed pattern (here <code>1011</code>) has just gone past.</dd></div>
+  <div class="term"><dt>Failure function</dt><dd>The rule for where to go on a <em>wrong</em> bit: the state for the longest ending of what you have that is still a <em>start</em> of the pattern. It is what stops you throwing away partial progress.</dd></div>
+  <div class="term"><dt>Overlapping</dt><dd>A detector that may reuse the tail of one match as the head of the next. A non-overlapping detector must restart from scratch after every match.</dd></div>
+  <div class="term"><dt>Testbench</dt><dd>A simulation-only module that drives the design with a test stream and prints or plots what comes out. It never becomes hardware.</dd></div>
 </dl>
 
 <h2>1. What an FSM is</h2>
@@ -51,8 +55,9 @@
   <tr><td>Timing</td><td>output appears <b>1 cycle later</b></td><td>output appears <b>in the same cycle</b></td></tr>
   <tr><td>Glitches</td><td>glitch-free, simpler</td><td>output may glitch if the input glitches</td></tr>
   <tr><td>Number of states</td><td>may need more states</td><td>often fewer states</td></tr>
+  <tr><td>How it looks in Verilog</td><td><code>assign out = (state == S4);</code> — outside any <code>always</code> block</td><td><code>out = 1'b1;</code> inside <code>always @(*)</code>, in a branch that tests the input</td></tr>
 </table></div>
-<div class="callout tip"><b>Memory hook</b><p>"Moore = output in the <b>circle</b>, Mealy = output on the <b>arrow</b>." Both styles can solve the same problems.</p></div>
+<div class="callout tip"><b>Memory hook</b><p>"Moore = output in the <b>circle</b>, Mealy = output on the <b>arrow</b>." Both styles can solve the same problems — Lab 8 (section 6) builds the <em>same</em> detector both ways so you can watch the difference in a waveform.</p></div>
 
 <h2>3. Anatomy of any FSM</h2>
 <p>Every FSM is built from three blocks: next-state logic (combinational gates), a state register (flip-flops), and output logic (combinational gates).</p>
@@ -159,28 +164,79 @@
   <li><b>6. Build</b>Flip-flops + gates</li>
 </ol>
 <p>"The state diagram IS the design; everything else is just translating it to gates."</p>
+<p>If you write Verilog instead of drawing gates, steps 5 and 6 collapse into one: a <code>case</code> statement <em>is</em> the state table, and the synthesiser does the K-maps for you. Lab 8 (next section) takes exactly that route.</p>
 <div class="callout tip"><b>Big picture: how a CPU uses FSMs</b><p>A CPU has a <b>control unit</b> (an FSM) and a <b>datapath</b> (registers, ALU, MUXes). Control sends control signals to the datapath; the datapath sends status flags (like "result is zero") back.</p></div>
 
-<h2>6. Worked design: a "1011" sequence detector</h2>
-<p><b>Goal:</b> one input bit <code>x</code> arrives on each clock edge. Output <code>y = 1</code> when the last four bits were <code>1011</code>. <b>Overlapping is allowed</b>: in <code>1011011</code> the pattern is found twice, because the last 1 of the first match starts the next one.</p>
-<p><b>Idea:</b> each state remembers "how much of 1011 have I matched so far?"</p>
-<div class="scroll"><table>
-  <tr><th>State</th><th>Meaning</th></tr>
-  <tr><td>S0</td><td>nothing matched yet</td></tr>
-  <tr><td>S1</td><td>matched <code>1</code></td></tr>
-  <tr><td>S2</td><td>matched <code>10</code></td></tr>
-  <tr><td>S3</td><td>matched <code>101</code></td></tr>
-  <tr><td>S4 (Moore only)</td><td>matched <code>1011</code> → output 1</td></tr>
-</table></div>
-<p><b>The rule for a wrong bit:</b> don't just go back to S0. Look at the bits you have so far and find the <em>longest ending</em> that is still a start of <code>1011</code>. Example: in S3 (<code>101</code>) a 0 arrives → <code>1010</code>. Its ending <code>10</code> is a start of 1011, so go to S2.</p>
-
-<h3>Mealy version: 4 states</h3>
+<h2>6. Lab 8: the "1011" sequence detector — four designs</h2>
+<p><b>The lab's task:</b> one bit arrives on input <code>in</code> at each rising clock edge. Raise <code>out</code> when the pattern <b>1011</b> has just been seen. Two <em>independent</em> design decisions turn that one task into <b>four legitimate, distinct hardware designs</b>:</p>
+<ol class="flow arrows">
+  <li><b>Axis 1 · Mealy or Moore</b>Does the match signal come out combinationally on the transition (Mealy, same cycle), or only once the FSM settles into a dedicated "matched" state (Moore, one cycle later)?</li>
+  <li><b>Axis 2 · Overlap or not</b>After a match, may the trailing bits be reused as the start of the next candidate match, or must the search restart from scratch?</li>
+</ol>
+<div class="callout tip"><b>Why this is not a toy problem</b><p>Finding a fixed bit pattern in a live serial stream is the exact hardware task behind <b>telecom frame synchronisation</b>. The DS1/T1 superframe standard locates frame boundaries with the 6-bit sync pattern <code>001011</code> (and its rotations); SONET uses the framing byte <code>11110110</code>. Any hardware that must find such a pattern — possibly with overlapping occurrences — is exactly the FSM you are building.</p></div>
+<div class="callout trap"><b>Shared test stream — use this for all four designs</b>
+  <p style="font-family:var(--mono);font-size:16px"><b>IN = 1 0 1 1 0 1 1 0</b> &nbsp;<span style="font-family:var(--body);font-size:14px;color:var(--ink-2)">(one bit per rising clock edge, bit 1 applied first)</span></p>
+  <ul>
+    <li><b>Overlapping</b> detectors must report <b>2</b> matches: bits 1–4, and bits 4–7 (bit 4 is reused).</li>
+    <li><b>Non-overlapping</b> detectors must report <b>1</b> match: bits 1–4 only.</li>
+  </ul>
+</div>
 <figure class="diagram">
-  <svg viewBox="0 0 640 280" width="640" role="img" aria-label="Mealy 1011 detector: states S0 to S3 in a row with input/output labels on each arrow">
-    <defs><marker id="ah-me" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-ink"/></marker>
-    <marker id="ah-me-hi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-hi"/></marker></defs>
+  <svg viewBox="0 0 560 150" width="560" role="img" aria-label="The eight-bit stream 1 0 1 1 0 1 1 0 in boxes; bits 1 to 4 are ringed as the first match and bits 4 to 7 as the second overlapping match, sharing bit 4">
+    <g>
+      <rect x="40" y="50" width="54" height="48" rx="6" class="box"/><text x="67" y="81" class="b" text-anchor="middle">1</text>
+      <rect x="100" y="50" width="54" height="48" rx="6" class="box"/><text x="127" y="81" class="b" text-anchor="middle">0</text>
+      <rect x="160" y="50" width="54" height="48" rx="6" class="box"/><text x="187" y="81" class="b" text-anchor="middle">1</text>
+      <rect x="220" y="50" width="54" height="48" rx="6" class="box-hi"/><text x="247" y="81" class="b" text-anchor="middle">1</text>
+      <rect x="280" y="50" width="54" height="48" rx="6" class="box"/><text x="307" y="81" class="b" text-anchor="middle">0</text>
+      <rect x="340" y="50" width="54" height="48" rx="6" class="box"/><text x="367" y="81" class="b" text-anchor="middle">1</text>
+      <rect x="400" y="50" width="54" height="48" rx="6" class="box"/><text x="427" y="81" class="b" text-anchor="middle">1</text>
+      <rect x="460" y="50" width="54" height="48" rx="6" class="box"/><text x="487" y="81" class="b" text-anchor="middle">0</text>
+    </g>
+    <text x="67" y="118" class="m dim" text-anchor="middle">1</text>
+    <text x="127" y="118" class="m dim" text-anchor="middle">2</text>
+    <text x="187" y="118" class="m dim" text-anchor="middle">3</text>
+    <text x="247" y="118" class="m dim" text-anchor="middle">4</text>
+    <text x="307" y="118" class="m dim" text-anchor="middle">5</text>
+    <text x="367" y="118" class="m dim" text-anchor="middle">6</text>
+    <text x="427" y="118" class="m dim" text-anchor="middle">7</text>
+    <text x="487" y="118" class="m dim" text-anchor="middle">8</text>
+    <text x="10" y="118" class="m dim">bit #</text>
+    <rect x="34" y="44" width="246" height="60" rx="9" fill="none" stroke="var(--copper)" stroke-width="2.5"/>
+    <text x="157" y="34" class="hi" text-anchor="middle">match 1 · bits 1–4</text>
+    <rect x="214" y="38" width="246" height="72" rx="9" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-dasharray="6 4"/>
+    <text x="337" y="140" text-anchor="middle" style="fill:var(--blue);font-weight:700">match 2 · bits 4–7 (reuses bit 4)</text>
+  </svg>
+  <figcaption>The lab's cover illustration. Bit 4 belongs to <em>both</em> matches — that shared bit is the whole overlap question.</figcaption>
+</figure>
+
+<h3>The failure-function method</h3>
+<p>All four designs share the same backbone, and the lab wants you to derive it the same way every time. Each state remembers <b>how much of 1011 has been matched so far</b>:</p>
+<div class="scroll"><table>
+  <tr><th>State</th><th>Encoding</th><th>Meaning: the longest prefix of 1011 matched so far</th></tr>
+  <tr><td>S0</td><td><code>2'b00</code></td><td>nothing matched yet</td></tr>
+  <tr><td>S1</td><td><code>2'b01</code></td><td>matched <code>1</code></td></tr>
+  <tr><td>S2</td><td><code>2'b10</code></td><td>matched <code>10</code></td></tr>
+  <tr><td>S3</td><td><code>2'b11</code></td><td>matched <code>101</code> — one more <code>1</code> completes the pattern</td></tr>
+  <tr><td>S4 <span class="tag class">Moore only</span></td><td><code>3'd4</code></td><td>just matched <code>1011</code> → this is the state whose output is 1</td></tr>
+</table></div>
+<p><b>The failure function is the rule for a <em>wrong</em> bit.</b> Do not jump straight back to S0. Instead: write down the bits you have, append the new one, then find the <b>longest ending of that string that is also a start of 1011</b>. Go to the state for that ending.</p>
+<ol class="steps">
+  <li><b>S1 (<code>1</code>) + input 1</b> → you now have <code>11</code>. Its longest ending that starts 1011 is <code>1</code>. → stay in <b>S1</b>.</li>
+  <li><b>S2 (<code>10</code>) + input 0</b> → <code>100</code>. Neither <code>0</code> nor <code>00</code> starts 1011. Nothing survives. → <b>S0</b>.</li>
+  <li><b>S3 (<code>101</code>) + input 0</b> → <code>1010</code>. Its ending <code>10</code> <em>is</em> a start of 1011. → <b>S2</b>, not S0. This is the one students get wrong.</li>
+  <li><b>S3 (<code>101</code>) + input 1</b> → <code>1011</code>. <b>Match!</b> What happens next is where the four designs split.</li>
+</ol>
+<div class="callout tip"><b>The shared backbone</b><p>Steps 1–3 are <b>identical in all four designs</b>. Only step 4 — where you go after a match — differs. Learn the backbone once and you have 90% of all four answers.</p></div>
+
+<h3>Q1 — Mealy, overlap allowed</h3>
+<p>Assert <code>out = 1</code> combinationally, <em>in the same clock cycle</em> the 4th matching bit arrives. A <code>1</code> that completes one match may simultaneously begin the next, so after a match we go to <b>S1</b> (we have just seen a <code>1</code>).</p>
+<figure class="diagram">
+  <svg viewBox="0 0 640 280" width="640" role="img" aria-label="Mealy 1011 detector with overlap: states S0 to S3 in a row with input slash output labels on each arrow; the copper arrow from S3 back to S1 is labelled 1 slash 1">
+    <defs><marker id="ah-q1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-ink"/></marker>
+    <marker id="ah-q1-hi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-hi"/></marker></defs>
     <text x="4" y="140" class="m dim">reset</text>
-    <path class="w" marker-end="url(#ah-me)" d="M8 150 L48 150"/>
+    <path class="w" marker-end="url(#ah-q1)" d="M8 150 L48 150"/>
     <circle cx="80" cy="150" r="32" class="box"/>
     <text x="80" y="150" class="b" text-anchor="middle">S0</text>
     <text x="80" y="166" class="m dim" text-anchor="middle">—</text>
@@ -190,173 +246,396 @@
     <circle cx="380" cy="150" r="32" class="box"/>
     <text x="380" y="150" class="b" text-anchor="middle">S2</text>
     <text x="380" y="166" class="m dim" text-anchor="middle">10</text>
-    <circle cx="530" cy="150" r="32" class="box-hi"/>
+    <circle cx="530" cy="150" r="32" class="box"/>
     <text x="530" y="150" class="b" text-anchor="middle">S3</text>
     <text x="530" y="166" class="m dim" text-anchor="middle">101</text>
-    <!-- forward -->
-    <path class="w" marker-end="url(#ah-me)" d="M112 150 L198 150"/>
+    <path class="w" marker-end="url(#ah-q1)" d="M112 150 L198 150"/>
     <text x="142" y="142" class="m">1/0</text>
-    <path class="w" marker-end="url(#ah-me)" d="M262 150 L348 150"/>
+    <path class="w" marker-end="url(#ah-q1)" d="M262 150 L348 150"/>
     <text x="292" y="142" class="m">0/0</text>
-    <path class="w" marker-end="url(#ah-me)" d="M412 150 L498 150"/>
+    <path class="w" marker-end="url(#ah-q1)" d="M412 150 L498 150"/>
     <text x="442" y="142" class="m">1/0</text>
-    <!-- S3 -> S1 on 1/1 -->
-    <path class="w-hi" marker-end="url(#ah-me-hi)" d="M530 118 Q380 30 230 118"/>
-    <text x="330" y="64" class="m hi">1/1 (found!)</text>
-    <!-- S3 -> S2 on 0/0 -->
-    <path class="w" marker-end="url(#ah-me)" d="M512 177 Q455 230 398 177"/>
+    <path class="w-hi" marker-end="url(#ah-q1-hi)" d="M530 118 Q380 30 230 118"/>
+    <text x="330" y="64" class="m hi">1/1 — match, reuse the 1</text>
+    <path class="w" marker-end="url(#ah-q1)" d="M512 177 Q455 230 398 177"/>
     <text x="443" y="225" class="m">0/0</text>
-    <!-- S2 -> S0 on 0/0 -->
-    <path class="w" marker-end="url(#ah-me)" d="M365 178 Q222 310 95 178"/>
+    <path class="w" marker-end="url(#ah-q1)" d="M365 178 Q222 310 95 178"/>
     <text x="215" y="266" class="m">0/0</text>
-    <!-- self loops -->
-    <path class="w" marker-end="url(#ah-me)" d="M66 121 C50 80, 110 80, 94 121"/>
+    <path class="w" marker-end="url(#ah-q1)" d="M66 121 C50 80, 110 80, 94 121"/>
     <text x="68" y="82" class="m">0/0</text>
-    <path class="w" marker-end="url(#ah-me)" d="M216 179 C200 220, 260 220, 244 179"/>
+    <path class="w" marker-end="url(#ah-q1)" d="M216 179 C200 220, 260 220, 244 179"/>
     <text x="254" y="214" class="m">1/0</text>
   </svg>
-  <figcaption>Mealy notation: every arrow says <code>input/output</code>. The small text in each circle is the part of 1011 matched so far. Only S3 with input 1 outputs 1 (copper).</figcaption>
+  <figcaption>Lab Figure 1. Mealy notation: every arrow reads <code>in/out</code>. The small text in each circle is the prefix matched so far. Copper = the overlap-defining transition; it is the only edge that changes in Q2.</figcaption>
 </figure>
-
+<p><b>Verified transition table</b> (<code>next state / out</code>):</p>
 <div class="scroll"><table class="tt">
-  <tr><th>Current</th><th>x = 0: next / y</th><th>x = 1: next / y</th></tr>
+  <tr><th>State</th><th>in = 0</th><th>in = 1</th></tr>
   <tr><td>S0</td><td>S0 / 0</td><td>S1 / 0</td></tr>
   <tr><td>S1</td><td>S2 / 0</td><td>S1 / 0</td></tr>
   <tr><td>S2</td><td>S0 / 0</td><td>S3 / 0</td></tr>
   <tr class="hl"><td>S3</td><td>S2 / 0</td><td class="one">S1 / 1</td></tr>
 </table></div>
-<ul>
-  <li><b>S1 + 1 → S1:</b> <code>11</code> ends in <code>1</code>, which is still a start.</li>
-  <li><b>S2 + 0 → S0:</b> <code>100</code> has no useful ending (neither <code>0</code> nor <code>00</code> starts 1011).</li>
-  <li><b>S3 + 1 → S1, output 1:</b> found 1011! Its last <code>1</code> can begin the next match.</li>
-</ul>
-<p>Encoding: 4 states need ⌈log₂ 4⌉ = <b>2 flip-flops</b>, e.g. S0 = 00, S1 = 01, S2 = 10, S3 = 11.</p>
-
-<h3>Moore version: 5 states</h3>
-<p>In Moore, the output must live <em>inside a state</em>, so we need an extra state S4 meaning "just matched 1011, output 1".</p>
-<figure class="diagram">
-  <svg viewBox="0 0 620 260" width="620" role="img" aria-label="Moore 1011 detector: five states S0 to S4, output written in each circle, S4 outputs 1">
-    <defs><marker id="ah-mo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-ink"/></marker></defs>
-    <path class="w" marker-end="url(#ah-mo)" d="M4 150 L40 150"/>
-    <circle cx="70" cy="150" r="30" class="box"/>
-    <text x="70" y="148" class="b" text-anchor="middle">S0</text>
-    <text x="70" y="164" class="m" text-anchor="middle">y=0</text>
-    <circle cx="190" cy="150" r="30" class="box"/>
-    <text x="190" y="148" class="b" text-anchor="middle">S1</text>
-    <text x="190" y="164" class="m" text-anchor="middle">y=0</text>
-    <circle cx="310" cy="150" r="30" class="box"/>
-    <text x="310" y="148" class="b" text-anchor="middle">S2</text>
-    <text x="310" y="164" class="m" text-anchor="middle">y=0</text>
-    <circle cx="430" cy="150" r="30" class="box"/>
-    <text x="430" y="148" class="b" text-anchor="middle">S3</text>
-    <text x="430" y="164" class="m" text-anchor="middle">y=0</text>
-    <circle cx="550" cy="150" r="30" class="box-g"/>
-    <text x="550" y="148" class="b" text-anchor="middle">S4</text>
-    <text x="550" y="164" class="m g" text-anchor="middle">y=1</text>
-    <!-- straight -->
-    <path class="w" marker-end="url(#ah-mo)" d="M100 150 L160 150"/><text x="126" y="142" class="m">1</text>
-    <path class="w" marker-end="url(#ah-mo)" d="M220 150 L280 150"/><text x="246" y="142" class="m">0</text>
-    <path class="w" marker-end="url(#ah-mo)" d="M340 150 L400 150"/><text x="366" y="142" class="m">1</text>
-    <path class="w" marker-end="url(#ah-mo)" d="M460 150 L520 150"/><text x="486" y="142" class="m">1</text>
-    <!-- top curves from S4 -->
-    <path class="w" marker-end="url(#ah-mo)" d="M550 120 Q370 20 190 120"/>
-    <text x="365" y="62" class="m">1</text>
-    <path class="w" marker-end="url(#ah-mo)" d="M536 124 Q430 60 324 124"/>
-    <text x="426" y="112" class="m">0</text>
-    <!-- bottom curves -->
-    <path class="w" marker-end="url(#ah-mo)" d="M296 176 Q190 270 84 176"/>
-    <text x="186" y="240" class="m">0</text>
-    <path class="w" marker-end="url(#ah-mo)" d="M416 176 Q370 215 324 176"/>
-    <text x="366" y="212" class="m">0</text>
-    <!-- loops -->
-    <path class="w" marker-end="url(#ah-mo)" d="M56 124 C40 85, 100 85, 84 124"/>
-    <text x="66" y="86" class="m">0</text>
-    <path class="w" marker-end="url(#ah-mo)" d="M176 176 C160 215, 220 215, 204 176"/>
-    <text x="214" y="200" class="m">1</text>
-  </svg>
-  <figcaption>Moore notation: arrows carry only the input; the output <code>y</code> is inside each circle. Only S4 outputs 1.</figcaption>
-</figure>
-
-<div class="scroll"><table class="tt">
-  <tr><th>Current</th><th>Output y</th><th>next if x = 0</th><th>next if x = 1</th></tr>
-  <tr><td>S0</td><td>0</td><td>S0</td><td>S1</td></tr>
-  <tr><td>S1</td><td>0</td><td>S2</td><td>S1</td></tr>
-  <tr><td>S2</td><td>0</td><td>S0</td><td>S3</td></tr>
-  <tr><td>S3</td><td>0</td><td>S2</td><td>S4</td></tr>
-  <tr class="hl"><td>S4</td><td class="one">1</td><td>S2</td><td>S1</td></tr>
-</table></div>
-<p>S4 + 0 → S2 because <code>10110</code> ends in <code>10</code>. S4 + 1 → S1 because <code>10111</code> ends in <code>1</code>. 5 states need ⌈log₂ 5⌉ = <b>3 flip-flops</b>, one more than Mealy.</p>
-
-<h3>Trace: input "101011" through the Mealy detector</h3>
-<div class="stepper" data-stepper>
-  <div class="stage"><p><b>Start:</b> reset puts the machine in <b>S0</b>. Inputs will arrive in this order: 1, 0, 1, 0, 1, 1.</p></div>
-  <div class="stage"><p><b>Bit 1 = 1:</b> in S0, input 1 → output <b>0</b>, go to <b>S1</b> (matched <code>1</code>).</p></div>
-  <div class="stage"><p><b>Bit 2 = 0:</b> in S1, input 0 → output <b>0</b>, go to <b>S2</b> (matched <code>10</code>).</p></div>
-  <div class="stage"><p><b>Bit 3 = 1:</b> in S2, input 1 → output <b>0</b>, go to <b>S3</b> (matched <code>101</code>).</p></div>
-  <div class="stage"><p><b>Bit 4 = 0:</b> in S3, input 0 → output <b>0</b>. <code>1010</code> ends in <code>10</code>, so go to <b>S2</b>, not S0.</p></div>
-  <div class="stage"><p><b>Bit 5 = 1:</b> in S2, input 1 → output <b>0</b>, go to <b>S3</b> (matched <code>101</code> again).</p></div>
-  <div class="stage"><p><b>Bit 6 = 1:</b> in S3, input 1 → output <b>1</b>. Found <code>1011</code>! Go to <b>S1</b>, because the last 1 can start a new match.</p></div>
-</div>
-<div class="scroll"><table class="tt">
-  <tr><th>Step</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th></tr>
-  <tr><td>Input x</td><td>1</td><td>0</td><td>1</td><td>0</td><td>1</td><td>1</td></tr>
-  <tr><td>Current state</td><td>S0</td><td>S1</td><td>S2</td><td>S3</td><td>S2</td><td>S3</td></tr>
-  <tr><td>Next state</td><td>S1</td><td>S2</td><td>S3</td><td>S2</td><td>S3</td><td>S1</td></tr>
-  <tr class="hl"><td>Output y (Mealy)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td class="one">1</td></tr>
-</table></div>
-<p style="font-size:15px">State path: S0 → S1 → S2 → S3 → S2 → S3 → S1. Output: <code>000001</code>. The Moore machine takes the path S0 → S1 → S2 → S3 → S2 → S3 → <b>S4</b>; its 1 appears only once it is <em>in</em> S4, one clock cycle later than the Mealy output.</p>
-
-<h3>The Mealy detector in Verilog</h3>
 <div class="code">
-  <div class="code-head"><span><b>verilog</b> · det1011.v</span><span>code → what it means</span></div>
+  <div class="code-head"><span><b>verilog</b> · mealy_overlap.v</span><span>code → what it means</span></div>
   <table class="ann">
-    <tr><td class="c"><span class="com">// Mealy "1011" detector, overlapping</span></td><td class="n">A comment.</td></tr>
-    <tr><td class="c"><span class="kw">module</span> det1011 (</td><td class="n">A circuit block called <code>det1011</code>.</td></tr>
-    <tr><td class="c">  <span class="kw">input</span>      clk,</td><td class="n">The clock.</td></tr>
-    <tr><td class="c">  <span class="kw">input</span>      rst,</td><td class="n">Reset: 1 sends the machine back to S0.</td></tr>
-    <tr><td class="c">  <span class="kw">input</span>      x,</td><td class="n">The serial input bit.</td></tr>
-    <tr><td class="c">  <span class="kw">output reg</span> y</td><td class="n">The "found it" output. It is <code>reg</code> because it is set inside an <code>always</code> block (it is still plain gates).</td></tr>
-    <tr><td class="c">);</td><td class="n"></td></tr>
-    <tr><td class="c">  <span class="kw">localparam</span> S0 = <span class="num">2'd0</span>, S1 = <span class="num">2'd1</span>,</td><td class="n"><code>localparam</code> gives names to numbers. This is the state encoding: S0 = 00, S1 = 01…</td></tr>
-    <tr><td class="c">             S2 = <span class="num">2'd2</span>, S3 = <span class="num">2'd3</span>;</td><td class="n">…S2 = 10, S3 = 11. 4 states → 2 bits.</td></tr>
-    <tr><td class="c">  <span class="kw">reg</span> [1:0] state, next;</td><td class="n"><code>state</code> = the current state (the 2 flip-flops). <code>next</code> = the state to move to.</td></tr>
+    <tr><td class="c"><span class="kw">module</span> mealy_overlap (</td><td class="n">Declares a hardware block named <code>mealy_overlap</code>. A module is a box with named wires poking out of it — not a function that gets "called".</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> clk,</td><td class="n">An incoming wire carrying the clock. <code>wire</code> = a plain piece of metal, it just carries whatever is driven onto it.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> rst,</td><td class="n">Reset. When it goes high the machine is forced back to S0.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> in,</td><td class="n">The serial data bit, one new value per clock edge.</td></tr>
+    <tr><td class="c">  <span class="kw">output reg</span>  out</td><td class="n">The "found it" signal. It is <code>reg</code> only because Verilog requires that keyword for anything assigned inside an <code>always</code> block — it is still built from plain gates here, <b>not</b> a flip-flop.</td></tr>
+    <tr><td class="c">);</td><td class="n">End of the port list.</td></tr>
+    <tr><td class="c">  <span class="kw">localparam</span> S0=<span class="num">2'b00</span>, S1=<span class="num">2'b01</span>, S2=<span class="num">2'b10</span>, S3=<span class="num">2'b11</span>;</td><td class="n">Names for constants. <code>2'b01</code> reads "2 bits, binary, value 01". <b>This line IS the state encoding</b> — 4 states, 2 bits.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span> [1:0] state, next_state;</td><td class="n">Two 2-bit storage names. <code>state</code> becomes the actual pair of flip-flops; <code>next_state</code> is just the wire carrying where to go next.</td></tr>
     <tr><td class="c"></td><td class="n"></td></tr>
-    <tr><td class="c">  <span class="com">// 1) state register</span></td><td class="n"></td></tr>
-    <tr><td class="c">  <span class="kw">always</span> @(<span class="kw">posedge</span> clk) <span class="kw">begin</span></td><td class="n">At every rising clock edge…</td></tr>
-    <tr><td class="c">    <span class="kw">if</span> (rst) state &lt;= S0;</td><td class="n">…if reset is on, go to the start state…</td></tr>
-    <tr><td class="c">    <span class="kw">else</span>     state &lt;= next;</td><td class="n">…otherwise move to the state chosen by the logic below.</td></tr>
-    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(<span class="kw">posedge</span> clk <span class="kw">or</span> <span class="kw">posedge</span> rst) <span class="kw">begin</span></td><td class="n">"Whenever the clock rises <b>or</b> reset rises, do the following." Listing <code>rst</code> here makes it an <b>asynchronous</b> reset: it acts the instant it arrives, without waiting for a clock edge.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rst) state &lt;= S0;</td><td class="n">Reset wins: jump to the start state. <code>&lt;=</code> is the "non-blocking" assignment — the flip-flop's correct arrow. All <code>&lt;=</code> in a block take effect together at the edge.</td></tr>
+    <tr><td class="c">    <span class="kw">else</span>      state &lt;= next_state;</td><td class="n">Otherwise, clock in whatever the logic below worked out. These two lines are the <b>state register</b> block of the anatomy diagram.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">End of the clocked block.</td></tr>
     <tr><td class="c"></td><td class="n"></td></tr>
-    <tr><td class="c">  <span class="com">// 2) next-state + output logic</span></td><td class="n"></td></tr>
-    <tr><td class="c">  <span class="kw">always</span> @(*) <span class="kw">begin</span></td><td class="n"><code>@(*)</code> = recompute whenever any input changes. This builds plain gates, no flip-flops.</td></tr>
-    <tr><td class="c">    next = S0;</td><td class="n">Default values first, so every path gives an answer (otherwise the tool adds unwanted latches).</td></tr>
-    <tr><td class="c">    y    = <span class="num">1'b0</span>;</td><td class="n">Output is 0 unless we say otherwise.</td></tr>
-    <tr><td class="c">    <span class="kw">case</span> (state)</td><td class="n">Choose a branch depending on the current state.</td></tr>
-    <tr><td class="c">      S0: next = x ? S1 : S0;</td><td class="n"><code>x ? A : B</code> means "if x is 1 then A, else B". In S0: 1 → S1, 0 → stay.</td></tr>
-    <tr><td class="c">      S1: next = x ? S1 : S2;</td><td class="n">In S1: 1 → stay in S1, 0 → S2.</td></tr>
-    <tr><td class="c">      S2: next = x ? S3 : S0;</td><td class="n">In S2: 1 → S3, 0 → back to S0.</td></tr>
-    <tr><td class="c">      S3: <span class="kw">begin</span></td><td class="n">In S3 two things happen, so wrap them in begin/end.</td></tr>
-    <tr><td class="c">            next = x ? S1 : S2;</td><td class="n">1 → S1 (overlap), 0 → S2.</td></tr>
-    <tr><td class="c">            y    = x;</td><td class="n"><b>Mealy output:</b> y = 1 exactly when we are in S3 <em>and</em> x = 1. It uses the input directly.</td></tr>
-    <tr><td class="c">          <span class="kw">end</span></td><td class="n"></td></tr>
-    <tr><td class="c">      <span class="kw">default</span>: next = S0;</td><td class="n">Safety net: any unexpected value goes back to S0.</td></tr>
-    <tr><td class="c">    <span class="kw">endcase</span></td><td class="n"></td></tr>
-    <tr><td class="c">  <span class="kw">end</span></td><td class="n"></td></tr>
-    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(*) <span class="kw">begin</span></td><td class="n"><code>@(*)</code> means "redo this whenever any input to it changes". No clock is listed, so this builds <b>pure combinational gates</b> — the next-state and output logic.</td></tr>
+    <tr><td class="c">    next_state = S0;</td><td class="n">A default, assigned before anything else. Without a default, a path through the logic that assigns nothing makes the synthesiser infer an unwanted <b>latch</b>.</td></tr>
+    <tr><td class="c">    out        = <span class="num">1'b0</span>;</td><td class="n">Same idea for the output: 0 unless a branch below says otherwise. <code>1'b0</code> = "1 bit, binary, 0".</td></tr>
+    <tr><td class="c">    <span class="kw">case</span> (state)</td><td class="n">Pick one branch according to the current state. This is a multiplexer in disguise.</td></tr>
+    <tr><td class="c">      S0: next_state = in ? S1 : S0;</td><td class="n"><code>a ? b : c</code> means "if a then b else c". In S0: a 1 starts a match (→ S1); a 0 changes nothing (stay).</td></tr>
+    <tr><td class="c">      S1: next_state = in ? S1 : S2;</td><td class="n">In S1 (seen <code>1</code>): another 1 gives <code>11</code>, whose useful ending is still <code>1</code> → stay. A 0 gives <code>10</code> → S2.</td></tr>
+    <tr><td class="c">      S2: next_state = in ? S3 : S0;</td><td class="n">In S2 (seen <code>10</code>): a 1 gives <code>101</code> → S3. A 0 gives <code>100</code>, which has no useful ending → all the way back to S0.</td></tr>
+    <tr><td class="c">      S3: <span class="kw">begin</span></td><td class="n">In S3 two things must happen, so they are wrapped in <code>begin … end</code> (Verilog's version of curly braces).</td></tr>
+    <tr><td class="c">        <span class="kw">if</span> (in) <span class="kw">begin</span></td><td class="n">The deciding moment: the 4th bit is a 1, so <code>1011</code> is complete.</td></tr>
+    <tr><td class="c">          next_state = S1; <span class="com">// overlap: reuse the matching '1'</span></td><td class="n"><b>The overlap decision.</b> That final <code>1</code> can itself begin the next <code>1011</code>, so we land in S1 rather than S0. Change this single line and you have Q2.</td></tr>
+    <tr><td class="c">          out        = <span class="num">1'b1</span>; <span class="com">// Mealy: asserted this same cycle</span></td><td class="n"><b>The Mealy decision.</b> The output is set inside a branch that depends on <code>in</code>, so it rises in the <em>same</em> cycle the 4th bit is present — not after a clock edge.</td></tr>
+    <tr><td class="c">        <span class="kw">end</span> <span class="kw">else</span> <span class="kw">begin</span></td><td class="n">The 4th bit was a 0 instead.</td></tr>
+    <tr><td class="c">          next_state = S2;</td><td class="n"><code>1010</code> — the failure function says its ending <code>10</code> survives, so go to S2. <code>out</code> keeps its default 0.</td></tr>
+    <tr><td class="c">        <span class="kw">end</span></td><td class="n">End of the if/else.</td></tr>
+    <tr><td class="c">      <span class="kw">end</span></td><td class="n">End of the S3 branch.</td></tr>
+    <tr><td class="c">    <span class="kw">endcase</span></td><td class="n">End of the case. All four values of a 2-bit <code>state</code> are listed, so no <code>default</code> is needed here.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">End of the combinational block.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">End of the hardware block.</td></tr>
   </table>
 </div>
-<p style="font-size:15px">For the Moore version you would add S4 (needing a 3-bit <code>state</code>) and write the output from the state alone: <code>assign y = (state == S4);</code></p>
+<div class="callout tip"><b>Lab's verified result</b><p>On the shared stream, <code>out</code> pulses on the <b>4th and 7th</b> applied bits — <b>2 matches</b>, each in the same cycle its triggering bit is applied.</p></div>
+
+<h3>Q2 — Mealy, non-overlapping</h3>
+<p>Same Mealy structure, but on a match the matching tail is <b>discarded entirely</b> and the search restarts from S0. No bit may be reused.</p>
+<p><b>Verified transition table</b> — compare with Q1 and you will find exactly <b>one</b> changed cell:</p>
+<div class="scroll"><table class="tt">
+  <tr><th>State</th><th>in = 0</th><th>in = 1</th></tr>
+  <tr><td>S0</td><td>S0 / 0</td><td>S1 / 0</td></tr>
+  <tr><td>S1</td><td>S2 / 0</td><td>S1 / 0</td></tr>
+  <tr><td>S2</td><td>S0 / 0</td><td>S3 / 0</td></tr>
+  <tr class="hl"><td>S3</td><td>S2 / 0</td><td class="one">S0 / 1</td></tr>
+</table></div>
+<p>The state diagram is <b>identical to Q1's</b> except that the copper <code>1/1</code> arrow lands on <b>S0</b> instead of S1.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · mealy_nooverlap.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> mealy_nooverlap (</td><td class="n">Same block, new name.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> clk,</td><td class="n">Clock in.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> rst,</td><td class="n">Asynchronous reset in.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> in,</td><td class="n">Serial data bit in.</td></tr>
+    <tr><td class="c">  <span class="kw">output reg</span>  out</td><td class="n">Match flag out, still combinational (Mealy).</td></tr>
+    <tr><td class="c">);</td><td class="n">End of the port list.</td></tr>
+    <tr><td class="c">  <span class="kw">localparam</span> S0=<span class="num">2'b00</span>, S1=<span class="num">2'b01</span>, S2=<span class="num">2'b10</span>, S3=<span class="num">2'b11</span>;</td><td class="n">Identical encoding to Q1 — 4 states, 2 bits.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span> [1:0] state, next_state;</td><td class="n">Identical: 2 flip-flops plus the next-state wires.</td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(<span class="kw">posedge</span> clk <span class="kw">or</span> <span class="kw">posedge</span> rst) <span class="kw">begin</span></td><td class="n">Identical state register: clock edge or asynchronous reset.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rst) state &lt;= S0;</td><td class="n">Identical: reset forces S0.</td></tr>
+    <tr><td class="c">    <span class="kw">else</span>      state &lt;= next_state;</td><td class="n">Identical: otherwise clock in the next state.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">End of the clocked block.</td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(*) <span class="kw">begin</span></td><td class="n">Identical combinational block.</td></tr>
+    <tr><td class="c">    next_state = S0;</td><td class="n">Identical latch-avoiding default.</td></tr>
+    <tr><td class="c">    out        = <span class="num">1'b0</span>;</td><td class="n">Identical output default.</td></tr>
+    <tr><td class="c">    <span class="kw">case</span> (state)</td><td class="n">Identical branch on the current state.</td></tr>
+    <tr><td class="c">      S0: next_state = in ? S1 : S0;</td><td class="n">Identical: a 1 starts a match.</td></tr>
+    <tr><td class="c">      S1: next_state = in ? S1 : S2;</td><td class="n">Identical failure-function edge.</td></tr>
+    <tr><td class="c">      S2: next_state = in ? S3 : S0;</td><td class="n">Identical failure-function edge.</td></tr>
+    <tr><td class="c">      S3: <span class="kw">begin</span></td><td class="n">Identical: the deciding state.</td></tr>
+    <tr><td class="c">        <span class="kw">if</span> (in) <span class="kw">begin</span></td><td class="n">Identical: the 4th bit completes <code>1011</code>.</td></tr>
+    <tr><td class="c">          next_state = S0; <span class="com">// full reset, no overlap reuse</span></td><td class="n"><b>The one line that differs from Q1.</b> S0 instead of S1: the trailing <code>1</code> is thrown away, so the machine must re-climb S0→S1→S2→S3 from nothing.</td></tr>
+    <tr><td class="c">          out        = <span class="num">1'b1</span>;</td><td class="n">Identical: still a Mealy output, still in the same cycle.</td></tr>
+    <tr><td class="c">        <span class="kw">end</span> <span class="kw">else</span> <span class="kw">begin</span></td><td class="n">Identical: the 4th bit was a 0.</td></tr>
+    <tr><td class="c">          next_state = S2;</td><td class="n">Identical: <code>1010</code> keeps the ending <code>10</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">end</span></td><td class="n">End of the if/else.</td></tr>
+    <tr><td class="c">      <span class="kw">end</span></td><td class="n">End of the S3 branch.</td></tr>
+    <tr><td class="c">    <span class="kw">endcase</span></td><td class="n">All 4 state codes covered.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">End of the combinational block.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">End of the hardware block.</td></tr>
+  </table>
+</div>
+<div class="callout tip"><b>Lab's verified result</b><p><code>out</code> pulses only on the <b>4th</b> applied bit — <b>1 match</b>. By bit 5 the FSM has fully reset and must re-climb S0→S1→S2→S3, so the bit-7 candidate is never detected.</p></div>
+
+<h3>Q3 — Moore, overlap allowed</h3>
+<p>Same overlap policy as Q1, but <code>out</code> must be a <b>pure function of the current state</b>. That forces a <b>5th state S4</b>, entered on a match. S4's own outgoing edges <b>mirror S1's</b>, because after reporting the match the machine's position for future matching is the same as "just matched a single 1".</p>
+<figure class="diagram">
+  <svg viewBox="0 0 620 260" width="620" role="img" aria-label="Moore 1011 detector with overlap: five states S0 to S4 in a row, the output written in each circle, only S4 outputs 1">
+    <defs><marker id="ah-q3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-ink"/></marker>
+    <marker id="ah-q3-hi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-hi"/></marker></defs>
+    <path class="w" marker-end="url(#ah-q3)" d="M4 150 L40 150"/>
+    <circle cx="70" cy="150" r="30" class="box"/>
+    <text x="70" y="148" class="b" text-anchor="middle">S0</text>
+    <text x="70" y="164" class="m" text-anchor="middle">out=0</text>
+    <circle cx="190" cy="150" r="30" class="box"/>
+    <text x="190" y="148" class="b" text-anchor="middle">S1</text>
+    <text x="190" y="164" class="m" text-anchor="middle">out=0</text>
+    <circle cx="310" cy="150" r="30" class="box"/>
+    <text x="310" y="148" class="b" text-anchor="middle">S2</text>
+    <text x="310" y="164" class="m" text-anchor="middle">out=0</text>
+    <circle cx="430" cy="150" r="30" class="box"/>
+    <text x="430" y="148" class="b" text-anchor="middle">S3</text>
+    <text x="430" y="164" class="m" text-anchor="middle">out=0</text>
+    <circle cx="550" cy="150" r="30" class="box-g"/>
+    <text x="550" y="148" class="b" text-anchor="middle">S4</text>
+    <text x="550" y="164" class="m g" text-anchor="middle">out=1</text>
+    <path class="w" marker-end="url(#ah-q3)" d="M100 150 L160 150"/><text x="126" y="142" class="m">1</text>
+    <path class="w" marker-end="url(#ah-q3)" d="M220 150 L280 150"/><text x="246" y="142" class="m">0</text>
+    <path class="w" marker-end="url(#ah-q3)" d="M340 150 L400 150"/><text x="366" y="142" class="m">1</text>
+    <path class="w" marker-end="url(#ah-q3)" d="M460 150 L520 150"/><text x="486" y="142" class="m">1</text>
+    <path class="w" marker-end="url(#ah-q3)" d="M550 120 Q370 20 190 120"/>
+    <text x="365" y="62" class="m">1</text>
+    <path class="w-hi" marker-end="url(#ah-q3-hi)" d="M536 124 Q430 60 324 124"/>
+    <text x="426" y="112" class="m hi">0</text>
+    <path class="w" marker-end="url(#ah-q3)" d="M296 176 Q190 270 84 176"/>
+    <text x="186" y="240" class="m">0</text>
+    <path class="w" marker-end="url(#ah-q3)" d="M416 176 Q370 215 324 176"/>
+    <text x="366" y="212" class="m">0</text>
+    <path class="w" marker-end="url(#ah-q3)" d="M56 124 C40 85, 100 85, 84 124"/>
+    <text x="66" y="86" class="m">0</text>
+    <path class="w" marker-end="url(#ah-q3)" d="M176 176 C160 215, 220 215, 204 176"/>
+    <text x="214" y="200" class="m">1</text>
+  </svg>
+  <figcaption>Lab Figure 3. Moore notation: arrows carry only the input; the output lives inside the circle. Green S4 is the one state with <code>out = 1</code>. The copper edge (S4 on a 0) is the only one that changes in Q4.</figcaption>
+</figure>
+<div class="scroll"><table class="tt">
+  <tr><th>State</th><th>in = 0</th><th>in = 1</th><th>Output</th></tr>
+  <tr><td>S0</td><td>S0</td><td>S1</td><td>0</td></tr>
+  <tr><td>S1</td><td>S2</td><td>S1</td><td>0</td></tr>
+  <tr><td>S2</td><td>S0</td><td>S3</td><td>0</td></tr>
+  <tr><td>S3</td><td>S2</td><td>S4</td><td>0</td></tr>
+  <tr class="hl"><td>S4</td><td>S2</td><td>S1</td><td class="one">1</td></tr>
+</table></div>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · moore_overlap.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> moore_overlap (</td><td class="n">The Moore version of the same detector.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> clk,</td><td class="n">Clock in.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> rst,</td><td class="n">Asynchronous reset in.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> in,</td><td class="n">Serial data bit in.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> out</td><td class="n"><b>Note: <code>wire</code>, not <code>reg</code>.</b> In Moore the output is driven by a single <code>assign</code> statement at the bottom, never inside an <code>always</code> block — which is exactly what "output depends only on the state" looks like in code.</td></tr>
+    <tr><td class="c">);</td><td class="n">End of the port list.</td></tr>
+    <tr><td class="c">  <span class="kw">localparam</span> S0=<span class="num">3'd0</span>, S1=<span class="num">3'd1</span>, S2=<span class="num">3'd2</span>, S3=<span class="num">3'd3</span>, S4=<span class="num">3'd4</span>;</td><td class="n">Now <b>5</b> states, so <b>3</b> bits are needed (⌈log₂ 5⌉ = 3). <code>3'd4</code> reads "3 bits, decimal, value 4" = <code>100</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span> [2:0] state, next_state;</td><td class="n">Three flip-flops instead of two — the price Moore pays for the extra state.</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(<span class="kw">posedge</span> clk <span class="kw">or</span> <span class="kw">posedge</span> rst) <span class="kw">begin</span></td><td class="n">Same state register as the Mealy versions.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rst) state &lt;= S0;</td><td class="n">Reset forces S0.</td></tr>
+    <tr><td class="c">    <span class="kw">else</span>      state &lt;= next_state;</td><td class="n">Otherwise clock in the next state.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">End of the clocked block.</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(*) <span class="kw">begin</span></td><td class="n">Combinational next-state logic. <b>No <code>out</code> appears in here at all</b> — that is the Moore rule in one observation.</td></tr>
+    <tr><td class="c">    <span class="kw">case</span> (state)</td><td class="n">Branch on the current state.</td></tr>
+    <tr><td class="c">      S0: next_state = in ? S1 : S0;</td><td class="n">Same backbone edge as Q1.</td></tr>
+    <tr><td class="c">      S1: next_state = in ? S1 : S2;</td><td class="n">Same backbone edge as Q1.</td></tr>
+    <tr><td class="c">      S2: next_state = in ? S3 : S0;</td><td class="n">Same backbone edge as Q1.</td></tr>
+    <tr><td class="c">      S3: next_state = in ? S4 : S2;</td><td class="n"><b>The Moore change.</b> Where Mealy raised <code>out</code> and jumped to S1, Moore walks into the dedicated state S4. The report happens by <em>being somewhere</em>, so it necessarily arrives one clock later.</td></tr>
+    <tr><td class="c">      S4: next_state = in ? S1 : S2; <span class="com">// mirrors S1's transitions</span></td><td class="n"><b>The overlap decision.</b> Having just matched, the machine behaves as if it had seen a single <code>1</code> — exactly S1's row. Change this line and you have Q4.</td></tr>
+    <tr><td class="c">      <span class="kw">default</span>: next_state = S0;</td><td class="n"><b>Now a <code>default</code> is essential.</b> 3 bits give 8 codes but only 5 are used; the other 3 (<code>101</code>, <code>110</code>, <code>111</code>) are illegal. Without this line a glitch could strand the machine in a code with no way out.</td></tr>
+    <tr><td class="c">    <span class="kw">endcase</span></td><td class="n">End of the case.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">End of the combinational block.</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> out = (state == S4); <span class="com">// pure function of state: Moore</span></td><td class="n">One permanent wire: <code>out</code> is high exactly when the state register holds S4. <code>assign</code> means "this connection is always true", like soldering a comparator's output to a pin. <code>in</code> does not appear — that is the whole definition of Moore.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">End of the hardware block.</td></tr>
+  </table>
+</div>
+<div class="callout tip"><b>Lab's verified result</b><p>The same <b>2 matches</b> as Q1, but each <code>out</code> pulse appears <b>one clock cycle later</b> than its Q1 counterpart — it is registered on the state, not combinational on the transition.</p></div>
+
+<h3>Q4 — Moore, non-overlapping</h3>
+<p>Same Moore structure as Q3, but S4's outgoing edges now <b>mirror S0's</b> — a full reset one cycle after the match. This is the Moore parallel to Q2's policy.</p>
+<div class="scroll"><table class="tt">
+  <tr><th>State</th><th>in = 0</th><th>in = 1</th><th>Output</th></tr>
+  <tr><td>S0</td><td>S0</td><td>S1</td><td>0</td></tr>
+  <tr><td>S1</td><td>S2</td><td>S1</td><td>0</td></tr>
+  <tr><td>S2</td><td>S0</td><td>S3</td><td>0</td></tr>
+  <tr><td>S3</td><td>S2</td><td>S4</td><td>0</td></tr>
+  <tr class="hl"><td>S4</td><td class="one">S0</td><td>S1</td><td class="one">1</td></tr>
+</table></div>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · moore_nooverlap.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> moore_nooverlap (</td><td class="n">The fourth and last design.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> clk,</td><td class="n">Clock in.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> rst,</td><td class="n">Asynchronous reset in.</td></tr>
+    <tr><td class="c">  <span class="kw">input  wire</span> in,</td><td class="n">Serial data bit in.</td></tr>
+    <tr><td class="c">  <span class="kw">output wire</span> out</td><td class="n">Still a <code>wire</code>: Moore output, driven by <code>assign</code>.</td></tr>
+    <tr><td class="c">);</td><td class="n">End of the port list.</td></tr>
+    <tr><td class="c">  <span class="kw">localparam</span> S0=<span class="num">3'd0</span>, S1=<span class="num">3'd1</span>, S2=<span class="num">3'd2</span>, S3=<span class="num">3'd3</span>, S4=<span class="num">3'd4</span>;</td><td class="n">Identical 5-state, 3-bit encoding to Q3.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span> [2:0] state, next_state;</td><td class="n">Identical: three flip-flops.</td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(<span class="kw">posedge</span> clk <span class="kw">or</span> <span class="kw">posedge</span> rst) <span class="kw">begin</span></td><td class="n">Identical state register.</td></tr>
+    <tr><td class="c">    <span class="kw">if</span> (rst) state &lt;= S0;</td><td class="n">Identical: reset forces S0.</td></tr>
+    <tr><td class="c">    <span class="kw">else</span>      state &lt;= next_state;</td><td class="n">Identical: otherwise clock in the next state.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">End of the clocked block.</td></tr>
+    <tr><td class="c">  <span class="kw">always</span> @(*) <span class="kw">begin</span></td><td class="n">Identical combinational block, no <code>out</code> inside.</td></tr>
+    <tr><td class="c">    <span class="kw">case</span> (state)</td><td class="n">Identical branch on the current state.</td></tr>
+    <tr><td class="c">      S0: next_state = in ? S1 : S0;</td><td class="n">Identical backbone edge.</td></tr>
+    <tr><td class="c">      S1: next_state = in ? S1 : S2;</td><td class="n">Identical backbone edge.</td></tr>
+    <tr><td class="c">      S2: next_state = in ? S3 : S0;</td><td class="n">Identical backbone edge.</td></tr>
+    <tr><td class="c">      S3: next_state = in ? S4 : S2;</td><td class="n">Identical: a 1 here walks into the reporting state S4.</td></tr>
+    <tr><td class="c">      S4: next_state = in ? S1 : S0; <span class="com">// mirrors S0's transitions</span></td><td class="n"><b>The one line that differs from Q3.</b> On a 0 it falls all the way to S0 instead of S2 — history wiped. (On a 1 it still goes to S1, which is also what S0 does on a 1, so the whole row now copies S0.)</td></tr>
+    <tr><td class="c">      <span class="kw">default</span>: next_state = S0;</td><td class="n">Identical safety net for the 3 unused 3-bit codes.</td></tr>
+    <tr><td class="c">    <span class="kw">endcase</span></td><td class="n">End of the case.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">End of the combinational block.</td></tr>
+    <tr><td class="c">  <span class="kw">assign</span> out = (state == S4);</td><td class="n">Identical Moore output wire.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">End of the hardware block.</td></tr>
+  </table>
+</div>
+<div class="callout tip"><b>Lab's verified result</b><p>Only <b>1 match</b>, one cycle after bit 4 — no second pulse near bit 7, for the same reason as Q2.</p></div>
+
+<h3>The whole lab in one picture: four designs, two edges</h3>
+<p>Across all four modules, the backbone (S0, S1, S2 and the climb to the deciding state) is <b>letter-for-letter identical</b>. Everything you are asked to explain comes down to one edge in each pair:</p>
+<figure class="diagram">
+  <svg viewBox="0 0 620 300" width="620" role="img" aria-label="Four rows: Q1 Mealy overlap S3 to S1 on 1 slash 1; Q2 Mealy no overlap S3 to S0 on 1 slash 1; Q3 Moore overlap S4 to S2 on 0; Q4 Moore no overlap S4 to S0 on 0">
+    <defs><marker id="ah-dx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-ink"/></marker>
+    <marker id="ah-dx-hi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fill-hi"/></marker>
+    <marker id="ah-dx-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--green)"/></marker></defs>
+
+    <text x="10" y="40" class="b g">Q1 · Mealy, overlap</text>
+    <circle cx="250" cy="45" r="26" class="box"/><text x="250" y="51" class="b" text-anchor="middle">S3</text>
+    <path class="w-g" marker-end="url(#ah-dx-g)" d="M276 45 H388"/>
+    <text x="332" y="36" class="m" text-anchor="middle">1 / 1</text>
+    <circle cx="420" cy="45" r="26" class="box-g"/><text x="420" y="51" class="b" text-anchor="middle">S1</text>
+    <text x="458" y="41" class="dim">keep the trailing 1 —</text>
+    <text x="458" y="57" class="dim">it can start the next match</text>
+
+    <text x="10" y="110" class="b hi">Q2 · Mealy, no overlap</text>
+    <circle cx="250" cy="115" r="26" class="box"/><text x="250" y="121" class="b" text-anchor="middle">S3</text>
+    <path class="w-hi" marker-end="url(#ah-dx-hi)" d="M276 115 H388"/>
+    <text x="332" y="106" class="m" text-anchor="middle">1 / 1</text>
+    <circle cx="420" cy="115" r="26" class="box-hi"/><text x="420" y="121" class="b" text-anchor="middle">S0</text>
+    <text x="458" y="111" class="dim">throw the tail away —</text>
+    <text x="458" y="127" class="dim">re-climb from nothing</text>
+
+    <path class="grid" d="M10 150 H610"/>
+
+    <text x="10" y="190" class="b g">Q3 · Moore, overlap</text>
+    <circle cx="250" cy="195" r="26" class="box-g"/><text x="250" y="195" class="b" text-anchor="middle">S4</text>
+    <text x="250" y="210" class="m g" text-anchor="middle">out=1</text>
+    <path class="w-g" marker-end="url(#ah-dx-g)" d="M276 195 H388"/>
+    <text x="332" y="186" class="m" text-anchor="middle">0</text>
+    <circle cx="420" cy="195" r="26" class="box"/><text x="420" y="201" class="b" text-anchor="middle">S2</text>
+    <text x="458" y="191" class="dim">S4 copies S1's row —</text>
+    <text x="458" y="207" class="dim">it has "just seen a 1"</text>
+
+    <text x="10" y="260" class="b hi">Q4 · Moore, no overlap</text>
+    <circle cx="250" cy="265" r="26" class="box-g"/><text x="250" y="265" class="b" text-anchor="middle">S4</text>
+    <text x="250" y="280" class="m g" text-anchor="middle">out=1</text>
+    <path class="w-hi" marker-end="url(#ah-dx-hi)" d="M276 265 H388"/>
+    <text x="332" y="256" class="m" text-anchor="middle">0</text>
+    <circle cx="420" cy="265" r="26" class="box-hi"/><text x="420" y="271" class="b" text-anchor="middle">S0</text>
+    <text x="458" y="261" class="dim">S4 copies S0's row —</text>
+    <text x="458" y="277" class="dim">history wiped</text>
+  </svg>
+  <figcaption>Every other state and edge is identical across all four designs. Top pair: the Mealy difference is on the match edge itself. Bottom pair: the Moore difference is on S4's <code>0</code> edge, because in Moore the match edge always goes to S4.</figcaption>
+</figure>
+
+<h3>Simulating all four on IN = 10110110</h3>
+<div class="stepper" data-stepper>
+  <div class="stage"><p><b>Start:</b> <code>rst</code> puts every machine in <b>S0</b>. Bits arrive in this order: 1, 0, 1, 1, 0, 1, 1, 0.</p></div>
+  <div class="stage"><p><b>Bit 1 = 1:</b> S0 + 1 → <b>S1</b> (matched <code>1</code>). All four agree. <code>out = 0</code>.</p></div>
+  <div class="stage"><p><b>Bit 2 = 0:</b> S1 + 0 → <b>S2</b> (matched <code>10</code>). <code>out = 0</code>.</p></div>
+  <div class="stage"><p><b>Bit 3 = 1:</b> S2 + 1 → <b>S3</b> (matched <code>101</code>). <code>out = 0</code>. One bit from a match.</p></div>
+  <div class="stage"><p><b>Bit 4 = 1: MATCH.</b> All four report it. Mealy raises <code>out</code> now, during this very cycle; Moore walks into S4 and raises <code>out</code> for the <em>next</em> cycle. The designs now diverge: <b>Q1 → S1</b>, <b>Q2 → S0</b>, <b>Q3 → S4</b> (which behaves like S1), <b>Q4 → S4</b> (which behaves like S0).</p></div>
+  <div class="stage"><p><b>Bit 5 = 0:</b> the overlapping machines are effectively at <code>1</code> + a <code>0</code> = <code>10</code> → <b>S2</b>: they are already two bits into a new match. The non-overlapping machines are at nothing + <code>0</code> → <b>S0</b>: still at zero.</p></div>
+  <div class="stage"><p><b>Bit 6 = 1:</b> overlapping go S2 → <b>S3</b> (three bits in). Non-overlapping go S0 → <b>S1</b> (one bit in).</p></div>
+  <div class="stage"><p><b>Bit 7 = 1: second MATCH — but only for Q1 and Q3.</b> They were in S3, so this 1 completes <code>1011</code>. Q2 and Q4 were only in S1; for them this is just another <code>1</code> and they stay in S1. <b>This single step is the entire overlap/non-overlap difference.</b></p></div>
+  <div class="stage"><p><b>Bit 8 = 0:</b> everything falls back to <b>S2</b> (ending <code>10</code>). Final tally: Q1 and Q3 found <b>2</b> matches, Q2 and Q4 found <b>1</b>.</p></div>
+</div>
+<p><b>State paths</b> (simulated bit by bit; the state shown is the one <em>entered</em> by that bit):</p>
+<div class="scroll"><table class="tt">
+  <tr><th>Bit #</th><th>reset</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th></tr>
+  <tr><td><b>in</b></td><td>—</td><td>1</td><td>0</td><td>1</td><td>1</td><td>0</td><td>1</td><td>1</td><td>0</td></tr>
+  <tr><td>Q1 Mealy, overlap</td><td>S0</td><td>S1</td><td>S2</td><td>S3</td><td>S1</td><td>S2</td><td>S3</td><td>S1</td><td>S2</td></tr>
+  <tr class="hl"><td>Q1 <b>out</b></td><td>0</td><td>0</td><td>0</td><td>0</td><td class="one">1</td><td>0</td><td>0</td><td class="one">1</td><td>0</td></tr>
+  <tr><td>Q2 Mealy, no overlap</td><td>S0</td><td>S1</td><td>S2</td><td>S3</td><td>S0</td><td>S0</td><td>S1</td><td>S1</td><td>S2</td></tr>
+  <tr class="hl"><td>Q2 <b>out</b></td><td>0</td><td>0</td><td>0</td><td>0</td><td class="one">1</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+  <tr><td>Q3 Moore, overlap</td><td>S0</td><td>S1</td><td>S2</td><td>S3</td><td class="one">S4</td><td>S2</td><td>S3</td><td class="one">S4</td><td>S2</td></tr>
+  <tr class="hl"><td>Q3 <b>out</b></td><td>0</td><td>0</td><td>0</td><td>0</td><td class="one">1</td><td>0</td><td>0</td><td class="one">1</td><td>0</td></tr>
+  <tr><td>Q4 Moore, no overlap</td><td>S0</td><td>S1</td><td>S2</td><td>S3</td><td class="one">S4</td><td>S0</td><td>S1</td><td>S1</td><td>S2</td></tr>
+  <tr class="hl"><td>Q4 <b>out</b></td><td>0</td><td>0</td><td>0</td><td>0</td><td class="one">1</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+</table></div>
+<p style="font-size:15px">The two <code>out</code> rows for Q1 and Q3 are the <em>same list of bits</em> — but they do not happen at the same moment. Q1's pulse is high while bit 4 is being applied; Q3's pulse is high during the following cycle, after the edge that consumed bit 4. Same answer, one clock apart.</p>
+<h4>Summary comparison</h4>
+<div class="scroll"><table>
+  <tr><th>Build</th><th>Matches on the shared stream</th><th>Detection timing</th><th>Flip-flops</th></tr>
+  <tr><td>Q1 · Mealy, overlap</td><td><b>2</b> (bit 4, bit 7)</td><td>Same cycle as the 4th bit</td><td>2</td></tr>
+  <tr><td>Q2 · Mealy, no overlap</td><td><b>1</b> (bit 4)</td><td>Same cycle as the 4th bit</td><td>2</td></tr>
+  <tr><td>Q3 · Moore, overlap</td><td><b>2</b> (bit 4, bit 7)</td><td>One cycle after each match</td><td>3</td></tr>
+  <tr><td>Q4 · Moore, no overlap</td><td><b>1</b> (bit 4)</td><td>One cycle after the match</td><td>3</td></tr>
+</table></div>
+<div class="callout tip"><b>The one-paragraph write-up the lab asks for</b>
+  <p><b>Mealy vs Moore:</b> the single structural change is <em>where the output is produced</em>. Mealy computes <code>out</code> inside the combinational block from state <b>and</b> input, so it rises in the same cycle as the final bit and needs no extra state. Moore drives <code>out</code> from the state register alone (<code>assign out = (state == S4)</code>), which forces a dedicated accepting state S4 — one more state, one more flip-flop, and the pulse arrives one clock later but is glitch-free and already registered.</p>
+  <p><b>Overlap vs non-overlap:</b> the single structural change is <em>the destination of one edge</em>. Overlapping sends the machine to the state for the longest reusable suffix of the match (S1, because <code>1011</code> ends in <code>1</code>); non-overlapping sends it to S0, discarding the tail. Everything else is untouched.</p>
+</div>
+
+<h3>The shared testbench</h3>
+<p>The lab gives one testbench structure for all four modules: instantiate the design under test and reuse this stimulus.</p>
+<div class="code">
+  <div class="code-head"><span><b>verilog</b> · tb_top.v</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">module</span> tb_top;</td><td class="n">A testbench is itself a module, but with no ports — nothing connects to it, it just drives the design and watches.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span> clk = <span class="num">0</span>, rst = <span class="num">1</span>, in;</td><td class="n">Signals the testbench <em>drives</em>. <code>clk</code> starts low; <code>rst</code> starts high so the design wakes up in S0.</td></tr>
+    <tr><td class="c">  <span class="kw">wire</span> out;</td><td class="n">The signal the testbench <em>watches</em>. It is driven by the design, so it is a <code>wire</code>.</td></tr>
+    <tr><td class="c">  <span class="kw">integer</span> i;</td><td class="n">A plain counter for the loop. <code>integer</code> exists only in simulation — it never becomes hardware.</td></tr>
+    <tr><td class="c">  <span class="kw">reg</span> [7:0] stream = <span class="num">8'b10110110</span>; <span class="com">// bit 1 = MSB, applied first</span></td><td class="n">The 8-bit test vector held in one register. <b>MSB first</b>: <code>stream[7]</code> is the leftmost <code>1</code>, so the loop counts <em>down</em>.</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="com">// mealy_overlap dut (.clk(clk), .rst(rst), .in(in), .out(out));</span></td><td class="n">Where you drop in the design under test. <code>.clk(clk)</code> reads "wire the module's <code>clk</code> port to my signal called <code>clk</code>". Swap the module name to test each of the four.</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">always</span> #<span class="num">5</span> clk = ~clk;</td><td class="n">The clock generator: every 5 time units, flip <code>clk</code> (<code>~</code> = NOT). That gives a 10-unit period — rising edges at t = 5, 15, 25…</td></tr>
+    <tr><td class="c"></td><td class="n"></td></tr>
+    <tr><td class="c">  <span class="kw">initial</span> <span class="kw">begin</span></td><td class="n"><code>initial</code> runs <b>once</b>, from t = 0. This is the test script.</td></tr>
+    <tr><td class="c">    rst = <span class="num">1</span>; in = <span class="num">0</span>;</td><td class="n">Hold reset and park the data line at 0.</td></tr>
+    <tr><td class="c">    @(<span class="kw">negedge</span> clk); rst = <span class="num">0</span>;</td><td class="n">"Wait until the clock falls, then release reset." Changing inputs on the <b>falling</b> edge keeps them stable across the rising edge the design actually uses — standard practice.</td></tr>
+    <tr><td class="c">    <span class="kw">for</span> (i = <span class="num">7</span>; i &gt;= <span class="num">0</span>; i = i − <span class="num">1</span>) <span class="kw">begin</span></td><td class="n">Count down from 7 to 0 so bits come out most-significant first: 1, 0, 1, 1, 0, 1, 1, 0.</td></tr>
+    <tr><td class="c">      in = stream[i];</td><td class="n">Apply one bit. <code>stream[i]</code> picks out bit number <code>i</code>.</td></tr>
+    <tr><td class="c">      @(<span class="kw">negedge</span> clk); <span class="com">// sample 'out' just after the clock edge</span></td><td class="n">Wait a full clock period. In between, the rising edge happens and the design consumes this bit.</td></tr>
+    <tr><td class="c">      $display(<span class="str">"t=%0t bit=%b out=%b"</span>, $time, in, out);</td><td class="n">Print a line. <code>%b</code> prints a bit, <code>%0t</code> prints the simulation time. <code>$display</code>, like <code>$time</code> and <code>$finish</code>, is a simulator command — never hardware.</td></tr>
+    <tr><td class="c">    <span class="kw">end</span></td><td class="n">End of the loop body.</td></tr>
+    <tr><td class="c">    $finish;</td><td class="n">Stop the simulation, otherwise the clock generator runs forever.</td></tr>
+    <tr><td class="c">  <span class="kw">end</span></td><td class="n">End of the test script.</td></tr>
+    <tr><td class="c"><span class="kw">endmodule</span></td><td class="n">End of the testbench.</td></tr>
+  </table>
+</div>
+<div class="callout fix"><b>Lab correction — this testbench mis-reads the two Mealy designs</b>
+  <p>The four modules are correct. The <b>testbench's sampling instant is not</b>, for Mealy. The loop applies a bit at a falling edge and then prints <code>out</code> at the <em>next</em> falling edge — by which time the rising edge has already moved the state on, while <code>in</code> is still holding the old bit. For a Mealy machine, whose output is <code>f(state, in)</code> right now, that reads the wrong combination.</p>
+  <p>Simulating the whole thing cycle by cycle: Q1's printed lines show <code>out = 1</code> against <b>bits 3 and 6</b>, not bits 4 and 7, and Q2's against bit 3, not bit 4. The hardware is fine — <code>out</code> really is high during the cycle in which bit 4 is applied (time 40–45 with this clock) — the printout just lands half a cycle late. <b>Moore is unaffected</b>, because its <code>out</code> depends only on the state, which is exactly what has settled by the falling edge; Q3 and Q4 print correctly on bits 4 and 7.</p>
+  <p><b>Fix:</b> print <em>before</em> the rising edge instead of after it, so the Mealy output is read while its own bit is still the current one:</p>
+  <pre class="plain"><code>for (i = 7; i &gt;= 0; i = i - 1) begin
+    in = stream[i];
+    #4;                                 // settle, still before the posedge at +5
+    $display("bit=%b out=%b", in, out); // Mealy: correct instant
+    @(negedge clk);
+end</code></pre>
+  <p>With that change Q1 prints pulses on bits 4 and 7 and Q2 on bit 4, matching the lab's stated results. If you would rather not touch the testbench, keep it and just <b>read the waveform</b> instead of the text: in the waveform Q1's pulse visibly covers the half-cycle during which bit 4 is applied, which is also what the deliverable's annotated screenshot is asking you to show.</p>
+</div>
+
+<h3>Deliverables checklist</h3>
+<div class="callout trap"><b>What you have to hand in</b>
+<ul>
+  <li>Four synthesizable modules (Q1–Q4), matching the verified transition tables above.</li>
+  <li>Four testbenches driving the shared stream <code>10110110</code>.</li>
+  <li>One waveform screenshot per module, annotated with which bit(s) triggered <code>out = 1</code>.</li>
+  <li>A one-paragraph write-up: for each of the two design axes (Mealy/Moore, overlap/no-overlap), state in your own words the single structural change that causes the behavioural difference you saw in simulation. (A model answer is in the green box above — write your own version of it.)</li>
+</ul></div>
 
 <h2>Common mistakes &amp; exam traps</h2>
 <div class="callout trap"><b>Slips that cost marks</b>
 <ul>
-  <li><b>Resetting to S0 after a match</b> is wrong for overlapping detection. After <code>1011</code> the trailing 1 can start a new match, so go to S1.</li>
+  <li><b>Read the question for the word "overlapping".</b> Going to S0 after a match is <em>wrong</em> for an overlapping detector and <em>right</em> for a non-overlapping one. Both are correct hardware — for different specifications. Lab 8 exists to make you notice which one you were asked for.</li>
+  <li><b>Jumping to S0 on any wrong bit.</b> Use the failure function: from S3 (<code>101</code>) a 0 gives <code>1010</code>, whose ending <code>10</code> survives, so go to <b>S2</b> — not S0. This mistake quietly loses matches and is the single most common one.</li>
   <li><b>Mixing notations:</b> Moore writes the output in the circle (<code>S1/1</code>); Mealy writes <code>in/out</code> on the arrow. Don't mix them in one diagram.</li>
-  <li><b>Miscounting states:</b> Moore usually needs one more state than Mealy (5 vs 4 for 1011).</li>
+  <li><b>Miscounting states:</b> Moore needs one more state than Mealy (5 vs 4 for 1011), because the output has to live somewhere.</li>
   <li><b>Wrong flip-flop count:</b> N states need ⌈log₂ N⌉ flip-flops. 5 states → 3, not 2.</li>
   <li><b>Forgetting the reset state.</b> Without reset, the machine may power up in a random state.</li>
-  <li><b>Unused codes</b> (like 11 in the traffic light) should route back to reset, so the machine can't get stuck.</li>
+  <li><b>Unused codes</b> (the three spare 3-bit codes in the Moore designs, or <code>11</code> in the traffic light) should route back to reset, so the machine can't get stuck. That is what <code>default: next_state = S0;</code> is for.</li>
   <li>Missing <code>default</code> or default values in <code>always @(*)</code> creates accidental latches.</li>
+  <li><b>Writing <code>out</code> inside the <code>always</code> block of a Moore machine.</b> If <code>out</code> can see <code>in</code>, it is a Mealy machine whatever you called it. Moore's output must be a single <code>assign out = (state == S4);</code>.</li>
+  <li><b>Trusting a printed simulation log without checking when it sampled.</b> A Mealy output is only valid while its own input bit is still applied — see the lab correction above.</li>
 </ul></div>
 
 <h2>Practice</h2>
@@ -407,11 +686,59 @@
     </table></div>
     <p>S3 behaves like S0 for its next moves (its history <code>110</code> gives the same "nothing matched" situation). 4 states → 2 flip-flops.</p>
   </div></details>
-  <details class="q"><summary>Feed "1011011" into the Mealy 1011 detector. When is y = 1?</summary><div class="a">
-    <p>States: S0 →1 S1 →0 S2 →1 S3 →1 S1 (<b>y=1</b>) →0 S2 →1 S3 →1 S1 (<b>y=1</b>).</p>
-    <p>y = <code>0001001</code>: found after bit 4 and bit 7. The second match reuses the 1 from bit 4.</p>
+  <details class="q"><summary>Feed "1011011" into the Q1 (Mealy, overlapping) detector. When is <code>out</code> = 1?</summary><div class="a">
+    <p>States: S0 →1 S1 →0 S2 →1 S3 →1 S1 (<b>out=1</b>) →0 S2 →1 S3 →1 S1 (<b>out=1</b>).</p>
+    <p><code>out</code> = <code>0001001</code>: found after bit 4 and bit 7. The second match reuses the 1 from bit 4.</p>
+    <p>Run the same stream through <b>Q2</b> (non-overlapping) and you get <code>0001000</code> — one match. Path: S0→S1→S2→S3→<b>S0</b>→S0→S1→S1.</p>
   </div></details>
   <details class="q"><summary>How many flip-flops for an FSM with 12 states?</summary><div class="a"><p>⌈log₂ 12⌉ = ⌈3.58⌉ = <b>4</b> flip-flops (3 bits only give 8 codes).</p></div></details>
+  <details class="q"><summary><b>Lab 8:</b> both Q1 and Q3 report 2 matches on the shared stream, so what is the actual difference between them?</summary><div class="a">
+    <p><b>Timing, cost and glitch behaviour — not the answer.</b></p>
+    <ul>
+      <li><b>Timing:</b> Q1's pulse is high during the cycle in which bit 4 is applied. Q3's is high during the <em>following</em> cycle, after the edge that consumed bit 4. One clock apart.</li>
+      <li><b>Cost:</b> Q1 needs 4 states / 2 flip-flops; Q3 needs 5 states / 3 flip-flops.</li>
+      <li><b>Quality:</b> Q3's output comes straight off a flip-flop, so it is clean and already registered. Q1's comes through combinational logic from the input, so it can glitch if <code>in</code> glitches — and it must be sampled while its own bit is applied.</li>
+    </ul>
+    <p>Rule of thumb: Mealy when you need the answer <em>fast</em> and cheap; Moore when you need it <em>clean</em> and easy to feed into the next block.</p>
+  </div></details>
+  <details class="q"><summary><b>Lab 8:</b> you change one line in <code>moore_overlap.v</code> to make it non-overlapping. Which line, and what to?</summary><div class="a">
+    <p><code>S4: next_state = in ? S1 : S2;</code> becomes <code>S4: next_state = in ? S1 : S0;</code></p>
+    <p>S4 stops mirroring S1 and starts mirroring S0. The <code>in = 1</code> half looks unchanged, but that is only because S0 and S1 happen to agree there (a 1 always lands you in S1) — the whole row is now S0's row.</p>
+    <p><b>Trap:</b> do not also change <code>S3: next_state = in ? S4 : S2;</code>. In a Moore machine the match edge <em>always</em> goes to S4, in both policies, because S4 is where the output lives.</p>
+  </div></details>
+  <details class="q"><summary><b>Lab 8:</b> derive the whole transition table for a <code>1101</code> detector (overlapping) with the failure function.</summary><div class="a">
+    <p>States: S0 = nothing, S1 = <code>1</code>, S2 = <code>11</code>, S3 = <code>110</code>. Work each wrong bit out by taking the longest ending that is still a start of <code>1101</code>:</p>
+    <div class="scroll"><table class="tt">
+      <tr><th>State</th><th>in = 0</th><th>in = 1</th></tr>
+      <tr><td>S0 (—)</td><td>S0 / 0</td><td>S1 / 0</td></tr>
+      <tr><td>S1 (<code>1</code>)</td><td>S0 / 0</td><td>S2 / 0</td></tr>
+      <tr><td>S2 (<code>11</code>)</td><td>S3 / 0</td><td>S2 / 0</td></tr>
+      <tr class="hl"><td>S3 (<code>110</code>)</td><td>S0 / 0</td><td class="one">S1 / 1</td></tr>
+    </table></div>
+    <ul>
+      <li><b>S1 + 0</b> → <code>10</code>. Endings: <code>0</code>, <code>10</code>. Neither starts <code>1101</code>. → S0.</li>
+      <li><b>S2 + 1</b> → <code>111</code>. Longest useful ending is <code>11</code>. → stay in S2.</li>
+      <li><b>S3 + 0</b> → <code>1100</code>. Nothing survives. → S0.</li>
+      <li><b>S3 + 1</b> → <code>1101</code>. <b>Match.</b> Overlapping: the trailing <code>1</code> is a valid start, so → <b>S1</b>. (Non-overlapping would send it to S0.)</li>
+    </ul>
+    <p>Check <code>1101101</code>: S0→S1→S2→S3→S1(<b>1</b>)→S2→S3→S1(<b>1</b>). Two overlapping matches. ✓</p>
+  </div></details>
+  <details class="q"><summary><b>Lab 8:</b> in Q1's Verilog, why are <code>next_state = S0;</code> and <code>out = 1'b0;</code> written before the <code>case</code>?</summary><div class="a">
+    <p>To stop the synthesiser inferring a <b>latch</b>. Inside an <code>always @(*)</code> block, any path that leaves a signal unassigned is read as "hold its old value" — and holding a value needs memory, so the tool silently adds a latch you never asked for. Assigning a default first guarantees every signal gets a value on every path.</p>
+    <p>In Q1 the <code>case</code> happens to cover all four states anyway, so the <code>next_state</code> default is belt-and-braces. The <code>out</code> default is doing real work: only the S3 branch ever sets <code>out</code> to 1, and the other three branches rely on the default to make it 0.</p>
+  </div></details>
+  <details class="q"><summary><b>Lab 8:</b> the Mealy modules have no <code>default:</code> in their <code>case</code>, but the Moore ones do. Why?</summary><div class="a">
+    <p>It is about how many bit patterns the state register can hold. <code>reg [1:0] state</code> has 4 possible codes and the Mealy machines use all 4, so <code>case</code> is already exhaustive. <code>reg [2:0] state</code> has 8 codes and the Moore machines use only 5 — codes <code>101</code>, <code>110</code> and <code>111</code> are unreachable in normal operation but physically possible after a glitch or at power-up. <code>default: next_state = S0;</code> guarantees the machine walks itself back into legal territory instead of getting stuck.</p>
+  </div></details>
+  <details class="q"><summary><b>Lab 8:</b> what does <code>always @(posedge clk or posedge rst)</code> give you that <code>always @(posedge clk)</code> does not?</summary><div class="a">
+    <p>An <b>asynchronous</b> reset. Listing <code>posedge rst</code> in the sensitivity list means the reset takes effect the instant it arrives, without waiting for a clock edge — useful at power-up, when the clock may not be running yet.</p>
+    <p><code>always @(posedge clk)</code> with <code>if (rst)</code> inside gives a <b>synchronous</b> reset instead: it only acts on the next rising edge. Both are used in real designs; the lab chose asynchronous. Make sure the testbench holds <code>rst</code> high across at least one clock edge either way.</p>
+  </div></details>
+  <details class="q"><summary><b>Lab 8:</b> what is the longest run of input bits that can go by with no match, and what is the shortest gap between two matches?</summary><div class="a">
+    <p><b>No match, forever:</b> a stream like <code>0000…</code> or <code>1111…</code> never produces a match, so there is no upper bound.</p>
+    <p><b>Shortest gap, overlapping:</b> 3 bits. Once you have matched <code>1011</code>, the next match needs <code>011</code> appended (giving <code>1011011</code>) — the trailing <code>1</code> is reused. That is why Q1 and Q3 fire on bits 4 and 7 of the lab stream: exactly 3 bits apart.</p>
+    <p><b>Shortest gap, non-overlapping:</b> 4 bits — a whole fresh copy of the pattern, e.g. <code>10111011</code> fires on bits 4 and 8.</p>
+  </div></details>
 </div>
 
 <h2>Watch</h2>

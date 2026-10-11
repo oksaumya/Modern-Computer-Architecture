@@ -15,9 +15,10 @@
 
 <main>
 <section class="hero">
-  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag book">From syllabus · textbook-based</span></div>
+  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag class">From class notes · Loops in Assembly: Factorial &amp; Fibonacci</span></div>
   <h1>Functions, the stack and recursion in MIPS</h1>
   <p class="idea">To call a function, MIPS uses <code>jal</code> (jump and remember where you came from) and returns with <code>jr $ra</code>. Arguments travel in <code>$a0–$a3</code> and the answer comes back in <code>$v0</code>. Anything that must survive the call is saved on the <b>stack</b>, an area of memory that grows <b>downward</b>.</p>
+  <p class="idea">The class deck <em>Factorial and Fibonacci in MIPS</em> solves both of its programs the other way — with a plain <b>loop</b> that counts down to zero, no <code>jal</code> and no stack at all — and leaves recursion as the closing challenge. Sections 8–12 are that material, and section 11 measures what each route costs.</p>
   <div class="analogy"><b>Think of it like this:</b> you are reading a book and look up a word in the dictionary. You put a <b>bookmark</b> in the book first (<code>$ra</code>). If the dictionary entry sends you to an encyclopedia, you need a <em>second</em> bookmark, so you stack the first one on a pile of sticky notes (the stack). When you finish each lookup, you take the top note off the pile and go back to that place.</div>
 </section>
 
@@ -180,7 +181,8 @@
 <h2>6. Non-leaf functions must save <code>$ra</code></h2>
 <p>If a function calls another function, its own <code>jal</code> <b>overwrites <code>$ra</code></b>. Without saving it, its final <code>jr $ra</code> would jump to the wrong place (usually an endless loop). It also must save any argument or <code>$t</code> value it still needs after the inner call, because the callee may change them.</p>
 
-<h2>7. Lab 3B: recursive factorial</h2>
+<h2>7. Recursive factorial — the class's closing challenge</h2>
+<p>The class deck ends on this: <em>"write factorial as a function that calls itself with <code>jal</code>. One hint: the moment <code>fact</code> calls <code>fact</code>, <code>jal</code> overwrites <code>$ra</code>. Where could you keep a copy so the function still finds its way home?"</em> The answer is the stack, and here is the whole program.</p>
 <p><b>C:</b></p>
 <div class="code">
   <div class="code-head"><span><b>c</b> · fact</span><span>code → what it means</span></div>
@@ -477,7 +479,373 @@
   </div>
 </div>
 
-<h2>8. Compare with the disassembly (Text Segment)</h2>
+<h2>8. The class's other route: loops instead of recursion</h2>
+<p>The deck <em>Factorial and Fibonacci in MIPS</em> builds both programs with a <b>loop</b> and no function call at all: no <code>jal</code>, no <code>$ra</code>, no stack. Recursion is set at the very end as a challenge ("the moment <code>fact</code> calls <code>fact</code>, <code>jal</code> overwrites <code>$ra</code> — where could you keep a copy?"), which is exactly the program in section 7. So the two halves of this page are the two answers to the same question.</p>
+<p>The class builds each program in the same five steps:</p>
+<ol class="flow arrows">
+  <li><b>1 · Write it in C</b>so the logic is clear first</li>
+  <li><b>2 · Choose registers</b>one register per variable</li>
+  <li><b>3 · Learn the new instructions</b><code>blez</code>, <code>mult</code>, <code>mflo</code>, <code>syscall 11</code></li>
+  <li><b>4 · Write the MIPS</b>fill in the loop skeleton</li>
+  <li><b>5 · Trace it by hand</b>check every value, then run it</li>
+</ol>
+
+<h3>The loop skeleton: counting down</h3>
+<p>Both class programs count a counter down to zero. This is the shape:</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · the skeleton</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        <i>init</i></td><td class="n">Set the starting values. This runs <b>once</b>, and it must sit <b>before</b> the label.</td></tr>
+    <tr><td class="c">loop:   <span class="kw">blez</span> <i>counter</i>, done</td><td class="n">Finished? If the counter is 0 or less, leave the loop.</td></tr>
+    <tr><td class="c">        <i>body</i></td><td class="n">The real work of one pass.</td></tr>
+    <tr><td class="c">        <i>counter--</i></td><td class="n">Count down by one, so the loop eventually ends.</td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n">Jump back to the test and go round again.</td></tr>
+    <tr><td class="c">done:   …</td><td class="n">Carry on here when the counter has run out.</td></tr>
+  </table>
+</div>
+<figure class="diagram">
+  <svg viewBox="0 0 620 320" width="620" role="img" aria-label="Flowchart: counter equals n, then test counter greater than zero; no leads to done, yes leads to body then counter minus minus then back to the test">
+    <rect x="200" y="20" width="200" height="36" rx="6" class="box-b"/>
+    <text x="300" y="43" class="m b" text-anchor="middle">counter = n</text>
+    <path class="w" d="M300 56 V74"/><polygon points="300,82 295,70 305,70" class="fill-ink"/>
+    <polygon points="300,84 412,118 300,152 188,118" class="box-hi"/>
+    <text x="300" y="123" class="m hi" text-anchor="middle">counter &gt; 0 ?</text>
+    <path class="w" d="M188 118 H136"/><polygon points="128,118 140,113 140,123" class="fill-ink"/>
+    <text x="160" y="110" class="m r" text-anchor="middle">no</text>
+    <rect x="20" y="100" width="106" height="36" rx="6" class="box-g"/>
+    <text x="73" y="123" class="m b" text-anchor="middle">done</text>
+    <text x="312" y="172" class="m g">yes</text>
+    <path class="w" d="M300 152 V180"/><polygon points="300,188 295,176 305,176" class="fill-ink"/>
+    <rect x="200" y="190" width="200" height="36" rx="6" class="box"/>
+    <text x="300" y="213" class="m b" text-anchor="middle">body</text>
+    <path class="w" d="M300 226 V242"/><polygon points="300,250 295,238 305,238" class="fill-ink"/>
+    <rect x="200" y="252" width="200" height="36" rx="6" class="box"/>
+    <text x="300" y="275" class="m b" text-anchor="middle">counter--</text>
+    <path class="w" d="M400 270 H500 V118 H420"/><polygon points="412,118 424,113 424,123" class="fill-ink"/>
+    <text x="508" y="198" class="m dim">j loop</text>
+  </svg>
+  <figcaption>The test is at the <b>top</b>. If n is 0 the body never runs at all — which is exactly what 0! = 1 needs.</figcaption>
+</figure>
+<div class="callout tip"><b>Why count DOWN?</b><p>Because MIPS can compare a register against zero in <b>one</b> instruction: <code>blez</code>. Counting up to n would need <code>slt</code> plus a branch — two instructions, and a second register holding n.</p></div>
+<div class="callout trap"><b>Watch the label</b><p>The init lines go <b>before</b> <code>loop:</code>. Put them after it and they run again on every pass, so the counter is reset and the loop never ends.</p></div>
+
+<h3>Three instructions the loops need</h3>
+<div class="scroll"><table>
+  <tr><th>Instruction</th><th>What it does</th></tr>
+  <tr class="hl"><td><code>blez $t1, done</code></td><td><b>B</b>ranch if <b>L</b>ess than or <b>E</b>qual to <b>Z</b>ero. If <code>$t1 ≤ 0</code>, jump to <code>done</code>; otherwise carry on with the next line. It only ever compares with zero, so no <code>slt</code> is needed.</td></tr>
+  <tr class="hl"><td><code>mult $t0, $t1</code></td><td>Multiply two 32-bit numbers. The answer can be up to <b>64</b> bits, so it does not go in an ordinary register: it goes into two special registers, <b>HI</b> (top 32 bits) and <b>LO</b> (bottom 32 bits).</td></tr>
+  <tr class="hl"><td><code>mflo $t0</code></td><td><b>M</b>ove <b>f</b>rom <b>LO</b>: copy LO into <code>$t0</code>. For small answers HI is 0 and LO holds the whole result. (<code>mfhi</code> reads HI.)</td></tr>
+  <tr><td><code>addiu $t1, $t1, -1</code></td><td>Add −1 to <code>$t1</code>: this is the "count down by one". The <b>u</b> means it never raises an overflow exception.</td></tr>
+  <tr><td><code>li $a0, 32</code> + <code>li $v0, 11</code> + <code>syscall</code></td><td>Syscall 11 prints <b>one character</b>, given by its ASCII code. 32 is the code for a space.</td></tr>
+</table></div>
+<div class="scroll"><table>
+  <tr><th><code>$v0</code></th><th>Syscall service</th><th>Uses</th></tr>
+  <tr><td><code>5</code></td><td>read integer</td><td>the number typed arrives in <code>$v0</code></td></tr>
+  <tr><td><code>1</code></td><td>print integer</td><td>prints the number in <code>$a0</code></td></tr>
+  <tr><td><code>11</code></td><td>print character</td><td>prints the one character whose ASCII code is in <code>$a0</code></td></tr>
+  <tr><td><code>4</code></td><td>print string</td><td>prints the <code>.asciiz</code> text whose address is in <code>$a0</code></td></tr>
+  <tr><td><code>10</code></td><td>exit</td><td>stop the program cleanly</td></tr>
+</table></div>
+<div class="callout trap"><b>Keep nothing in <code>$a0</code></b><p>Every print overwrites <code>$a0</code>. So a, b and the counter must live in <code>$t</code> registers, and you copy a value into <code>$a0</code> only at the moment you print it.</p></div>
+
+<h2>9. Iterative factorial (the class program)</h2>
+<p><b>The idea.</b> n! = n × (n − 1) × … × 2 × 1. The class's picture: <em>in how many ways can 4 objects be held in 4 hands?</em> The first hand has 4 choices, the second 3, the third 2, the last 1 — so 4 × 3 × 2 × 1 = <b>24</b>. That is counting down, and the program does exactly the same starting from n.</p>
+<div class="callout tip"><b>Why start at <code>result = 1</code>?</b><p>Multiplying by 1 changes nothing, so 1 is the safe starting value. It also makes n = 0 come out right for free: the loop never runs and the answer stays 1, which is the correct 0! = 1.</p></div>
+<p><b>C first</b> (<code>while</code> means "keep repeating as long as the test is true"; <code>counter--</code> means "make counter one smaller"):</p>
+<div class="code">
+  <div class="code-head"><span><b>c</b> · iterative factorial</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">int</span> result  = <span class="num">1</span>;</td><td class="n">A whole-number box called result, starting at 1.</td></tr>
+    <tr><td class="c"><span class="kw">int</span> counter = n;</td><td class="n">A second box, starting at the n we read.</td></tr>
+    <tr><td class="c"><span class="kw">while</span> (counter &gt; <span class="num">0</span>) {</td><td class="n">Repeat the block below as long as counter is still above zero.</td></tr>
+    <tr><td class="c">    result = result * counter;</td><td class="n">Multiply what we have so far by the counter (<code>*</code> means multiply).</td></tr>
+    <tr><td class="c">    counter--;</td><td class="n">Take one off the counter.</td></tr>
+    <tr><td class="c">}</td><td class="n">End of the repeated block; go back and test again.</td></tr>
+    <tr><td class="c">printf(<span class="str">"%d"</span>, result);</td><td class="n">Print the result as a decimal number.</td></tr>
+  </table>
+</div>
+<p><b>Then MIPS.</b> Everything happens inside <code>main</code>: <code>$t0</code> = result, <code>$t1</code> = counter.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · factorial_iterative.asm</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .text</td><td class="n">Here comes the program (instructions).</td></tr>
+    <tr><td class="c">        .globl main</td><td class="n">The label <code>main</code> is where execution starts.</td></tr>
+    <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Choose service 5 = read an integer.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Do it. The number typed arrives in <code>$v0</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $v0</td><td class="n">Copy it to <code>$a0</code>: this is n.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t0, <span class="num">1</span></td><td class="n">result = 1 &nbsp;— the init, before the label.</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $t1, $a0</td><td class="n">counter = n &nbsp;— also before the label.</td></tr>
+    <tr><td class="c">loop:   <span class="kw">blez</span> $t1, done</td><td class="n">If counter ≤ 0, the loop is over: jump to <code>done</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">mult</span> $t0, $t1</td><td class="n">HI:LO = result × counter.</td></tr>
+    <tr><td class="c">        <span class="kw">mflo</span> $t0</td><td class="n">result = LO (the bottom 32 bits of that product).</td></tr>
+    <tr><td class="c">        <span class="kw">addiu</span> $t1, $t1, <span class="num">-1</span></td><td class="n">counter--</td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n">Go back to the test.</td></tr>
+    <tr><td class="c">done:   <span class="kw">move</span> $a0, $t0</td><td class="n">Put the answer where the printer looks.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Service 1 = print integer.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Print it.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">Service 10 = exit.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Stop.</td></tr>
+  </table>
+</div>
+<div class="scroll"><table>
+  <tr><th>Register</th><th>Holds</th></tr>
+  <tr class="hl"><td><code>$t0</code></td><td>result</td></tr>
+  <tr class="hl"><td><code>$t1</code></td><td>counter</td></tr>
+  <tr><td><code>$a0</code></td><td>n, then the value to print</td></tr>
+  <tr><td><code>$v0</code></td><td>syscall number, and the number read in</td></tr>
+  <tr><td><code>LO</code></td><td>the product left behind by <code>mult</code></td></tr>
+</table></div>
+
+<h3>Tracing fact(5) by hand</h3>
+<p>One row per test of the loop. <code>$t1</code> counts down, <code>$t0</code> grows.</p>
+<div class="scroll"><table>
+  <tr><th>Pass</th><th><code>$t1</code> counter</th><th>counter ≤ 0 ?</th><th>HI:LO = result × counter</th><th><code>$t0</code> after</th></tr>
+  <tr><td>–</td><td><code>5</code></td><td>start</td><td>–</td><td><code>1</code></td></tr>
+  <tr><td>1</td><td><code>5</code></td><td>no</td><td><code>1 × 5 = 5</code></td><td><code>5</code></td></tr>
+  <tr><td>2</td><td><code>4</code></td><td>no</td><td><code>5 × 4 = 20</code></td><td><code>20</code></td></tr>
+  <tr><td>3</td><td><code>3</code></td><td>no</td><td><code>20 × 3 = 60</code></td><td><code>60</code></td></tr>
+  <tr><td>4</td><td><code>2</code></td><td>no</td><td><code>60 × 2 = 120</code></td><td><code>120</code></td></tr>
+  <tr><td>5</td><td><code>1</code></td><td>no</td><td><code>120 × 1 = 120</code></td><td><code>120</code></td></tr>
+  <tr class="hl"><td>6</td><td><code>0</code></td><td><b>yes → done</b></td><td>–</td><td>print <b>120</b></td></tr>
+</table></div>
+<p><b>Notice:</b> pass 5 multiplies by 1, which changes nothing. It is wasted work, but it is harmless and it keeps the code simple.</p>
+<p><b>Verified</b> (instruction-by-instruction simulation of exactly this listing): 0 → <code>1</code>, 1 → <code>1</code>, 2 → <code>2</code>, 3 → <code>6</code>, 5 → <code>120</code>, 10 → <code>3628800</code>, 12 → <code>479001600</code>.</p>
+
+<h2>10. Iterative Fibonacci (the class assignment)</h2>
+<p><b>The task:</b> read one integer n, then print F(0) up to F(n) with a single space between consecutive numbers. Use a loop — no recursion. No prompt, no labels: an automatic checker compares the output exactly.</p>
+<div class="formula">input <b>5</b> &nbsp;→&nbsp; output <b>0 1 1 2 3 5</b><small>n = 5 prints <b>six</b> numbers: F(0), F(1) … F(5). Nothing else — no prompt, no labels.</small></div>
+<p><b>The idea.</b> Each number is the sum of the two before it, starting F(0) = 0, F(1) = 1.</p>
+<div class="scroll"><table>
+  <tr><th>n</th><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td></tr>
+  <tr><th>F(n)</th><td><code>0</code></td><td><code>1</code></td><td><code>1</code></td><td><code>2</code></td><td><code>3</code></td><td><code>5</code></td><td><code>8</code></td><td><code>13</code></td><td><code>21</code></td></tr>
+</table></div>
+<p>You never need the whole list — only the <b>last two</b> numbers. Keep a window of two values and slide it along, printing each number as soon as you have it.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 620 210" width="620" role="img" aria-label="A window of two values sliding along the sequence 0 1 1 2 3 5; in each row the two shaded cells are a and b and the outlined cell is their sum">
+    <text x="20" y="14" class="dim">navy = the window (a, b) · copper = next = a + b</text>
+    <rect x="20" y="24" width="62" height="30" rx="4" class="box-b"/><text x="51" y="44" class="m b" text-anchor="middle">0</text>
+    <rect x="88" y="24" width="62" height="30" rx="4" class="box-b"/><text x="119" y="44" class="m b" text-anchor="middle">1</text>
+    <rect x="156" y="24" width="62" height="30" rx="4" class="box-hi"/><text x="187" y="44" class="m hi" text-anchor="middle">1</text>
+    <rect x="224" y="24" width="62" height="30" rx="4" fill="none" class="grid"/><text x="255" y="44" class="m dim" text-anchor="middle">2</text>
+    <rect x="292" y="24" width="62" height="30" rx="4" fill="none" class="grid"/><text x="323" y="44" class="m dim" text-anchor="middle">3</text>
+    <rect x="360" y="24" width="62" height="30" rx="4" fill="none" class="grid"/><text x="391" y="44" class="m dim" text-anchor="middle">5</text>
+    <text x="440" y="44" class="m hi">next = 0 + 1 = 1</text>
+    <rect x="20" y="68" width="62" height="30" rx="4" fill="none" class="grid"/><text x="51" y="88" class="m dim" text-anchor="middle">0</text>
+    <rect x="88" y="68" width="62" height="30" rx="4" class="box-b"/><text x="119" y="88" class="m b" text-anchor="middle">1</text>
+    <rect x="156" y="68" width="62" height="30" rx="4" class="box-b"/><text x="187" y="88" class="m b" text-anchor="middle">1</text>
+    <rect x="224" y="68" width="62" height="30" rx="4" class="box-hi"/><text x="255" y="88" class="m hi" text-anchor="middle">2</text>
+    <rect x="292" y="68" width="62" height="30" rx="4" fill="none" class="grid"/><text x="323" y="88" class="m dim" text-anchor="middle">3</text>
+    <rect x="360" y="68" width="62" height="30" rx="4" fill="none" class="grid"/><text x="391" y="88" class="m dim" text-anchor="middle">5</text>
+    <text x="440" y="88" class="m hi">next = 1 + 1 = 2</text>
+    <rect x="20" y="112" width="62" height="30" rx="4" fill="none" class="grid"/><text x="51" y="132" class="m dim" text-anchor="middle">0</text>
+    <rect x="88" y="112" width="62" height="30" rx="4" fill="none" class="grid"/><text x="119" y="132" class="m dim" text-anchor="middle">1</text>
+    <rect x="156" y="112" width="62" height="30" rx="4" class="box-b"/><text x="187" y="132" class="m b" text-anchor="middle">1</text>
+    <rect x="224" y="112" width="62" height="30" rx="4" class="box-b"/><text x="255" y="132" class="m b" text-anchor="middle">2</text>
+    <rect x="292" y="112" width="62" height="30" rx="4" class="box-hi"/><text x="323" y="132" class="m hi" text-anchor="middle">3</text>
+    <rect x="360" y="112" width="62" height="30" rx="4" fill="none" class="grid"/><text x="391" y="132" class="m dim" text-anchor="middle">5</text>
+    <text x="440" y="132" class="m hi">next = 1 + 2 = 3</text>
+    <rect x="20" y="156" width="62" height="30" rx="4" fill="none" class="grid"/><text x="51" y="176" class="m dim" text-anchor="middle">0</text>
+    <rect x="88" y="156" width="62" height="30" rx="4" fill="none" class="grid"/><text x="119" y="176" class="m dim" text-anchor="middle">1</text>
+    <rect x="156" y="156" width="62" height="30" rx="4" fill="none" class="grid"/><text x="187" y="176" class="m dim" text-anchor="middle">1</text>
+    <rect x="224" y="156" width="62" height="30" rx="4" class="box-b"/><text x="255" y="176" class="m b" text-anchor="middle">2</text>
+    <rect x="292" y="156" width="62" height="30" rx="4" class="box-b"/><text x="323" y="176" class="m b" text-anchor="middle">3</text>
+    <rect x="360" y="156" width="62" height="30" rx="4" class="box-hi"/><text x="391" y="176" class="m hi" text-anchor="middle">5</text>
+    <text x="440" y="176" class="m hi">next = 2 + 3 = 5</text>
+  </svg>
+  <figcaption>Two registers are enough for the whole sequence: <code>$t0</code> = a (the older), <code>$t1</code> = b (the newer).</figcaption>
+</figure>
+<div class="analogy"><b>Older than Fibonacci:</b> in Gujarat around 1150, the scholar <b>Hemachandra</b> wrote down this exact rule while counting the possible rhythms of a line of poetry (short and long syllables): the number of patterns of length n is the one before it plus the one before that.</div>
+
+<h3>Getting the spaces right</h3>
+<p>Six numbers need only <b>five</b> spaces, so the first number is special. Print F(0) on its own <em>before</em> the loop; then every pass prints "space, then number". No space can ever end up at the end.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 620 120" width="620" role="img" aria-label="The first number 0 is printed before the loop; the remaining five numbers each come with a leading space printed inside the loop">
+    <rect x="20" y="20" width="76" height="40" rx="6" class="box-b"/>
+    <text x="58" y="46" class="m b" text-anchor="middle">0</text>
+    <text x="58" y="80" class="dim" text-anchor="middle">printed once,</text>
+    <text x="58" y="96" class="dim" text-anchor="middle">before the loop</text>
+    <rect x="120" y="20" width="76" height="40" rx="6" class="box-hi"/><text x="158" y="46" class="m hi" text-anchor="middle">␣1</text>
+    <rect x="212" y="20" width="76" height="40" rx="6" class="box-hi"/><text x="250" y="46" class="m hi" text-anchor="middle">␣1</text>
+    <rect x="304" y="20" width="76" height="40" rx="6" class="box-hi"/><text x="342" y="46" class="m hi" text-anchor="middle">␣2</text>
+    <rect x="396" y="20" width="76" height="40" rx="6" class="box-hi"/><text x="434" y="46" class="m hi" text-anchor="middle">␣3</text>
+    <rect x="488" y="20" width="76" height="40" rx="6" class="box-hi"/><text x="526" y="46" class="m hi" text-anchor="middle">␣5</text>
+    <text x="342" y="88" class="dim" text-anchor="middle">each pass of the loop prints a space, then a number &nbsp;(␣ = space, ASCII 32)</text>
+  </svg>
+  <figcaption>n = 5 → the loop runs 5 times and 6 numbers are printed in total.</figcaption>
+</figure>
+
+<h3>C, registers, then the program</h3>
+<div class="code">
+  <div class="code-head"><span><b>c</b> · iterative Fibonacci</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">int</span> a = <span class="num">0</span>, b = <span class="num">1</span>, next;</td><td class="n">Three boxes: a = F(0), b = F(1), and an empty one called next.</td></tr>
+    <tr><td class="c"><span class="kw">int</span> counter = n;</td><td class="n">How many more numbers to print after the first one.</td></tr>
+    <tr><td class="c">printf(<span class="str">"%d"</span>, a);</td><td class="n">Print F(0) with <b>no</b> space in front of it.</td></tr>
+    <tr><td class="c"><span class="kw">while</span> (counter &gt; <span class="num">0</span>) {</td><td class="n">Repeat while there are numbers left.</td></tr>
+    <tr><td class="c">    printf(<span class="str">" %d"</span>, b);</td><td class="n">Print a space, then b. (The space is <em>inside</em> the quotes.)</td></tr>
+    <tr><td class="c">    next = a + b;</td><td class="n">Work out the next number <b>before</b> changing anything.</td></tr>
+    <tr><td class="c">    a = b;</td><td class="n">Slide the window: the newer one becomes the older one.</td></tr>
+    <tr><td class="c">    b = next;</td><td class="n">And the sum becomes the new newer one.</td></tr>
+    <tr><td class="c">    counter--;</td><td class="n">One fewer number to go.</td></tr>
+    <tr><td class="c">}</td><td class="n">Back to the test.</td></tr>
+  </table>
+</div>
+<div class="scroll"><table>
+  <tr><th>Variable</th><th>Register</th><th>Role</th></tr>
+  <tr class="hl"><td><code>counter</code></td><td><code>$t3</code></td><td>how many numbers are still to print</td></tr>
+  <tr class="hl"><td><code>a</code></td><td><code>$t0</code></td><td>the older of the two</td></tr>
+  <tr class="hl"><td><code>b</code></td><td><code>$t1</code></td><td>the newer: the one printed next</td></tr>
+  <tr class="hl"><td><code>next</code></td><td><code>$t2</code></td><td>a + b, held for a moment</td></tr>
+  <tr><td>(print)</td><td><code>$a0</code></td><td>the value or character being printed</td></tr>
+  <tr><td>(service)</td><td><code>$v0</code></td><td>which syscall to run</td></tr>
+</table></div>
+<p>n is read straight into the counter, because it is not needed for anything else.</p>
+<div class="code">
+  <div class="code-head"><span><b>mips</b> · fibonacci_iterative.asm</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        .text</td><td class="n"></td></tr>
+    <tr><td class="c">        .globl main</td><td class="n"></td></tr>
+    <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Service 5 = read integer.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">n arrives in <code>$v0</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $t3, $v0</td><td class="n">counter = n.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t0, <span class="num">0</span></td><td class="n">a = F(0) = 0.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t1, <span class="num">1</span></td><td class="n">b = F(1) = 1.</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $t0</td><td class="n">Copy a into the print register…</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">…service 1 = print integer…</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">…so F(0) is printed with no space in front.</td></tr>
+    <tr><td class="c">loop:   <span class="kw">blez</span> $t3, done</td><td class="n">No numbers left? Then finish.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $a0, <span class="num">32</span></td><td class="n">32 is the ASCII code for a space.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">11</span></td><td class="n">Service 11 = print one character.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Print the space.</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $t1</td><td class="n">Now the number itself: b.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Service 1 = print integer.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Print b.</td></tr>
+    <tr><td class="c">        <span class="kw">addu</span> $t2, $t0, $t1</td><td class="n">next = a + b &nbsp;(first, before anything is overwritten).</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $t0, $t1</td><td class="n">a = b</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $t1, $t2</td><td class="n">b = next</td></tr>
+    <tr><td class="c">        <span class="kw">addiu</span> $t3, $t3, <span class="num">-1</span></td><td class="n">counter--</td></tr>
+    <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n">Go round again.</td></tr>
+    <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">Service 10 = exit.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Stop.</td></tr>
+  </table>
+</div>
+<div class="callout tip"><b>Why <code>addu</code> and not <code>add</code>?</b><p><code>addu</code> is "add, unsigned" — the same addition, but with the overflow check switched off. The loop always computes <b>one number ahead</b> of what it prints, so with plain <code>add</code> the program would crash on a number it was never going to show you. See section 12.</p></div>
+
+<h3>Tracing n = 5</h3>
+<div class="scroll"><table>
+  <tr><th>Pass</th><th><code>$t3</code></th><th>prints</th><th>next = a + b</th><th>a</th><th>b</th><th>output so far</th></tr>
+  <tr><td>before</td><td><code>5</code></td><td><code>0</code></td><td>–</td><td><code>0</code></td><td><code>1</code></td><td><code>0</code></td></tr>
+  <tr><td>1</td><td><code>5</code></td><td><code>␣1</code></td><td><code>0 + 1 = 1</code></td><td><code>1</code></td><td><code>1</code></td><td><code>0 1</code></td></tr>
+  <tr><td>2</td><td><code>4</code></td><td><code>␣1</code></td><td><code>1 + 1 = 2</code></td><td><code>1</code></td><td><code>2</code></td><td><code>0 1 1</code></td></tr>
+  <tr><td>3</td><td><code>3</code></td><td><code>␣2</code></td><td><code>1 + 2 = 3</code></td><td><code>2</code></td><td><code>3</code></td><td><code>0 1 1 2</code></td></tr>
+  <tr><td>4</td><td><code>2</code></td><td><code>␣3</code></td><td><code>2 + 3 = 5</code></td><td><code>3</code></td><td><code>5</code></td><td><code>0 1 1 2 3</code></td></tr>
+  <tr class="hl"><td>5</td><td><code>1</code></td><td><code>␣5</code></td><td><code>3 + 5 = 8</code></td><td><code>5</code></td><td><code>8</code></td><td><b><code>0 1 1 2 3 5</code></b></td></tr>
+  <tr><td>6</td><td><code>0</code></td><td><b>done</b></td><td>–</td><td>–</td><td>–</td><td>finished</td></tr>
+</table></div>
+<p>The loop ran 5 times and printed 6 numbers, exactly as required. Look at pass 5: after printing 5 it still computes 8, which is never printed. Remember that — it is the whole reason for <code>addu</code>.</p>
+<p><b>Verified</b> (same simulation): 0 → <code>0</code>, 1 → <code>0 1</code>, 2 → <code>0 1 1</code>, 5 → <code>0 1 1 2 3 5</code>, 10 → <code>0 1 1 2 3 5 8 13 21 34 55</code>. No trailing space in any of them.</p>
+
+<h3>The update-order trap</h3>
+<p>Start with a = 2 and b = 3. The next number should be 5.</p>
+<div class="vs">
+  <div>
+    <h3 style="color:var(--red)">Wrong</h3>
+    <div class="code" style="margin:0">
+      <div class="code-head"><span><b>order</b></span><span>values after</span></div>
+      <table class="ann">
+        <tr><td class="c">a = b</td><td class="n">a = 3, b = 3 — the old a (2) is gone.</td></tr>
+        <tr><td class="c">b = a + b</td><td class="n">b = 3 + 3 = <b>6</b>. Wrong.</td></tr>
+      </table>
+    </div>
+  </div>
+  <div>
+    <h3 style="color:var(--green)">Right</h3>
+    <div class="code" style="margin:0">
+      <div class="code-head"><span><b>order</b></span><span>values after</span></div>
+      <table class="ann">
+        <tr><td class="c">next = a + b</td><td class="n">next = 5; a and b untouched.</td></tr>
+        <tr><td class="c">a = b</td><td class="n">a = 3, b = 3.</td></tr>
+        <tr><td class="c">b = next</td><td class="n">b = <b>5</b>. Correct.</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="analogy"><b>Think of it like this:</b> swapping the juice in two glasses needs a third, empty glass to hold one of them for a moment. In the program that third glass is <code>$t2</code>.</div>
+
+<h2>11. Iterative vs recursive: what it actually costs</h2>
+<p>Both factorial programs on this page give the same answers. They do not cost the same. The numbers below are <b>measured</b>, by running each listing one instruction at a time and counting; both versions were given identical input/output code (read an integer, print an integer, exit) so the comparison is fair.</p>
+<div class="scroll"><table>
+  <tr><th>n</th><th>Iterative: instructions run</th><th>Iterative: stack bytes</th><th>Recursive: instructions run</th><th>Recursive: stack bytes</th><th>Both print</th></tr>
+  <tr><td>0</td><td><code>11</code></td><td><code>0</code></td><td><code>17</code></td><td><code>8</code></td><td><code>1</code></td></tr>
+  <tr><td>1</td><td><code>16</code></td><td><code>0</code></td><td><code>29</code></td><td><code>16</code></td><td><code>1</code></td></tr>
+  <tr><td>3</td><td><code>26</code></td><td><code>0</code></td><td><code>53</code></td><td><code>32</code></td><td><code>6</code></td></tr>
+  <tr class="hl"><td>5</td><td><code>36</code></td><td><code>0</code></td><td><code>77</code></td><td><code>48</code></td><td><code>120</code></td></tr>
+  <tr><td>10</td><td><code>61</code></td><td><code>0</code></td><td><code>137</code></td><td><code>88</code></td><td><code>3628800</code></td></tr>
+  <tr><td>12</td><td><code>71</code></td><td><code>0</code></td><td><code>161</code></td><td><code>104</code></td><td><code>479001600</code></td></tr>
+</table></div>
+<div class="formula">iterative = 11 + 5n &nbsp;·&nbsp; recursive = 17 + 12n<small>instructions executed start to finish, for the two factorial programs on this page</small></div>
+<ul>
+  <li><b>Instruction count.</b> The loop body is 5 instructions (<code>blez</code>, <code>mult</code>, <code>mflo</code>, <code>addiu</code>, <code>j</code>). One recursive call costs 12: the same arithmetic <em>plus</em> 3 stack-pointer adjustments, 2 <code>sw</code>, 2 <code>lw</code>, a <code>jal</code> and a <code>jr</code>. So recursion runs roughly <b>2.4× more instructions</b> for the same answer.</li>
+  <li><b>Memory.</b> The loop uses <b>zero</b> bytes of stack, whatever n is. Recursion uses <b>8 × (n + 1)</b> bytes, because every call keeps its own <code>$ra</code> and <code>$a0</code> until the whole chain unwinds. For n = 1000 that is about 8 KB of stack for a program whose answer is one number.</li>
+  <li><b>Speed.</b> On a simple machine where every instruction takes about the same time, 2.4× the instructions means about 2.4× the time. On a real pipelined CPU the gap is usually <em>wider</em>: the <code>lw</code>s touch memory, and <code>jal</code>/<code>jr</code> are harder for the processor to predict than a loop that jumps to the same place every time.</li>
+  <li><b>What recursion buys.</b> Code that reads like the mathematical definition, and a natural way to handle problems with branching structure (trees, searches, sorting) where there is no simple loop. For a plain countdown like factorial, it buys nothing.</li>
+</ul>
+<figure class="diagram">
+  <svg viewBox="0 0 620 265" width="620" role="img" aria-label="Side by side stack usage for fact of 5: the iterative version uses no stack, the recursive version holds six eight-byte frames">
+    <text x="130" y="18" class="b" text-anchor="middle">Iterative fact(5)</text>
+    <text x="440" y="18" class="b" text-anchor="middle">Recursive fact(5)</text>
+    <rect x="40" y="34" width="180" height="192" fill="none" class="grid" stroke-dasharray="4 4"/>
+    <text x="130" y="124" class="m dim" text-anchor="middle">nothing on the stack</text>
+    <text x="130" y="144" class="m dim" text-anchor="middle">$sp never moves</text>
+    <text x="130" y="248" class="m g" text-anchor="middle">0 bytes</text>
+    <rect x="350" y="34" width="180" height="32" class="box-hi"/><text x="440" y="55" class="m" text-anchor="middle">fact(5): $ra, $a0=5</text>
+    <rect x="350" y="66" width="180" height="32" class="box-hi"/><text x="440" y="87" class="m" text-anchor="middle">fact(4): $ra, $a0=4</text>
+    <rect x="350" y="98" width="180" height="32" class="box-hi"/><text x="440" y="119" class="m" text-anchor="middle">fact(3): $ra, $a0=3</text>
+    <rect x="350" y="130" width="180" height="32" class="box-hi"/><text x="440" y="151" class="m" text-anchor="middle">fact(2): $ra, $a0=2</text>
+    <rect x="350" y="162" width="180" height="32" class="box-hi"/><text x="440" y="183" class="m" text-anchor="middle">fact(1): $ra, $a0=1</text>
+    <rect x="350" y="194" width="180" height="32" class="box-hi"/><text x="440" y="215" class="m" text-anchor="middle">fact(0): $ra, $a0=0</text>
+    <text x="540" y="215" class="m hi">← $sp</text>
+    <text x="440" y="248" class="m hi" text-anchor="middle">6 frames × 8 = 48 bytes</text>
+  </svg>
+  <figcaption>Each extra 1 in n adds another 8-byte frame to the recursive version, and nothing at all to the loop.</figcaption>
+</figure>
+<h3>Fibonacci makes the gap enormous</h3>
+<p>Factorial recursion is linear: n + 1 calls. But the naive recursion <code>F(n) = F(n−1) + F(n−2)</code> calls itself <b>twice</b> each time, and the same values are recomputed over and over. The number of calls is exactly 2·F(n+1) − 1:</p>
+<div class="scroll"><table>
+  <tr><th>n</th><th>Iterative: instructions</th><th>Naive recursive: calls</th><th>Naive recursive: instructions</th></tr>
+  <tr><td>5</td><td><code>41</code></td><td><code>15</code></td><td><code>153</code></td></tr>
+  <tr><td>10</td><td><code>71</code></td><td><code>177</code></td><td><code>1,773</code></td></tr>
+  <tr><td>15</td><td><code>101</code></td><td><code>1,973</code></td><td><code>19,733</code></td></tr>
+  <tr class="hl"><td>20</td><td><code>131</code></td><td><code>21,891</code></td><td><code>218,913</code></td></tr>
+  <tr><td>25</td><td><code>161</code></td><td><code>242,785</code></td><td><code>2,427,853</code></td></tr>
+</table></div>
+<p>(These count a version that returns the single value F(n), so both sides do the same job. Measured the same way.) The loop grows by 6 instructions per step; the recursion grows by about 60 %<em> per step</em>. At n = 25 the loop has done 161 instructions and the recursion 2.4 million. <b>That</b> is why the assignment says "use a loop, no recursion".</p>
+
+<h2>12. When n gets big: overflow</h2>
+<p>Not needed for the assignment, but worth knowing what your program would actually do. A register holds 32 bits, so the largest positive value is <b>2,147,483,647</b> (2³¹ − 1).</p>
+<div class="vs">
+  <div>
+    <h3>Factorial</h3>
+    <div class="scroll"><table>
+      <tr><td><code>12!</code></td><td><code>479,001,600</code></td><td class="hl"><b>fits</b></td></tr>
+      <tr><td><code>13!</code></td><td><code>6,227,020,800</code></td><td><b>too big</b></td></tr>
+    </table></div>
+    <p><code>mult</code> does keep the full answer, in HI:LO — but <code>mflo</code> takes only LO. So for n = 13 the program prints <b>1,932,053,504</b> (that is 6,227,020,800 − 4,294,967,296): wrong, with no warning at all.</p>
+    <p><b>To detect it:</b> after <code>mult</code>, read HI with <code>mfhi $t4</code>. If <code>$t4</code> is not 0, the answer did not fit.</p>
+  </div>
+  <div>
+    <h3>Fibonacci</h3>
+    <div class="scroll"><table>
+      <tr><td><code>F(46)</code></td><td><code>1,836,311,903</code></td><td class="hl"><b>fits</b></td></tr>
+      <tr><td><code>F(47)</code></td><td><code>2,971,215,073</code></td><td><b>too big</b></td></tr>
+    </table></div>
+    <p>With <code>addu</code> (our code) the value wraps round silently: n = 47 ends by printing <b>−1,323,752,223</b>.</p>
+    <p>With plain <code>add</code>, MARS stops with an overflow exception already at <b>n = 46</b> — even though every number it printed was correct — because the last pass computes F(47) one step ahead before the loop exits.</p>
+  </div>
+</div>
+<div class="callout tip"><b>So which should you use?</b><p><code>addu</code>, as the class does: the program must not crash on a number it is not even going to print. If you wanted a real overflow check you would test the value yourself before printing it, not rely on the exception.</p></div>
+
+<h2>13. Compare with the disassembly (Text Segment)</h2>
 <p>After Assemble (F3), MARS's <b>Execute</b> tab shows the Text Segment: address, machine code, the <b>Basic</b> (real) instruction, and your <b>Source</b>. Pseudo-instructions expand into real ones there. These are the actual rows for the factorial program:</p>
 <div class="scroll"><table>
   <tr><th>Address</th><th>Code</th><th>Basic (real instruction)</th><th>Source</th></tr>
@@ -517,6 +885,27 @@
   <li>Using <code>j</code> instead of <code>jal</code> to call: <code>$ra</code> is never set.</li>
   <li><code>jal</code> saves <b>PC + 4</b> (the next instruction), not PC.</li>
 </ul></div>
+<div class="callout trap"><b>And for the loop programs — the class's own list</b>
+<div class="scroll"><table>
+  <tr><th>Mistake</th><th>What you see</th></tr>
+  <tr><td>A space <em>after</em> the last number</td><td>output does not match, even though it looks right</td></tr>
+  <tr><td>Forgot to print F(0) before the loop</td><td>the output starts at 1</td></tr>
+  <tr><td>Loop runs n − 1 times</td><td>the last number is missing</td></tr>
+  <tr><td>Updated <code>a</code> before computing <code>next</code></td><td>wrong numbers from the second one on</td></tr>
+  <tr><td>Kept a value in <code>$a0</code> across a print</td><td>the next print overwrites it</td></tr>
+  <tr class="hl"><td>Init placed <em>after</em> <code>loop:</code></td><td>the counter resets every pass — the program never finishes</td></tr>
+  <tr><td>Used <code>add</code> instead of <code>addu</code> in Fibonacci</td><td>overflow exception at n = 46, on a number never printed</td></tr>
+  <tr><td>Forgot <code>mflo</code> after <code>mult</code></td><td>the result register never changes; answer stays 1</td></tr>
+</table></div>
+</div>
+<div class="callout tip"><b>How to check it in MARS</b>
+<ol>
+  <li>Assemble (F3), then <b>step</b> through one instruction at a time rather than running it.</li>
+  <li>Watch <code>$t0</code>, <code>$t1</code> and <code>$t3</code> in the Registers pane as you step.</li>
+  <li>Compare each pass against the trace table above. The first row that disagrees is where the bug is.</li>
+  <li>Test the smallest inputs first: n = 0 → <code>0</code>, n = 1 → <code>0 1</code>, n = 2 → <code>0 1 1</code>, n = 5 → <code>0 1 1 2 3 5</code>.</li>
+</ol>
+</div>
 
 <h2>Practice</h2>
 <div data-practice>
@@ -528,6 +917,77 @@
   <details class="q"><summary>Translate <code>int add3(int a, int b, int c) { return a + b + c; }</code> ("take three ints, give back their sum").</summary><div class="a"><p>A leaf that changes no <code>$s</code> register needs no stack:<br><code>add3: add $v0, $a0, $a1</code><br><code>      add $v0, $v0, $a2</code><br><code>      jr  $ra</code></p></div></details>
   <details class="q"><summary>What real instructions does <code>la $a0, res</code> become if <code>res</code> is at 0x1001000A?</summary><div class="a"><p><code>lui $at, 0x1001</code> then <code>ori $a0, $at, 0x000A</code>. (MARS shows exactly this: <code>0x3c011001</code>, <code>0x3424000a</code>.)</p></div></details>
   <details class="q"><summary>In fact, what goes wrong if you swap the order and write <code>lw $a0, 0($sp)</code> <i>before</i> <code>jal fact</code>?</summary><div class="a"><p>The <code>$a0</code> you just set to n − 1 is replaced by n, so fact calls itself with the same n forever (well, until the stack overflows). And after the call, <code>$a0</code> is no longer your n.</p></div></details>
+  <details class="q"><summary>Why does the class count <em>down</em> to zero instead of up to n?</summary><div class="a"><p>Because <code>blez</code> compares a register with zero in one instruction. Counting up would need the value of n kept in a second register plus <code>slt</code> and a branch — two instructions per pass instead of one, for no benefit.</p></div></details>
+  <details class="q"><summary>In the iterative factorial, what happens if you write <code>li $t0, 0</code> instead of <code>li $t0, 1</code>?</summary><div class="a"><p>Every multiplication is 0 × something, so the answer is always <b>0</b>. 1 is the identity for multiplication — it is the only safe starting value.</p></div></details>
+  <details class="q"><summary>You move <code>li $t1, 5</code> (the init) to just <em>after</em> the <code>loop:</code> label. What does the program do?</summary><div class="a"><p>The counter is set back to 5 at the top of every pass, so <code>blez</code> never fires. The program loops forever. This is why the init must sit before the label.</p></div></details>
+  <details class="q"><summary>For n = 7, how many numbers does the Fibonacci program print, and how many spaces?</summary><div class="a"><p><b>8 numbers</b> (F(0) … F(7) = 0 1 1 2 3 5 8 13) and <b>7 spaces</b> — one per loop pass. F(0) is printed before the loop with no space, so there is never a space at the end.</p></div></details>
+  <details class="q"><summary>Why does the Fibonacci loop need <code>$t2</code> at all? Couldn't it just do <code>a = b</code> then <code>b = a + b</code>?</summary><div class="a"><p>No. Once <code>a = b</code> has run, the old a is gone, so <code>a + b</code> is really <code>b + b</code>. Starting from a = 2, b = 3 you would get 6 instead of 5. <code>$t2</code> is the third glass that holds the sum before anything is overwritten.</p></div></details>
+  <details class="q"><summary>Your Fibonacci output is <code>1 1 2 3 5 8</code> for n = 5. What did you forget?</summary><div class="a"><p>The <code>move $a0, $t0</code> / <code>li $v0, 1</code> / <code>syscall</code> that prints F(0) <em>before</em> the loop. Without it the output starts at F(1) and still has six numbers, so it is easy to miss.</p></div></details>
+  <details class="q"><summary>The iterative factorial prints <code>1932053504</code> for n = 13. Is the program wrong?</summary><div class="a"><p>The program is fine; 32 bits are not enough. 13! = 6,227,020,800 and <code>mflo</code> keeps only the bottom 32 bits: 6,227,020,800 − 4,294,967,296 = 1,932,053,504. Add <code>mfhi $t4</code> after the <code>mult</code> and check whether <code>$t4</code> is 0 if you want to detect it.</p></div></details>
+  <details class="q"><summary>How many stack bytes does the <em>iterative</em> factorial use for n = 1000? And the recursive one?</summary><div class="a"><p>Iterative: <b>0 bytes</b> — it never touches <code>$sp</code>. Recursive: 8 × 1001 = <b>8,008 bytes</b>, because every one of the 1001 calls keeps its own <code>$ra</code> and <code>$a0</code> until the chain unwinds.</p></div></details>
+  <details class="q"><summary><b>Class homework 1.</b> Print the factorials 1! to n!, separated by spaces. (n = 5 → <code>1 2 6 24 120</code>)</summary><div class="a">
+    <p>Keep the running product in <code>$t0</code> and the multiplier in <code>$t1</code>, counting <em>up</em> this time; print a space only <em>between</em> numbers, by testing the counter again after each print.</p>
+    <div class="code">
+      <div class="code-head"><span><b>mips</b> · factorials 1! … n!</span><span>code → what it means</span></div>
+      <table class="ann">
+        <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">read n…</td></tr>
+        <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+        <tr><td class="c">        <span class="kw">move</span> $t3, $v0</td><td class="n">counter = n (how many terms to print)</td></tr>
+        <tr><td class="c">        <span class="kw">li</span>   $t0, <span class="num">1</span></td><td class="n">result = 1 (the running product)</td></tr>
+        <tr><td class="c">        <span class="kw">li</span>   $t1, <span class="num">1</span></td><td class="n">i = 1 (what we multiply by next)</td></tr>
+        <tr><td class="c">        <span class="kw">blez</span> $t3, done</td><td class="n">n ≤ 0 → print nothing at all</td></tr>
+        <tr><td class="c">loop:   <span class="kw">mult</span> $t0, $t1</td><td class="n">result × i</td></tr>
+        <tr><td class="c">        <span class="kw">mflo</span> $t0</td><td class="n">result = i!</td></tr>
+        <tr><td class="c">        <span class="kw">move</span> $a0, $t0</td><td class="n">print it…</td></tr>
+        <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+        <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+        <tr><td class="c">        <span class="kw">addiu</span> $t1, $t1, <span class="num">1</span></td><td class="n">i++</td></tr>
+        <tr><td class="c">        <span class="kw">addiu</span> $t3, $t3, <span class="num">-1</span></td><td class="n">counter--</td></tr>
+        <tr><td class="c">        <span class="kw">blez</span> $t3, done</td><td class="n">that was the last one → stop, so no trailing space</td></tr>
+        <tr><td class="c">        <span class="kw">li</span>   $a0, <span class="num">32</span></td><td class="n">otherwise print a separating space…</td></tr>
+        <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">11</span></td><td class="n"></td></tr>
+        <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+        <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n">next term</td></tr>
+        <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">exit</td></tr>
+        <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+      </table>
+    </div>
+    <p>Checked by simulation: 0 → <code>(nothing)</code>, 1 → <code>1</code>, 3 → <code>1 2 6</code>, 5 → <code>1 2 6 24 120</code>, 8 → <code>1 2 6 24 120 720 5040 40320</code>.</p>
+  </div></details>
+  <details class="q"><summary><b>Class homework 2.</b> Print only the <em>even</em> Fibonacci numbers up to F(n). (n = 10 → <code>0 2 8 34</code>)</summary><div class="a">
+    <p>Same sliding window, with two additions: <code>andi $t4, $t0, 1</code> keeps only the lowest bit of a — that bit is 0 for an even number and 1 for an odd one. And because you cannot know in advance which number is printed last, the "space" trick is flipped: print the space <em>before</em> each number except the very first. <code>$t5</code> remembers whether anything has been printed yet.</p>
+    <div class="code">
+      <div class="code-head"><span><b>mips</b> · even Fibonacci numbers up to F(n)</span><span>code → what it means</span></div>
+      <table class="ann">
+        <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">read n…</td></tr>
+        <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+        <tr><td class="c">        <span class="kw">move</span> $t3, $v0</td><td class="n">counter = n</td></tr>
+        <tr><td class="c">        <span class="kw">li</span>   $t0, <span class="num">0</span></td><td class="n">a = F(0)</td></tr>
+        <tr><td class="c">        <span class="kw">li</span>   $t1, <span class="num">1</span></td><td class="n">b = F(1)</td></tr>
+        <tr><td class="c">        <span class="kw">li</span>   $t5, <span class="num">0</span></td><td class="n">flag: nothing printed yet</td></tr>
+        <tr><td class="c">loop:   <span class="kw">andi</span> $t4, $t0, <span class="num">1</span></td><td class="n">$t4 = the lowest bit of a (0 = even, 1 = odd)</td></tr>
+        <tr><td class="c">        <span class="kw">bne</span>  $t4, $zero, skip</td><td class="n">odd → do not print it</td></tr>
+        <tr><td class="c">        <span class="kw">beq</span>  $t5, $zero, noSp</td><td class="n">first one printed? then no space in front</td></tr>
+        <tr><td class="c">        <span class="kw">li</span>   $a0, <span class="num">32</span></td><td class="n">otherwise a separating space…</td></tr>
+        <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">11</span></td><td class="n"></td></tr>
+        <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+        <tr><td class="c">noSp:   <span class="kw">move</span> $a0, $t0</td><td class="n">print a…</td></tr>
+        <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n"></td></tr>
+        <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+        <tr><td class="c">        <span class="kw">li</span>   $t5, <span class="num">1</span></td><td class="n">remember that something has been printed</td></tr>
+        <tr><td class="c">skip:   <span class="kw">blez</span> $t3, done</td><td class="n">was a the last one, F(n)? then stop</td></tr>
+        <tr><td class="c">        <span class="kw">addu</span> $t2, $t0, $t1</td><td class="n">next = a + b</td></tr>
+        <tr><td class="c">        <span class="kw">move</span> $t0, $t1</td><td class="n">a = b</td></tr>
+        <tr><td class="c">        <span class="kw">move</span> $t1, $t2</td><td class="n">b = next</td></tr>
+        <tr><td class="c">        <span class="kw">addiu</span> $t3, $t3, <span class="num">-1</span></td><td class="n">counter--</td></tr>
+        <tr><td class="c">        <span class="kw">j</span>    loop</td><td class="n">test the next number</td></tr>
+        <tr><td class="c">done:   <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">exit</td></tr>
+        <tr><td class="c">        <span class="kw">syscall</span></td><td class="n"></td></tr>
+      </table>
+    </div>
+    <p>Checked by simulation: 0 → <code>0</code>, 3 → <code>0 2</code>, 10 → <code>0 2 8 34</code>, 15 → <code>0 2 8 34 144 610</code>. (Every third Fibonacci number is even — a nice pattern to notice.)</p>
+  </div></details>
+  <details class="q"><summary>Roughly how many times slower is recursive factorial than the loop, and why exactly?</summary><div class="a"><p>About <b>2.4×</b> (17 + 12n instructions against 11 + 5n). The loop body is 5 instructions; one recursive call is 12, because on top of the same arithmetic it must move <code>$sp</code> three times, do two <code>sw</code>, two <code>lw</code>, a <code>jal</code> and a <code>jr</code>. None of that work contributes to the answer — it exists only to remember where to come back to.</p></div></details>
 </div>
 
 <h2>Watch</h2>

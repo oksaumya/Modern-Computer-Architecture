@@ -15,52 +15,192 @@
 
 <main>
 <section class="hero">
-  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag book">From syllabus · textbook-based</span></div>
+  <div class="eyebrow">Module 3 · Computer Organization &amp; ISA <span class="tag class">From class notes · L11 &amp; Lab 11</span></div>
   <h1>MIPS32: registers and instruction formats (R, I, J)</h1>
-  <p class="idea">MIPS32 has <b>32 registers</b>, and <b>every instruction is exactly 32 bits</b>. Those 32 bits are cut into fields in one of only three layouts: <b>R-type</b> (register maths), <b>I-type</b> (a constant, memory, or a branch) and <b>J-type</b> (jump). Learn the three layouts and you can turn any instruction into hex, and back.</p>
+  <p class="idea">MIPS32 has <b>32 registers</b>, and <b>every instruction is exactly 32 bits</b>. Those 32 bits are cut into fields in one of only three layouts: <b>R-type</b> (register maths), <b>I-type</b> (a constant, memory, or a branch) and <b>J-type</b> (jump). The lecture's stated goal: <em>"by the end you'll read a raw 32-bit hex instruction and write out the assembly it represents — by hand."</em></p>
   <div class="analogy"><b>Think of it like this:</b> a fixed-size postal form with boxes. Box 1 always says <em>what kind of form</em> (the opcode). The rest of the boxes depend on that kind: a "transfer" form has <em>from, to, amount</em> boxes; an "address change" form has one big box. The clerk (the CPU) reads box 1 first, then knows how to read the rest.</div>
 </section>
 
+<div class="callout tip"><b>What this page covers, and from where</b><p><b>Lecture 11 — Registers &amp; Instruction Formats</b> gives the register conventions, the three bit layouts, and three worked activities (decode <code>0x02324820</code>, hand-assemble <code>addi $t0, $zero, 5</code>, and the homework decode of <code>0x012A4020</code>). <b>Lab 11 — MIPS Assembly I</b> (90 minutes, Anuj Kumar) adds the machine model, the <code>syscall</code> table, pseudo-instructions, <code>mult</code>/<code>div</code> with HI and LO, logic and shifts, scalar memory, a five-snippet bug hunt, and seven practice problems. Everything on this page below §9 is the lab. Every hex encoding here was recomputed field-by-field before it was written down.</p></div>
+
 <h2>Key terms</h2>
 <dl class="terms">
-  <div class="term"><dt>Register</dt><dd>A tiny, very fast storage slot inside the CPU. MIPS has 32 of them, each 32 bits wide.</dd></div>
+  <div class="term"><dt>Register</dt><dd>A tiny, very fast storage slot inside the CPU. MIPS has 32 of them, each 32 bits wide — 128 bytes of storage in total.</dd></div>
   <div class="term"><dt>Word</dt><dd>A 32-bit value (4 bytes) in MIPS.</dd></div>
   <div class="term"><dt>Byte-addressed</dt><dd>Every <b>byte</b> of memory has its own address. So one word covers 4 addresses, and the next word is 4 further on.</dd></div>
   <div class="term"><dt>Opcode (op)</dt><dd>The top 6 bits. They say which instruction (or which format) this is.</dd></div>
   <div class="term"><dt>funct</dt><dd>The bottom 6 bits of an R-type. They pick the exact operation (add, sub, and…).</dd></div>
-  <div class="term"><dt>rs, rt, rd</dt><dd>5-bit register numbers (0–31). rs = first source, rt = second source (or target in I-type), rd = destination.</dd></div>
-  <div class="term"><dt>shamt</dt><dd>Shift amount: how many places to shift (for <code>sll</code>/<code>srl</code>). 0 otherwise.</dd></div>
+  <div class="term"><dt>rs, rt, rd</dt><dd>5-bit register numbers (0–31). rs = first source, rt = second source (or the destination in I-type), rd = destination. The lab's framing: <b>rs and rt are the register file's two read ports, rd is its write port</b> — exactly the <a href="m2-05-register-file.html">register file</a> you built.</dd></div>
+  <div class="term"><dt>shamt</dt><dd>Shift amount: how many places to shift (for <code>sll</code>/<code>srl</code>/<code>sra</code>). 0 otherwise.</dd></div>
   <div class="term"><dt>Immediate</dt><dd>A constant number stored inside the instruction itself (16 bits in I-type).</dd></div>
   <div class="term"><dt>Sign extension</dt><dd>Widening a number by copying its top (sign) bit to the left, so −1 (<code>FFFF</code>) stays −1 (<code>FFFFFFFF</code>).</dd></div>
-  <div class="term"><dt>PC</dt><dd>Program Counter: holds the address of the current instruction. Normally PC ← PC + 4.</dd></div>
+  <div class="term"><dt>PC</dt><dd>Program Counter: holds the address of the instruction being fetched. Normally PC ← PC + 4. It is <b>not</b> one of the 32 registers and you never write it directly.</dd></div>
+  <div class="term"><dt>HI and LO</dt><dd>Two extra registers that catch the 64-bit result of <code>mult</code> and the quotient/remainder of <code>div</code>. You read them with <code>mfhi</code> and <code>mflo</code>.</dd></div>
+  <div class="term"><dt>Caller-saved / callee-saved</dt><dd>Who is responsible for preserving a register across a function call. <code>$t</code> = caller-saved (not preserved), <code>$s</code> = callee-saved (preserved). The lecture calls this "the single most-tested convention".</dd></div>
+  <div class="term"><dt>Pseudo-instruction</dt><dd>Something you are allowed to write that the CPU cannot run. The assembler silently replaces it with one or more real instructions (e.g. <code>li</code>, <code>la</code>, <code>move</code>, <code>blt</code>).</dd></div>
+  <div class="term"><dt>syscall</dt><dd>The one instruction that asks the simulator's operating-system layer to do something (print, read, exit). It is not an ALU operation.</dd></div>
+  <div class="term"><dt>Effective address</dt><dd>What <code>lw</code>/<code>sw</code> actually read or write: <b>base register + sign-extended offset</b>. In <code>lw $t2, 4($t1)</code> it is the value in <code>$t1</code>, plus 4.</dd></div>
 </dl>
 
 <h2>1. The 32 registers</h2>
-<p>Each register has a <b>number</b> (0–31, used inside the machine code) and a <b>name</b> (used when you write code). The name tells you its job, by agreement between programmers (the "calling convention"). You write <code>$t0</code>, but the machine code stores 8.</p>
+<p>Each register has a <b>number</b> (0–31, used inside the machine code) and a <b>name</b> (used when you write code). The name tells you its job, by agreement between programmers — the <b>calling convention</b>. As the lecture puts it: <em>"the hardware treats them equally, but software agrees on a role for each."</em> You write <code>$t0</code>, but the machine code stores 8.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 680 228" width="680" role="img" aria-label="The 32 MIPS registers as a grid of four rows of eight, each showing its name and number, coloured by role">
+    <rect x="10" y="10" width="80" height="38" class="box-hi"/><text x="50" y="27" class="m b" text-anchor="middle">$zero</text><text x="50" y="41" class="m dim" text-anchor="middle">0</text>
+    <rect x="93" y="10" width="80" height="38" class="box-hi"/><text x="133" y="27" class="m b" text-anchor="middle">$at</text><text x="133" y="41" class="m dim" text-anchor="middle">1</text>
+    <rect x="176" y="10" width="80" height="38" class="box-b"/><text x="216" y="27" class="m b" text-anchor="middle">$v0</text><text x="216" y="41" class="m dim" text-anchor="middle">2</text>
+    <rect x="259" y="10" width="80" height="38" class="box-b"/><text x="299" y="27" class="m b" text-anchor="middle">$v1</text><text x="299" y="41" class="m dim" text-anchor="middle">3</text>
+    <rect x="342" y="10" width="80" height="38" class="box-b"/><text x="382" y="27" class="m b" text-anchor="middle">$a0</text><text x="382" y="41" class="m dim" text-anchor="middle">4</text>
+    <rect x="425" y="10" width="80" height="38" class="box-b"/><text x="465" y="27" class="m b" text-anchor="middle">$a1</text><text x="465" y="41" class="m dim" text-anchor="middle">5</text>
+    <rect x="508" y="10" width="80" height="38" class="box-b"/><text x="548" y="27" class="m b" text-anchor="middle">$a2</text><text x="548" y="41" class="m dim" text-anchor="middle">6</text>
+    <rect x="591" y="10" width="80" height="38" class="box-b"/><text x="631" y="27" class="m b" text-anchor="middle">$a3</text><text x="631" y="41" class="m dim" text-anchor="middle">7</text>
+    <rect x="10" y="53" width="80" height="38" class="box-g"/><text x="50" y="70" class="m b" text-anchor="middle">$t0</text><text x="50" y="84" class="m dim" text-anchor="middle">8</text>
+    <rect x="93" y="53" width="80" height="38" class="box-g"/><text x="133" y="70" class="m b" text-anchor="middle">$t1</text><text x="133" y="84" class="m dim" text-anchor="middle">9</text>
+    <rect x="176" y="53" width="80" height="38" class="box-g"/><text x="216" y="70" class="m b" text-anchor="middle">$t2</text><text x="216" y="84" class="m dim" text-anchor="middle">10</text>
+    <rect x="259" y="53" width="80" height="38" class="box-g"/><text x="299" y="70" class="m b" text-anchor="middle">$t3</text><text x="299" y="84" class="m dim" text-anchor="middle">11</text>
+    <rect x="342" y="53" width="80" height="38" class="box-g"/><text x="382" y="70" class="m b" text-anchor="middle">$t4</text><text x="382" y="84" class="m dim" text-anchor="middle">12</text>
+    <rect x="425" y="53" width="80" height="38" class="box-g"/><text x="465" y="70" class="m b" text-anchor="middle">$t5</text><text x="465" y="84" class="m dim" text-anchor="middle">13</text>
+    <rect x="508" y="53" width="80" height="38" class="box-g"/><text x="548" y="70" class="m b" text-anchor="middle">$t6</text><text x="548" y="84" class="m dim" text-anchor="middle">14</text>
+    <rect x="591" y="53" width="80" height="38" class="box-g"/><text x="631" y="70" class="m b" text-anchor="middle">$t7</text><text x="631" y="84" class="m dim" text-anchor="middle">15</text>
+    <rect x="10" y="96" width="80" height="38" class="box-r"/><text x="50" y="113" class="m b" text-anchor="middle">$s0</text><text x="50" y="127" class="m dim" text-anchor="middle">16</text>
+    <rect x="93" y="96" width="80" height="38" class="box-r"/><text x="133" y="113" class="m b" text-anchor="middle">$s1</text><text x="133" y="127" class="m dim" text-anchor="middle">17</text>
+    <rect x="176" y="96" width="80" height="38" class="box-r"/><text x="216" y="113" class="m b" text-anchor="middle">$s2</text><text x="216" y="127" class="m dim" text-anchor="middle">18</text>
+    <rect x="259" y="96" width="80" height="38" class="box-r"/><text x="299" y="113" class="m b" text-anchor="middle">$s3</text><text x="299" y="127" class="m dim" text-anchor="middle">19</text>
+    <rect x="342" y="96" width="80" height="38" class="box-r"/><text x="382" y="113" class="m b" text-anchor="middle">$s4</text><text x="382" y="127" class="m dim" text-anchor="middle">20</text>
+    <rect x="425" y="96" width="80" height="38" class="box-r"/><text x="465" y="113" class="m b" text-anchor="middle">$s5</text><text x="465" y="127" class="m dim" text-anchor="middle">21</text>
+    <rect x="508" y="96" width="80" height="38" class="box-r"/><text x="548" y="113" class="m b" text-anchor="middle">$s6</text><text x="548" y="127" class="m dim" text-anchor="middle">22</text>
+    <rect x="591" y="96" width="80" height="38" class="box-r"/><text x="631" y="113" class="m b" text-anchor="middle">$s7</text><text x="631" y="127" class="m dim" text-anchor="middle">23</text>
+    <rect x="10" y="139" width="80" height="38" class="box-g"/><text x="50" y="156" class="m b" text-anchor="middle">$t8</text><text x="50" y="170" class="m dim" text-anchor="middle">24</text>
+    <rect x="93" y="139" width="80" height="38" class="box-g"/><text x="133" y="156" class="m b" text-anchor="middle">$t9</text><text x="133" y="170" class="m dim" text-anchor="middle">25</text>
+    <rect x="176" y="139" width="80" height="38" class="box"/><text x="216" y="156" class="m b" text-anchor="middle">$k0</text><text x="216" y="170" class="m dim" text-anchor="middle">26</text>
+    <rect x="259" y="139" width="80" height="38" class="box"/><text x="299" y="156" class="m b" text-anchor="middle">$k1</text><text x="299" y="170" class="m dim" text-anchor="middle">27</text>
+    <rect x="342" y="139" width="80" height="38" class="box"/><text x="382" y="156" class="m b" text-anchor="middle">$gp</text><text x="382" y="170" class="m dim" text-anchor="middle">28</text>
+    <rect x="425" y="139" width="80" height="38" class="box"/><text x="465" y="156" class="m b" text-anchor="middle">$sp</text><text x="465" y="170" class="m dim" text-anchor="middle">29</text>
+    <rect x="508" y="139" width="80" height="38" class="box"/><text x="548" y="156" class="m b" text-anchor="middle">$fp</text><text x="548" y="170" class="m dim" text-anchor="middle">30</text>
+    <rect x="591" y="139" width="80" height="38" class="box"/><text x="631" y="156" class="m b" text-anchor="middle">$ra</text><text x="631" y="170" class="m dim" text-anchor="middle">31</text>
+    <text x="340" y="197" class="m dim" text-anchor="middle">copper = fixed / reserved · blue = arguments &amp; return values</text>
+    <text x="340" y="215" class="m dim" text-anchor="middle">green = temporaries (caller-saved) · red = saved (callee-saved) · plain = pointers &amp; kernel</text>
+  </svg>
+  <figcaption>The lecture's register grid. Each cell is one 32-bit register: 32 × 32 bits = 128 bytes of storage in the whole CPU.</figcaption>
+</figure>
 <div class="scroll"><table>
-  <tr><th>Name</th><th>Number</th><th>Use</th><th>Plain meaning</th></tr>
-  <tr><td style="white-space:nowrap"><code>$zero</code></td><td>0</td><td>Always 0</td><td>Hardwired to 0. Writes to it are ignored.</td></tr>
-  <tr><td style="white-space:nowrap"><code>$at</code></td><td>1</td><td>Assembler temporary</td><td>Reserved: the assembler uses it when it expands pseudo-instructions. Don't touch.</td></tr>
-  <tr><td style="white-space:nowrap"><code>$v0–$v1</code></td><td>2–3</td><td>Return values</td><td>A function puts its answer here. <code>$v0</code> also picks the syscall number in MARS.</td></tr>
-  <tr><td style="white-space:nowrap"><code>$a0–$a3</code></td><td>4–7</td><td>Arguments</td><td>The first four inputs to a function.</td></tr>
-  <tr><td style="white-space:nowrap"><code>$t0–$t7</code></td><td>8–15</td><td>Temporaries</td><td>Scratch space. A function you call may overwrite them.</td></tr>
-  <tr><td style="white-space:nowrap"><code>$s0–$s7</code></td><td>16–23</td><td>Saved registers</td><td>Long-lived variables. A function must restore them before it returns.</td></tr>
-  <tr><td style="white-space:nowrap"><code>$t8–$t9</code></td><td>24–25</td><td>More temporaries</td><td>Same as $t0–$t7.</td></tr>
-  <tr><td style="white-space:nowrap"><code>$k0–$k1</code></td><td>26–27</td><td>Kernel</td><td>Reserved for the operating system.</td></tr>
-  <tr><td style="white-space:nowrap"><code>$gp</code></td><td>28</td><td>Global pointer</td><td>Points into the global data area.</td></tr>
-  <tr><td style="white-space:nowrap"><code>$sp</code></td><td>29</td><td>Stack pointer</td><td>Address of the top of the stack.</td></tr>
-  <tr><td style="white-space:nowrap"><code>$fp</code></td><td>30</td><td>Frame pointer</td><td>Marks the start of the current function's stack frame.</td></tr>
-  <tr><td style="white-space:nowrap"><code>$ra</code></td><td>31</td><td>Return address</td><td>Where to go back to after a function call.</td></tr>
+  <tr><th>Name</th><th>Number</th><th>Use</th><th>Saved across a call?</th><th>Plain meaning</th></tr>
+  <tr><td style="white-space:nowrap"><code>$zero</code></td><td>0</td><td>Always 0</td><td>n/a</td><td>Hardwired to 0. Writes to it are ignored.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$at</code></td><td>1</td><td>Assembler temporary</td><td>no</td><td>The assembler's scratch register when it expands pseudo-instructions. The lab's rule: <b>never use it</b> (1 mark of the code-craft score).</td></tr>
+  <tr><td style="white-space:nowrap"><code>$v0–$v1</code></td><td>2–3</td><td>Return values</td><td>no</td><td>A function puts its answer here. <code>$v0</code> also carries the <b>syscall service number</b>.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$a0–$a3</code></td><td>4–7</td><td>Arguments</td><td>no</td><td>The first four inputs to a function. <code>$a0</code> is also the <b>syscall argument</b>.</td></tr>
+  <tr class="hl"><td style="white-space:nowrap"><code>$t0–$t7</code></td><td>8–15</td><td>Temporaries</td><td><b>caller-saved</b></td><td>Scratch space. A function you call may destroy them freely. Lab 11 uses only these.</td></tr>
+  <tr class="hl"><td style="white-space:nowrap"><code>$s0–$s7</code></td><td>16–23</td><td>Saved registers</td><td><b>callee-saved</b></td><td>Long-lived variables. A function must restore them before it returns.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$t8–$t9</code></td><td>24–25</td><td>More temporaries</td><td>caller-saved</td><td>Same rules as $t0–$t7.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$k0–$k1</code></td><td>26–27</td><td>Kernel</td><td>n/a</td><td>Reserved for the operating system.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$gp</code></td><td>28</td><td>Global pointer</td><td>yes</td><td>Points into the global data area.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$sp</code></td><td>29</td><td>Stack pointer</td><td>yes</td><td>Address of the top of the stack. The stack <b>grows downwards</b>, toward low addresses.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$fp</code></td><td>30</td><td>Frame pointer</td><td>yes</td><td>Marks the start of the current function's stack frame.</td></tr>
+  <tr><td style="white-space:nowrap"><code>$ra</code></td><td>31</td><td>Return address</td><td>no</td><td>Where to go back to after a function call. Written by <code>jal</code>.</td></tr>
 </table></div>
-<p><b>Special registers</b> (not among the 32):</p>
+
+<h3>$t vs $s: the saving rules</h3>
+<p>The lecture flags this as <b>"the single most-tested convention"</b>: who is responsible for preserving a register across a function call.</p>
+<div class="vs">
+  <div><h3><code>$t0–$t9</code> · temporaries</h3><p><b>caller-saved</b></p><ul>
+    <li><b>Not</b> preserved across a call.</li>
+    <li>A called function may freely clobber them.</li>
+    <li>If the caller still needs the value, <b>the caller</b> must save it first.</li>
+    <li>Use for short-lived scratch values.</li>
+  </ul></div>
+  <div><h3><code>$s0–$s7</code> · saved</h3><p><b>callee-saved</b></p><ul>
+    <li>Preserved across a call.</li>
+    <li>A called function <b>must</b> restore them before returning.</li>
+    <li>The caller can trust they survive.</li>
+    <li>Use for values you still need after a call.</li>
+  </ul></div>
+</div>
+<div class="callout tip"><b>The lecture's mnemonic</b><p><code>t</code> = "<b>t</b>emporary, don't <b>t</b>rust it"; <code>s</code> = "<b>s</b>aved, it <b>s</b>urvives". You put this to work on the <a href="m3-05-functions-stack.html">functions &amp; stack page</a> (Lab 14).</p></div>
+
+<h3>The special registers</h3>
 <ul>
-  <li><b>PC</b>: the program counter.</li>
-  <li><b>HI and LO</b>: hold the results of <code>mult</code> and <code>div</code>. <code>mult</code> puts the upper 32 bits of the 64-bit product in HI and the lower 32 in LO. <code>div</code> puts the remainder in HI and the quotient in LO.</li>
+  <li><b><code>$zero</code> ($0)</b> — the lecture calls it "the quiet hero". Hardwired to 0; reads always give 0 and writes are silently ignored. It buys you free instructions: <code>move $t0,$t1</code> is "add zero to $t1", <code>nop</code> is "shift zero into zero", <code>b L</code> is "branch if 0 == 0".</li>
+  <li><b><code>$ra</code> ($31)</b> — the return address. <code>jal</code> writes "where to come back to" here so a function can return.</li>
+  <li><b><code>$sp</code> ($29)</b> — the stack pointer, tracking the top of the call stack for local variables and saved registers.</li>
+  <li><b>PC</b> — <b>not</b> one of the 32. A dedicated register holding the address of the instruction being fetched. Updated automatically (PC ← PC + 4) or set by a branch, jump or call. <b>You never write it like <code>$t0</code>.</b></li>
+  <li><b>HI and LO</b> — also not among the 32. They hold the results of <code>mult</code> and <code>div</code>: see §9.6.</li>
 </ul>
 <div class="callout tip"><b>Link to Module 2</b><p>These 32 registers are the <a href="m2-05-register-file.html">register file</a> you built: 32 × 32-bit registers, 2 read ports (for rs and rt) and 1 write port (for rd or rt). Reads are instant (combinational); writes happen on the clock edge. The <code>$zero</code> register is wired to 0.</p></div>
 <div class="callout tip"><b>Memorise the numbers with ranges</b><p>0 zero · 1 at · 2–3 v · 4–7 a · 8–15 t · 16–23 s · 24–25 t · 26–27 k · 28 gp · 29 sp · 30 fp · 31 ra. Fast check: <code>$t0</code> = 8, <code>$s0</code> = 16, <code>$ra</code> = 31.</p></div>
 
-<h2>2. Memory: bytes, words, and "×4"</h2>
+<h2>2. The machine model: two boxes and a narrow road</h2>
+<p>Lab 11 opens with this picture, and the whole ISA follows from it. There are only two boxes — the CPU and memory — and everything that happens is traffic between them.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 700 300" width="700" role="img" aria-label="A CPU box holding the PC, 32 registers, HI and LO, and the ALU, joined to a memory box holding the text, data, heap and stack segments by a fetch arrow and a two-way load-store arrow">
+    <rect x="10" y="20" width="285" height="232" class="box"/>
+    <text x="24" y="40" class="b">CPU</text>
+    <rect x="24" y="48" width="257" height="30" class="box-hi"/>
+    <text x="152" y="68" class="m" text-anchor="middle">PC — address of next instr.</text>
+    <rect x="24" y="84" width="257" height="48" class="box-b"/>
+    <text x="152" y="103" class="m b" text-anchor="middle">32 registers × 32 bit</text>
+    <text x="152" y="121" class="m dim" text-anchor="middle">$zero · $t0–$t9 · $s0–$s7 · $ra</text>
+    <rect x="24" y="138" width="257" height="30" class="box-g"/>
+    <text x="152" y="158" class="m" text-anchor="middle">HI LO — mult / div result</text>
+    <rect x="24" y="176" width="257" height="50" class="box-r"/>
+    <text x="152" y="198" class="b" text-anchor="middle">ALU</text>
+    <text x="152" y="216" class="m dim" text-anchor="middle">operands from registers only</text>
+    <text x="152" y="244" class="m dim" text-anchor="middle">32 × 32 bit = 128 bytes in all</text>
+    <rect x="405" y="20" width="285" height="232" class="box"/>
+    <text x="419" y="40" class="b">MEMORY</text>
+    <text x="676" y="40" class="m dim" text-anchor="end">4 GiB</text>
+    <rect x="419" y="48" width="257" height="32" class="box-hi"/>
+    <text x="547" y="69" class="m" text-anchor="middle">.text — instructions</text>
+    <rect x="419" y="86" width="257" height="32" class="box-b"/>
+    <text x="547" y="107" class="m" text-anchor="middle">.data — variables, arrays</text>
+    <rect x="419" y="124" width="257" height="44" class="fill-bg"/>
+    <path class="grid" d="M419 124 h257 v44 h-257 z"/>
+    <text x="547" y="151" class="m dim" text-anchor="middle">heap ↑   free   ↓ stack</text>
+    <rect x="419" y="174" width="257" height="44" class="box"/>
+    <text x="547" y="193" class="m" text-anchor="middle">stack — grows downward</text>
+    <text x="547" y="211" class="m dim" text-anchor="middle">$sp points at its top</text>
+    <text x="547" y="240" class="m dim" text-anchor="middle">byte-addressable: 1 word = 4 bytes</text>
+    <path class="w-hi" d="M297 64 H391"/><polygon points="401,64 388,58 388,70" class="fill-hi"/>
+    <text x="349" y="56" class="m hi" text-anchor="middle">fetch</text>
+    <path class="w-g" d="M303 102 H397"/>
+    <polygon points="401,102 388,96 388,108" class="fill-ink"/><polygon points="293,102 306,96 306,108" class="fill-ink"/>
+    <text x="349" y="94" class="m g" text-anchor="middle">lw / sw</text>
+    <text x="350" y="278" class="b" text-anchor="middle">To use memory you load, compute, store.</text>
+    <text x="350" y="294" class="dim" text-anchor="middle">The ALU never touches memory — only lw and sw do.</text>
+  </svg>
+  <figcaption>Lab 11's machine model. Memory is byte-addressable, so consecutive words are 4 apart; every instruction is exactly 32 bits.</figcaption>
+</figure>
+
+<h3>Load/store architecture: <code>c = a + b</code> costs four instructions</h3>
+<p>Because only registers reach the ALU, a one-line sum in a high-level language becomes four MIPS instructions.</p>
+<div class="code">
+  <div class="code-head"><span><b>MIPS</b> · c = a + b</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">lw</span>  $t0, a</td><td class="n">1 — copy the value of the variable <code>a</code> from <b>memory into a register</b>.</td></tr>
+    <tr><td class="c"><span class="kw">lw</span>  $t1, b</td><td class="n">2 — same for <code>b</code>. Now both operands are inside the CPU.</td></tr>
+    <tr><td class="c"><span class="kw">add</span> $t2, $t0, $t1</td><td class="n">3 — the actual addition. Register + register → register. <b>Destination comes first.</b></td></tr>
+    <tr><td class="c"><span class="kw">sw</span>  $t2, c</td><td class="n">4 — copy the answer back out of the register <b>into memory</b> at <code>c</code>.</td></tr>
+  </table>
+</div>
+<div class="callout trap"><b>Illegal, and why</b><p><code>add $t0, var, $t1</code> does not assemble. The operands of <code>add</code> are <b>registers</b>, full stop. x86 lets an ALU instruction read memory directly; MIPS does not, and that restriction is exactly what buys the fixed 32-bit format, the fast decode and the simple pipeline.</p></div>
+
+<h3>Fetch, decode, execute: the loop the CPU never stops</h3>
+<ol class="flow arrows">
+  <li><b>1 Fetch</b>Word at address PC → instruction register. PC ← PC + 4.</li>
+  <li><b>2 Decode</b>Split op / rs / rt / rd / funct. Read the two registers.</li>
+  <li><b>3 Execute</b>ALU: add, sub, and, or — or compute a memory address.</li>
+  <li><b>4 Memory</b><code>lw</code> reads, <code>sw</code> writes. Everything else skips this stage.</li>
+  <li><b>5 Write back</b>Result → rd (R-type) or rt (I-type).</li>
+</ol>
+<div class="scroll"><table>
+  <tr><th>Instruction</th><th>Fetch</th><th>Decode</th><th>Execute</th><th>Memory</th><th>Write back</th><th>Note</th></tr>
+  <tr><td><code>add $t2,$t0,$t1</code></td><td>•</td><td>•</td><td>•</td><td></td><td>•</td><td>no memory access</td></tr>
+  <tr class="hl"><td><code>lw $t0,4($t1)</code></td><td>•</td><td>•</td><td>•</td><td>•</td><td>•</td><td>the only instruction that uses all five</td></tr>
+  <tr><td><code>sw $t0,4($t1)</code></td><td>•</td><td>•</td><td>•</td><td>•</td><td></td><td>nothing to write back</td></tr>
+  <tr><td><code>beq $t0,$t1,L</code></td><td>•</td><td>•</td><td>•</td><td></td><td></td><td>may replace PC</td></tr>
+</table></div>
+<p>These are the same five stages as the <a href="m4-01-single-cycle-datapath.html">single-cycle datapath</a> and the <a href="m4-02-pipeline-5-stage.html">5-stage pipeline</a>. Fixed 32-bit instructions make stage 1 trivial: the next instruction is always at PC + 4.</p>
+
+<h2>3. Memory: bytes, words, and "×4"</h2>
 <p>Every instruction is 32 bits, and memory is <b>byte-addressed</b>. So one word takes 4 addresses, and <b>words sit 4 bytes apart</b>. That is why the PC moves by 4, and why array element <code>A[8]</code> is at offset 8 × 4 = 32.</p>
 <figure class="diagram">
   <svg viewBox="0 0 600 230" width="600" role="img" aria-label="An array in memory: each element is a 4-byte word, so A[i] is at base address plus 4 times i; A[8] is at base plus 32">
@@ -88,10 +228,39 @@
   </svg>
   <figcaption>The array's base address (address of A[0]) is in <code>$s3</code>. Each element is one word, so indexes step by 4 bytes.</figcaption>
 </figure>
-<p>In MARS: the program (<code>.text</code>) starts at address <code>0x00400000</code>, data (<code>.data</code>) starts at <code>0x10010000</code>, and <code>$sp</code> starts at <code>0x7FFFEFFC</code>.</p>
+<p>In MARS: the program (<code>.text</code>) starts at address <code>0x00400000</code>, data (<code>.data</code>) starts at <code>0x10010000</code>, and <code>$sp</code> starts at <code>0x7FFFEFFC</code>. The lab's advice is to <b>read these off the simulator's text and data panes rather than memorise them</b>, since another simulator may choose differently.</p>
 
-<h2>3. The three instruction formats</h2>
-<p>All three formats put the <b>opcode in the top 6 bits</b>, and put <b>rs and rt in the same place</b>. That regularity makes the decoder simple and fast.</p>
+<h3>Alignment: a word address must be a multiple of 4</h3>
+<p>If you ask for a word at an address that is not a multiple of 4, the CPU raises an <b>address error exception</b> — the program stops. <code>lb</code>/<code>sb</code> (single bytes) have no such restriction.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 560 160" width="560" role="img" aria-label="Eight bytes labelled B plus 0 to B plus 7; a load word at offset 0 spans the first four and is legal, a load word at offset 2 straddles a boundary and is an error">
+    <rect x="40" y="50" width="60" height="40" class="box"/><text x="70" y="75" class="m" text-anchor="middle">B+0</text>
+    <rect x="100" y="50" width="60" height="40" class="box"/><text x="130" y="75" class="m" text-anchor="middle">B+1</text>
+    <rect x="160" y="50" width="60" height="40" class="box"/><text x="190" y="75" class="m" text-anchor="middle">B+2</text>
+    <rect x="220" y="50" width="60" height="40" class="box"/><text x="250" y="75" class="m" text-anchor="middle">B+3</text>
+    <rect x="280" y="50" width="60" height="40" class="box"/><text x="310" y="75" class="m" text-anchor="middle">B+4</text>
+    <rect x="340" y="50" width="60" height="40" class="box"/><text x="370" y="75" class="m" text-anchor="middle">B+5</text>
+    <rect x="400" y="50" width="60" height="40" class="box"/><text x="430" y="75" class="m" text-anchor="middle">B+6</text>
+    <rect x="460" y="50" width="60" height="40" class="box"/><text x="490" y="75" class="m" text-anchor="middle">B+7</text>
+    <path class="w-g" d="M40 108 V118 H280 V108"/>
+    <text x="160" y="136" class="m g" text-anchor="middle">lw $t1, 0($t0) — OK (0 is a multiple of 4)</text>
+    <path class="w-hi" d="M160 42 V32 H400 V42"/>
+    <text x="280" y="24" class="m hi" text-anchor="middle">lw $t1, 2($t0) — ERROR, straddles a word boundary</text>
+  </svg>
+  <figcaption>Legal word offsets are 0, 4, 8, 12… After a <code>.byte</code> declaration, put <code>.align 2</code> before the next <code>.word</code>.</figcaption>
+</figure>
+
+<h3>Endianness: which end of the word comes first</h3>
+<p>Store the word <code>0x12345678</code> at address B. Which byte lands at B+0?</p>
+<div class="scroll"><table>
+  <tr><th>Order</th><th>B+0</th><th>B+1</th><th>B+2</th><th>B+3</th><th><code>lb $t1, 0($t0)</code> gives</th></tr>
+  <tr><td><b>Big-endian</b> (most significant byte first)</td><td><code>12</code></td><td><code>34</code></td><td><code>56</code></td><td><code>78</code></td><td><code>0x12</code></td></tr>
+  <tr><td><b>Little-endian</b> (least significant byte first)</td><td><code>78</code></td><td><code>56</code></td><td><code>34</code></td><td><code>12</code></td><td><code>0x78</code></td></tr>
+</table></div>
+<p>MIPS hardware is <b>bi-endian</b> — the chip can be wired either way, and your simulator picks one. Network byte order is big-endian; x86 is little-endian. (MARS is little-endian.) It only matters when you read a word one byte at a time.</p>
+
+<h2>4. The three instruction formats</h2>
+<p>All three formats put the <b>opcode in the top 6 bits</b>, and put <b>rs and rt in the same place</b>. The CPU reads the opcode first to know which layout follows — that regularity is what makes the decoder simple and fast.</p>
 <figure class="diagram">
   <svg viewBox="0 0 660 255" width="660" role="img" aria-label="Bit layouts: R-type is op 6, rs 5, rt 5, rd 5, shamt 5, funct 6; I-type is op 6, rs 5, rt 5, immediate 16; J-type is op 6, address 26">
     <text x="79" y="20" class="m dim" text-anchor="middle">31</text>
@@ -149,45 +318,65 @@
   <figcaption>Bit numbers run from 31 (left) down to 0 (right). The field widths always add up to 32.</figcaption>
 </figure>
 <div class="scroll"><table>
-  <tr><th>Format</th><th>Used for</th><th>Written as</th><th>Examples</th></tr>
-  <tr><td><b>R</b></td><td>Maths/logic on registers, shifts, <code>jr</code></td><td><code>op rd, rs, rt</code></td><td><code>add</code>, <code>sub</code>, <code>and</code>, <code>or</code>, <code>slt</code>, <code>sll</code>, <code>jr</code></td></tr>
-  <tr><td><b>I</b></td><td>Constants, memory, branches</td><td><code>op rt, rs, imm</code> · <code>op rt, imm(rs)</code> · <code>op rs, rt, label</code></td><td><code>addi</code>, <code>lw</code>, <code>sw</code>, <code>beq</code>, <code>bne</code>, <code>slti</code>, <code>lui</code></td></tr>
-  <tr><td><b>J</b></td><td>Far jumps</td><td><code>op label</code></td><td><code>j</code>, <code>jal</code></td></tr>
+  <tr><th>Format</th><th>Used for</th><th>Written as</th><th>Class's instruction list</th></tr>
+  <tr><td><b>R</b></td><td>Register arithmetic and logic, shifts, <code>jr</code></td><td><code>op rd, rs, rt</code></td><td><code>add sub and or nor slt sll srl sra jr</code></td></tr>
+  <tr><td><b>I</b></td><td>One register + a 16-bit constant: immediates, memory, branches</td><td><code>op rt, rs, imm</code> · <code>op rt, imm(rs)</code> · <code>op rs, rt, label</code></td><td><code>addi andi ori lw sw lb sb beq bne lui slti</code></td></tr>
+  <tr><td><b>J</b></td><td>A 26-bit word address</td><td><code>op label</code></td><td><code>j jal</code></td></tr>
 </table></div>
 
 <h3>R-type: <code>op(6) rs(5) rt(5) rd(5) shamt(5) funct(6)</code></h3>
-<p><b>op is 0 for every R-type.</b> The <b>funct</b> field chooses the operation. The result goes into <b>rd</b>.</p>
+<p><b>op is 0 for every R-type.</b> The <b>funct</b> field chooses the operation. The result goes into <b>rd</b>. How the lecture says to read one: <em>opcode = 0 → R-type; funct → the actual operation; rs, rt → the two sources; rd → the destination; shamt → shift amount (0 unless it is a shift)</em>.</p>
 <div class="scroll"><table>
   <tr><th>Instruction</th><th>funct (hex)</th><th>funct (dec)</th><th>Meaning</th></tr>
-  <tr><td><code>add rd, rs, rt</code></td><td>0x20</td><td>32</td><td>rd = rs + rt</td></tr>
-  <tr><td><code>sub rd, rs, rt</code></td><td>0x22</td><td>34</td><td>rd = rs − rt</td></tr>
+  <tr><td><code>add rd, rs, rt</code></td><td>0x20</td><td>32</td><td>rd = rs + rt — <b>traps</b> on signed overflow</td></tr>
+  <tr><td><code>addu rd, rs, rt</code></td><td>0x21</td><td>33</td><td>rd = rs + rt — wraps silently</td></tr>
+  <tr><td><code>sub rd, rs, rt</code></td><td>0x22</td><td>34</td><td>rd = rs − rt — traps on overflow</td></tr>
+  <tr><td><code>subu rd, rs, rt</code></td><td>0x23</td><td>35</td><td>rd = rs − rt — wraps silently</td></tr>
   <tr><td><code>and rd, rs, rt</code></td><td>0x24</td><td>36</td><td>bitwise AND</td></tr>
   <tr><td><code>or rd, rs, rt</code></td><td>0x25</td><td>37</td><td>bitwise OR</td></tr>
+  <tr><td><code>xor rd, rs, rt</code></td><td>0x26</td><td>38</td><td>bitwise XOR</td></tr>
+  <tr><td><code>nor rd, rs, rt</code></td><td>0x27</td><td>39</td><td>bitwise NOR (<code>nor rd, rs, $zero</code> = bitwise NOT)</td></tr>
   <tr><td><code>slt rd, rs, rt</code></td><td>0x2A</td><td>42</td><td>rd = 1 if rs &lt; rt, else 0</td></tr>
   <tr><td><code>sll rd, rt, shamt</code></td><td>0x00</td><td>0</td><td>rd = rt shifted left by shamt (rs = 0)</td></tr>
+  <tr><td><code>srl rd, rt, shamt</code></td><td>0x02</td><td>2</td><td>shift right, <b>zero</b>-fill</td></tr>
+  <tr><td><code>sra rd, rt, shamt</code></td><td>0x03</td><td>3</td><td>shift right, <b>sign</b>-fill</td></tr>
   <tr><td><code>jr rs</code></td><td>0x08</td><td>8</td><td>PC = rs (rt = rd = shamt = 0)</td></tr>
+  <tr><td><code>mult rs, rt</code></td><td>0x18</td><td>24</td><td>HI:LO = rs × rt (64-bit); no rd field used</td></tr>
+  <tr><td><code>div rs, rt</code></td><td>0x1A</td><td>26</td><td>LO = rs ÷ rt, HI = remainder</td></tr>
+  <tr><td><code>mfhi rd</code></td><td>0x10</td><td>16</td><td>rd = HI</td></tr>
+  <tr><td><code>mflo rd</code></td><td>0x12</td><td>18</td><td>rd = LO</td></tr>
 </table></div>
 
 <h3>I-type: <code>op(6) rs(5) rt(5) immediate(16)</code></h3>
-<p>The opcode alone picks the instruction. <b>rt is usually the destination</b> (for <code>addi</code>, <code>lw</code>, <code>slti</code>…). For <code>sw</code>, rt is the value to store. For branches, rs and rt are the two things compared.</p>
+<p>The opcode alone picks the instruction — there is no funct. The immediate replaces rd, shamt <em>and</em> funct in one 16-bit field, so <b>I-type has no rd: the destination sits in the rt slot</b> (for <code>addi</code>, <code>lw</code>, <code>slti</code>, <code>lui</code>…). For <code>sw</code>, rt is the value to store. For branches, rs and rt are the two things compared.</p>
 <div class="scroll"><table>
   <tr><th>Instruction</th><th>op (hex)</th><th>op (dec)</th><th>Meaning</th></tr>
-  <tr><td><code>addi rt, rs, imm</code></td><td>0x08</td><td>8</td><td>rt = rs + imm</td></tr>
+  <tr><td><code>addi rt, rs, imm</code></td><td>0x08</td><td>8</td><td>rt = rs + imm (traps on overflow). <b>There is no <code>subi</code></b> — use a negative immediate.</td></tr>
+  <tr><td><code>addiu rt, rs, imm</code></td><td>0x09</td><td>9</td><td>same sum, no overflow trap. This is what <code>li</code> usually becomes.</td></tr>
   <tr><td><code>lw rt, imm(rs)</code></td><td>0x23</td><td>35</td><td>rt = memory[rs + imm]</td></tr>
   <tr><td><code>sw rt, imm(rs)</code></td><td>0x2B</td><td>43</td><td>memory[rs + imm] = rt</td></tr>
+  <tr><td><code>lb rt, imm(rs)</code></td><td>0x20</td><td>32</td><td>load one byte, <b>sign</b>-extended</td></tr>
+  <tr><td><code>lbu rt, imm(rs)</code></td><td>0x24</td><td>36</td><td>load one byte, <b>zero</b>-extended</td></tr>
+  <tr><td><code>sb rt, imm(rs)</code></td><td>0x28</td><td>40</td><td>store the low byte of rt</td></tr>
   <tr><td><code>beq rs, rt, label</code></td><td>0x04</td><td>4</td><td>if rs == rt, go to label</td></tr>
   <tr><td><code>bne rs, rt, label</code></td><td>0x05</td><td>5</td><td>if rs != rt, go to label</td></tr>
   <tr><td><code>andi rt, rs, imm</code></td><td>0x0C</td><td>12</td><td>rt = rs AND imm (<b>zero</b>-extended)</td></tr>
   <tr><td><code>ori rt, rs, imm</code></td><td>0x0D</td><td>13</td><td>rt = rs OR imm (<b>zero</b>-extended)</td></tr>
+  <tr><td><code>xori rt, rs, imm</code></td><td>0x0E</td><td>14</td><td>rt = rs XOR imm (<b>zero</b>-extended)</td></tr>
   <tr><td><code>slti rt, rs, imm</code></td><td>0x0A</td><td>10</td><td>rt = 1 if rs &lt; imm, else 0</td></tr>
   <tr><td><code>lui rt, imm</code></td><td>0x0F</td><td>15</td><td>rt = imm × 65536 (imm goes in the upper 16 bits; rs = 0)</td></tr>
 </table></div>
-<div class="callout tip"><b>Sign-extend or zero-extend?</b><p>The 16-bit immediate must be widened to 32 bits. Most instructions (<code>addi</code>, <code>lw</code>, <code>sw</code>, <code>beq</code>, <code>slti</code>) <b>sign-extend</b> it, so the range is −32768 to +32767. The logic ones (<code>andi</code>, <code>ori</code>) <b>zero-extend</b> it (fill with 0s), range 0 to 65535. It is the same idea as <code>lb</code> (sign-extends a byte) vs <code>lbu</code> (zero-extends it) from class.</p></div>
-<p><b>Constants bigger than 16 bits</b> need two instructions: <code>lui</code> loads the upper 16 bits, then <code>ori</code> fills in the lower 16. Example: <code>lui $t0, 0x1001</code> then <code>ori $t0, $t0, 0x0000</code> makes <code>$t0 = 0x10010000</code>. MARS's <code>la</code> (load address) pseudo-instruction does exactly this.</p>
+<div class="callout tip"><b>Sign-extend or zero-extend? (Lab 11, "three details every student gets wrong once")</b><p>The 16-bit immediate must be widened to 32 bits before it is used.<br>
+<b>Sign-extended:</b> <code>addi addiu lw sw lb slti</code> and branch offsets. Range −32768 to +32767. <code>addi $t0,$t0,-1</code> stores <code>0xFFFF</code>, which widens to <code>0xFFFFFFFF</code>.<br>
+<b>Zero-extended:</b> <code>andi ori xori</code>, because logic works on bit patterns, not on magnitudes. <code>andi $t0,$t1,0xFFFF</code> masks with <code>0x0000FFFF</code>, not with <code>0xFFFFFFFF</code>.<br>
+Same idea one size down: <code>lb</code> on the byte <code>0xF0</code> gives <code>0xFFFFFFF0</code>, while <code>lbu</code> gives <code>0x000000F0</code>.</p></div>
+<div class="callout tip"><b>"Unsigned" is a misnomer — the lab's Sheet-K clarification</b><p><code>addu</code> / <code>addiu</code> do <b>exactly the same arithmetic</b> as <code>add</code> / <code>addi</code>, on exactly the same bits. The only difference is that they <b>do not trap on overflow</b>. Concretely: 2³¹ − 1 = 2,147,483,647 = <code>0x7FFFFFFF</code>; adding 1 with <code>add</code> raises an exception, while <code>addu</code> quietly returns <code>0x80000000</code> = −2,147,483,648. And despite the "u", <code>addiu</code>'s 16-bit immediate is still <b>sign</b>-extended.</p></div>
+<p><b>Constants bigger than 16 bits</b> need two instructions: <code>lui</code> loads the upper 16 bits, then <code>ori</code> fills in the lower 16. Example: <code>lui $t0, 0x1001</code> then <code>ori $t0, $t0, 0x0000</code> makes <code>$t0 = 0x10010000</code>. The <code>la</code> (load address) pseudo-instruction does exactly this — which is why it costs <b>two</b> real instructions, not one.</p>
 
 <h3>J-type: <code>op(6) address(26)</code></h3>
-<p><code>j</code> (op 0x02) and <code>jal</code> (op 0x03) store a 26-bit address. The CPU builds the 32-bit target like this:</p>
-<div class="formula">Target = { PC+4 [31:28] , address , 00 }<small>Take the top 4 bits of PC+4, then the 26-bit field, then two 0 bits (every instruction address is a multiple of 4). { } means "join the bits together".</small></div>
+<p><code>j</code> (op 0x02) and <code>jal</code> (op 0x03) store a 26-bit <b>word</b> address. <code>jal</code> additionally writes PC + 4 into <code>$ra</code> — that is what makes it a function call. The CPU builds the full 32-bit target like this:</p>
+<div class="formula">Target = { (PC+4)[31:28] , address , 00 }<small>Take the top 4 bits of PC+4, then the 26-bit field, then two 0 bits (every instruction address is a multiple of 4). { } means "join the bits together". Equivalently: target = ((PC+4) &amp; 0xF0000000) | (address &lt;&lt; 2).</small></div>
+<div class="callout fix"><b>Slide correction</b><p>Lecture 11 slide 20 writes the rule as <code>target = (PC[31:28]) | (address &lt;&lt; 2)</code>, using the <b>current</b> PC. The hardware actually takes the top 4 bits of <b>PC + 4</b> (the already-incremented PC), as MIPS32 and Patterson &amp; Hennessy both specify. In almost every exam question the two give the same answer, because the top 4 bits only differ when the jump sits in the last word of a 256 MB region — but write <b>PC + 4</b> and you are right in every case. The slide is correct about the important part: the <code>&lt;&lt; 2</code>, and the 256 MB reach.</p></div>
 <figure class="diagram">
   <svg viewBox="0 0 640 170" width="640" role="img" aria-label="Jump target: 4 bits from PC plus 4, then the 26-bit address field, then 00; example gives 0x00400000">
     <text x="80" y="22" class="m dim" text-anchor="middle">4 bits</text>
@@ -207,88 +396,118 @@
     <text x="580" y="103" class="m" text-anchor="middle">00</text>
     <text x="320" y="146" class="m" text-anchor="middle">= 0000 0000 0100 0000 0000 0000 0000 0000 = 0x00400000</text>
   </svg>
-  <figcaption>Example: <code>j loop</code> where <code>loop</code> is at 0x00400000. The address field is 0x00400000 ÷ 4 = 0x0100000.</figcaption>
+  <figcaption>Example: <code>j loop</code> where <code>loop</code> is at 0x00400000. The address field is 0x00400000 ÷ 4 = 0x0100000, so the whole word is <code>0x08100000</code>.</figcaption>
 </figure>
 <p>So <code>j</code> can only reach addresses in the same 256 MB block as PC+4 (same top 4 bits). To jump anywhere, use <code>jr</code> with a full 32-bit register.</p>
 
-<h2>4. Worked encodings</h2>
+<h2>5. Worked encodings — the class's own examples</h2>
+<p>Lab 11's phrase for this is <b>"be the assembler"</b>. The recipe never changes: map the written operands onto the field names, write each field in binary <em>at its exact width</em>, regroup into 4s, read off hex.</p>
 <figure class="diagram">
-  <svg viewBox="0 0 660 170" width="660" role="img" aria-label="Filled bit fields for add $t0, $s1, $s2 and lw $t0, 32($s3)">
+  <svg viewBox="0 0 660 186" width="660" role="img" aria-label="Filled bit fields for add dollar t2, dollar t0, dollar t1 and for lw dollar t0, 4 bracket dollar t1">
     <text x="10" y="37" class="b">add</text>
     <rect x="70" y="10" width="108" height="44" class="box-hi"/>
     <text x="124" y="27" class="m dim" text-anchor="middle">op</text>
     <text x="124" y="44" class="m b" text-anchor="middle">000000</text>
     <rect x="178" y="10" width="90" height="44" class="box-b"/>
     <text x="223" y="27" class="m dim" text-anchor="middle">rs</text>
-    <text x="223" y="44" class="m b" text-anchor="middle">10001</text>
+    <text x="223" y="44" class="m b" text-anchor="middle">01000</text>
     <rect x="268" y="10" width="90" height="44" class="box-g"/>
     <text x="313" y="27" class="m dim" text-anchor="middle">rt</text>
-    <text x="313" y="44" class="m b" text-anchor="middle">10010</text>
+    <text x="313" y="44" class="m b" text-anchor="middle">01001</text>
     <rect x="358" y="10" width="90" height="44" class="box-r"/>
     <text x="403" y="27" class="m dim" text-anchor="middle">rd</text>
-    <text x="403" y="44" class="m b" text-anchor="middle">01000</text>
+    <text x="403" y="44" class="m b" text-anchor="middle">01010</text>
     <rect x="448" y="10" width="90" height="44" class="box"/>
     <text x="493" y="27" class="m dim" text-anchor="middle">shamt</text>
     <text x="493" y="44" class="m b" text-anchor="middle">00000</text>
     <rect x="538" y="10" width="108" height="44" class="box-hi"/>
     <text x="592" y="27" class="m dim" text-anchor="middle">funct</text>
     <text x="592" y="44" class="m b" text-anchor="middle">100000</text>
-    <text x="124" y="72" class="m" text-anchor="middle">0</text>
-    <text x="223" y="72" class="m" text-anchor="middle">17 = $s1</text>
-    <text x="313" y="72" class="m" text-anchor="middle">18 = $s2</text>
-    <text x="403" y="72" class="m" text-anchor="middle">8 = $t0</text>
+    <text x="124" y="72" class="m" text-anchor="middle">0 = R-type</text>
+    <text x="223" y="72" class="m" text-anchor="middle">$t0 = 8</text>
+    <text x="313" y="72" class="m" text-anchor="middle">$t1 = 9</text>
+    <text x="403" y="72" class="m" text-anchor="middle">$t2 = 10</text>
     <text x="493" y="72" class="m" text-anchor="middle">0</text>
-    <text x="592" y="72" class="m" text-anchor="middle">32 = 0x20</text>
+    <text x="592" y="72" class="m" text-anchor="middle">32 = add</text>
     <text x="10" y="123" class="b">lw</text>
     <rect x="70" y="96" width="108" height="44" class="box-hi"/>
     <text x="124" y="113" class="m dim" text-anchor="middle">op</text>
     <text x="124" y="130" class="m b" text-anchor="middle">100011</text>
     <rect x="178" y="96" width="90" height="44" class="box-b"/>
     <text x="223" y="113" class="m dim" text-anchor="middle">rs</text>
-    <text x="223" y="130" class="m b" text-anchor="middle">10011</text>
+    <text x="223" y="130" class="m b" text-anchor="middle">01001</text>
     <rect x="268" y="96" width="90" height="44" class="box-g"/>
     <text x="313" y="113" class="m dim" text-anchor="middle">rt</text>
     <text x="313" y="130" class="m b" text-anchor="middle">01000</text>
     <rect x="358" y="96" width="288" height="44" class="box"/>
     <text x="502" y="113" class="m dim" text-anchor="middle">immediate</text>
-    <text x="502" y="130" class="m b" text-anchor="middle">0000000000100000</text>
-    <text x="124" y="158" class="m" text-anchor="middle">35 = 0x23</text>
-    <text x="223" y="158" class="m" text-anchor="middle">19 = $s3</text>
-    <text x="313" y="158" class="m" text-anchor="middle">8 = $t0</text>
-    <text x="502" y="158" class="m" text-anchor="middle">32</text>
+    <text x="502" y="130" class="m b" text-anchor="middle">0000000000000100</text>
+    <text x="124" y="158" class="m" text-anchor="middle">35 = lw</text>
+    <text x="223" y="158" class="m" text-anchor="middle">$t1 = 9</text>
+    <text x="223" y="174" class="m dim" text-anchor="middle">base</text>
+    <text x="313" y="158" class="m" text-anchor="middle">$t0 = 8</text>
+    <text x="313" y="174" class="m dim" text-anchor="middle">dest</text>
+    <text x="502" y="158" class="m" text-anchor="middle">4 = byte offset</text>
   </svg>
-  <figcaption>Top: <code>add $t0, $s1, $s2</code> = 0x02324020. Bottom: <code>lw $t0, 32($s3)</code> = 0x8E680020.</figcaption>
+  <figcaption>Top: <code>add $t2, $t0, $t1</code> = <code>0x01095020</code> (Lab 11's cover instruction). Bottom: <code>lw $t0, 4($t1)</code> = <code>0x8D280004</code>.</figcaption>
 </figure>
-<h3>Encoding 1: <code>add $t0, $s1, $s2</code> (R-type)</h3>
-<ol class="steps">
-  <li><b>Map the operands.</b> Written <code>add rd, rs, rt</code>, so rd = <code>$t0</code> = 8, rs = <code>$s1</code> = 17, rt = <code>$s2</code> = 18.</li>
-  <li><b>Fill the fields.</b> op = 0, rs = 17, rt = 18, rd = 8, shamt = 0, funct = 32 (0x20).</li>
-  <li><b>Write each field in binary, at its width.</b> <code>000000 10001 10010 01000 00000 100000</code></li>
-  <li><b>Regroup into 4s.</b> <code>0000 0010 0011 0010 0100 0000 0010 0000</code></li>
-  <li><b>Each group is one hex digit:</b> <b><code>0x02324020</code></b>.</li>
-</ol>
-<h3>Encoding 2: <code>lw $t0, 32($s3)</code> (I-type)</h3>
-<ol class="steps">
-  <li><b>Map.</b> Written <code>lw rt, imm(rs)</code>: rt = <code>$t0</code> = 8 (destination), rs = <code>$s3</code> = 19 (base), imm = 32.</li>
-  <li><b>Fields.</b> op = 35 (0x23), rs = 19, rt = 8, imm = 32.</li>
-  <li><b>Binary.</b> <code>100011 10011 01000 0000000000100000</code></li>
-  <li><b>Groups of 4.</b> <code>1000 1110 0110 1000 0000 0000 0010 0000</code></li>
-  <li><b>Hex:</b> <b><code>0x8E680020</code></b>.</li>
-</ol>
-<h3>Encoding 3: <code>addi $t0, $t0, -1</code> (negative immediate)</h3>
-<ol class="steps">
-  <li><b>Fields.</b> op = 8, rs = 8, rt = 8, imm = −1.</li>
-  <li><b>−1 in 16-bit two's complement</b> is <code>1111 1111 1111 1111</code> = <code>0xFFFF</code>.</li>
-  <li><b>Binary.</b> <code>001000 01000 01000 1111111111111111</code> → <code>0010 0001 0000 1000 1111 1111 1111 1111</code></li>
-  <li><b>Hex:</b> <b><code>0x2108FFFF</code></b>. At run time the CPU sign-extends <code>FFFF</code> to <code>FFFFFFFF</code> (−1).</li>
-</ol>
-<h3>Encoding 4: <code>sll $t1, $s1, 2</code> (shift)</h3>
-<p>Written <code>sll rd, rt, shamt</code>. So rs = 0, rt = <code>$s1</code> = 17, rd = <code>$t1</code> = 9, shamt = 2, funct = 0.<br>
-<code>000000 00000 10001 01001 00010 000000</code> → <b><code>0x00114880</code></b>. Watch out: the shifted register goes in <b>rt</b>, not rs.</p>
 
-<h2>5. Branch offsets (beq / bne)</h2>
-<p>A branch does not store the full target address. It stores <b>how many instructions to jump, counted from PC + 4</b> (the instruction after the branch). The count can be negative (jump backwards).</p>
-<div class="formula">offset = (Target − (PC + 4)) ÷ 4 &nbsp;&nbsp;⇔&nbsp;&nbsp; Target = PC + 4 + offset × 4<small>PC = address of the branch itself. The offset is a signed 16-bit number of instructions.</small></div>
+<h3>Encoding 1: <code>add $t2, $t0, $t1</code> (R-type) — Lab 11, "be the assembler"</h3>
+<ol class="steps">
+  <li><b>Map the operands.</b> Written <code>add rd, rs, rt</code>, so rd = <code>$t2</code> = 10, rs = <code>$t0</code> = 8, rt = <code>$t1</code> = 9.</li>
+  <li><b>Fill the fields.</b> op = 0 (every R-type), rs = 8, rt = 9, rd = 10, shamt = 0, funct = 32 (0x20).</li>
+  <li><b>Write each field in binary, at its width.</b> <code>000000 01000 01001 01010 00000 100000</code></li>
+  <li><b>Regroup into 4s.</b> <code>0000 0001 0000 1001 0101 0000 0010 0000</code></li>
+  <li><b>Each group is one hex digit:</b> <b><code>0x01095020</code></b>.</li>
+</ol>
+<p>The lab's point: <em>"the CPU never sees <code>$t2</code> or the word 'add'. It sees bits. The program is a list of 32-bit numbers in memory."</em></p>
+
+<h3>Encoding 2: decode <code>0x02324820</code> (Lecture 11, Activity 2)</h3>
+<ol class="steps">
+  <li><b>Hex → binary</b>, 4 bits per digit: <code>0000 0010 0011 0010 0100 1000 0010 0000</code></li>
+  <li><b>Read the top 6 bits.</b> op = <code>000000</code> → R-type, so slice 6 | 5 | 5 | 5 | 5 | 6.</li>
+  <li><b>Split:</b> <code>000000 | 10001 | 10010 | 01001 | 00000 | 100000</code></li>
+  <li><b>Translate:</b> rs = 10001 = 17 = <code>$s1</code>, rt = 10010 = 18 = <code>$s2</code>, rd = 01001 = 9 = <code>$t1</code>, shamt = 0, funct = 0x20 = <code>add</code>.</li>
+  <li><b>Write it in assembly order</b> (rd first): <b><code>add $t1, $s1, $s2</code></b>, i.e. <code>$t1 = $s1 + $s2</code>.</li>
+</ol>
+
+<h3>Encoding 3: hand-assemble <code>addi $t0, $zero, 5</code> (Lecture 11, Activity 3)</h3>
+<ol class="steps">
+  <li><b>Identify the format.</b> <code>addi</code> is I-format. op = 0x08 = <code>001000</code>.</li>
+  <li><b>Map:</b> written <code>addi rt, rs, imm</code>, so rt = <code>$t0</code> = 8 (destination), rs = <code>$zero</code> = 0, imm = 5.</li>
+  <li><b>Place the bits.</b> <code>001000 00000 01000 0000000000000101</code></li>
+  <li><b>Regroup to hex.</b> <code>0010 0000 0000 1000 0000 0000 0000 0101</code> = <b><code>0x20080005</code></b>.</li>
+</ol>
+<p>In practice an assembler writing <code>li $t0, 5</code> emits <code>addiu</code> (op 0x09) instead, giving <code>0x24080005</code> — same arithmetic, no overflow trap. See §9.5.</p>
+
+<h3>Encoding 4: decode <code>0x8D280004</code> (Lab 11, "reverse it")</h3>
+<ol class="steps">
+  <li><b>Binary:</b> <code>1000 1101 0010 1000 0000 0000 0000 0100</code></li>
+  <li><b>op</b> = <code>100011</code> = 35 = 0x23 → <code>lw</code>, which is I-format, so slice 6 | 5 | 5 | 16.</li>
+  <li><b>Split:</b> rs = <code>01001</code> = 9 = <code>$t1</code> (the base), rt = <code>01000</code> = 8 = <code>$t0</code> (the destination), imm = <code>0000000000000100</code> = 4 (a <b>byte</b> offset).</li>
+  <li><b>Answer:</b> <b><code>lw $t0, 4($t1)</code></b> — "load into <code>$t0</code> the word at address <code>$t1</code> + 4".</li>
+</ol>
+<div class="callout tip"><b>Which register receives the data?</b><p><b>rt.</b> I-type has no rd field, so for loads the destination sits in the rt slot. This is the question the lab asks on the slide, and the one that catches people in the exam.</p></div>
+
+<h3>Encoding 5: the 30-second drill — <code>addi $t2, $t3, 5</code></h3>
+<p>op = <code>001000</code>, rs = <code>$t3</code> = 11 = <code>01011</code>, rt = <code>$t2</code> = 10 = <code>01010</code>, imm = 5.<br>
+<code>001000 01011 01010 0000000000000101</code> → <code>0010 0001 0110 1010 0000 0000 0000 0101</code> = <b><code>0x216A0005</code></b>.</p>
+
+<h3>Three more, from the textbook side</h3>
+<div class="scroll"><table>
+  <tr><th>Instruction</th><th>Fields</th><th>Binary</th><th>Hex</th></tr>
+  <tr><td><code>lw $t0, 32($s3)</code></td><td>op 35, rs 19, rt 8, imm 32</td><td><code>100011 10011 01000 0000000000100000</code></td><td><code>0x8E680020</code></td></tr>
+  <tr><td><code>addi $t0, $t0, -1</code></td><td>op 8, rs 8, rt 8, imm −1 = <code>0xFFFF</code></td><td><code>001000 01000 01000 1111111111111111</code></td><td><code>0x2108FFFF</code></td></tr>
+  <tr><td><code>sll $t1, $s1, 2</code></td><td>op 0, rs <b>0</b>, rt 17, rd 9, shamt 2, funct 0</td><td><code>000000 00000 10001 01001 00010 000000</code></td><td><code>0x00114880</code></td></tr>
+</table></div>
+<div class="callout trap"><b>Two traps hidden in that table</b><ul>
+  <li><b>Negative immediates:</b> write the <b>16-bit</b> two's complement and nothing more. −1 = <code>FFFF</code>, −8 = <code>FFF8</code>, −12 = <code>FFF4</code>. Do not write a 32-bit pattern into a 16-bit field. At run time the CPU sign-extends it back.</li>
+  <li><b><code>sll</code> swaps the usual roles:</b> the register being shifted goes in <b>rt</b>, and rs is 0. In <code>jr</code> it is the opposite — the register goes in <b>rs</b>, and rt, rd, shamt are all 0.</li>
+</ul></div>
+
+<h2>6. Branch offsets (beq / bne)</h2>
+<p>A branch does not store the full target address. It stores <b>how many instructions to jump, counted from PC + 4</b> (the instruction after the branch). The count can be negative, to jump backwards.</p>
+<div class="formula">offset = (Target − (PC + 4)) ÷ 4 &nbsp;&nbsp;⇔&nbsp;&nbsp; Target = PC + 4 + offset × 4<small>PC = address of the branch itself. The offset is a signed 16-bit number of <b>instructions</b> (words), not bytes.</small></div>
 <div class="scroll"><table>
   <tr><th>Address</th><th>Code</th><th>Machine code</th><th>Note</th></tr>
   <tr><td><code>0x00400000</code></td><td><code>loop: beq $t0, $zero, exit</code></td><td><code>0x11000002</code></td><td>(0x0040000C − 0x00400004) ÷ 4 = <b>2</b></td></tr>
@@ -298,9 +517,9 @@
 </table></div>
 <p><b>beq decoded:</b> op 4 = <code>000100</code>, rs = <code>$t0</code> = 8 = <code>01000</code>, rt = <code>$zero</code> = <code>00000</code>, offset = 2 → <code>0001 0001 0000 0000 0000 0000 0000 0010</code> = <code>0x11000002</code>.</p>
 <p><b>Backward example:</b> a <code>bne $s3, $s4, loop</code> at <code>0x0040002C</code> with <code>loop</code> at <code>0x00400000</code>: offset = (0x00400000 − 0x00400030) ÷ 4 = −48 ÷ 4 = <b>−12</b> = <code>0xFFF4</code>. Machine code <code>0x1674FFF4</code>.</p>
-<div class="callout tip"><b>Why count in instructions?</b><p>Targets are always multiples of 4, so storing "÷ 4" gives 4× the reach: ±32768 instructions (about ±128 KB) instead of ±32 KB.</p></div>
+<div class="callout tip"><b>Why count in instructions? (the lecture's "forgetting the &lt;&lt; 2")</b><p>Targets are always multiples of 4, so the bottom two bits would always be 00 — wasted. Storing the count ÷ 4 gives 4× the reach: ±32768 instructions (about ±128 KB) instead of ±32 KB. The hardware shifts it back left by 2 before adding. Miss the <code>&lt;&lt; 2</code> and every branch and jump target you compute is wrong by a factor of 4.</p></div>
 
-<h2>6. Decoding: hex back to an instruction</h2>
+<h2>7. Decoding: hex back to an instruction</h2>
 <ol class="flow arrows">
   <li><b>Hex → binary</b>Write 4 bits per hex digit.</li>
   <li><b>Read op</b>Top 6 bits. 0 means R-type; 2 or 3 means J-type; anything else is I-type.</li>
@@ -315,30 +534,573 @@
   <li>rs = 8 (<code>$t0</code>), rt = 9 (<code>$t1</code>), rd = 16 (<code>$s0</code>), shamt = 0, funct = 34 = 0x22 → <code>sub</code></li>
   <li>Answer: <b><code>sub $s0, $t0, $t1</code></b></li>
 </ol>
+<div class="callout tip"><b>Decoding in code, not on paper</b><p>Lab 11 points out that the same job is just a shift: <code>srl $t1, $t0, 26</code> moves the opcode field down to the bottom, so <code>0x8D280004 &gt;&gt; 26 = 35 = lw</code>. Masks and shifts are how a real decoder (and your <a href="m4-01-single-cycle-datapath.html">single-cycle datapath</a>) pulls the fields apart.</p></div>
+
+<h2>8. Your program is numbers in memory, and PC walks through them</h2>
+<p>Assemble Lab 11's three-line warm-up and this is literally what sits in memory:</p>
+<div class="scroll"><table>
+  <tr><th>Address</th><th>Word</th><th>Assembly</th><th>Fields</th><th>PC after</th></tr>
+  <tr><td><code>0x00400000</code></td><td><code>0x24080007</code></td><td><code>addiu $t0,$zero,7</code></td><td>op 9, rs 0, rt 8, imm 7 &nbsp;(you wrote <code>li $t0,7</code>)</td><td><code>0x00400004</code></td></tr>
+  <tr><td><code>0x00400004</code></td><td><code>0x24090005</code></td><td><code>addiu $t1,$zero,5</code></td><td>op 9, rs 0, rt 9, imm 5 &nbsp;(you wrote <code>li $t1,5</code>)</td><td><code>0x00400008</code></td></tr>
+  <tr><td><code>0x00400008</code></td><td><code>0x01095020</code></td><td><code>add $t2,$t0,$t1</code></td><td>op 0, rs 8, rt 9, rd 10, funct 32</td><td><code>0x0040000C</code></td></tr>
+</table></div>
+<p>Addresses step by 4 because every instruction is 32 bits. Some assemblers emit <code>ori $t0,$zero,7</code> (<code>0x34080007</code>) for <code>li</code> instead of <code>addiu</code>; both are correct, and your simulator's text pane tells you which one yours chose.</p>
+<div class="callout tip"><b>Program and data share one memory</b><p>Instructions live in <code>.text</code>, variables in <code>.data</code>, but they are the same bytes in the same address space. The CPU cannot tell them apart by looking at the bits — only <b>PC versus lw/sw</b> decides which is which. That is the stored-program (<a href="m3-01-von-neumann-harvard.html">von Neumann</a>) idea, and it is why forgetting the exit <code>syscall</code> makes the CPU happily start executing your string data.</p></div>
+<p><b>Why this matters for what comes next:</b> loops and function calls are nothing more than instructions that put a different value into PC.</p>
+
+<h2>9. Lab 11: writing and running MIPS in MARS</h2>
+<p>Lab 11 (<em>MIPS Assembly I: Machine, Arithmetic &amp; Memory</em>) is the 90-minute lab that turns the bit layouts above into programs you can run. Its own summary of what you should be able to do by the end: explain fetch/decode/execute and what PC does; name the registers by convention and use only <code>$t</code>, <code>$a</code>, <code>$v</code>, <code>$zero</code>; write a <code>.data</code>/<code>.text</code> program that reads, computes, prints and exits via <code>syscall</code>; use <code>add</code>/<code>sub</code>/<code>addi</code> and <code>mult</code>/<code>div</code> with HI/LO; tell <code>la</code> (an <em>address</em>) from <code>lw</code> (a <em>value</em>); and encode and decode one R-type and one I-type by hand.</p>
+<div class="callout tip"><b>It is an open-book lab</b><p>Both reference sheets stay open for all 90 minutes — the JHU CS333 quick reference ("Sheet J": conventions, the syscall table, worked examples) and the KTH reference sheet v1.12 ("Sheet K": exact semantics, opcode/funct numbers, bit formats). <b>Memorise nothing. Understand everything.</b> When the two sheets disagree, Sheet K is the hardware truth and Sheet J is the assembler's convenience — and the simulator is the final judge.</p></div>
+
+<h3>9.1 The workflow: edit → assemble → run → inspect</h3>
+<ol class="steps">
+  <li><b>Write one <code>.asm</code> file.</b> <code>.data</code> section first, then <code>.text</code>, then <code>.globl main</code> and a <code>main:</code> label.</li>
+  <li><b>Assemble.</b> MARS turns your text into 32-bit words. Errors appear in the message pane with a line number — fix the <b>first</b> one, then re-assemble, because one bad line often causes several complaints.</li>
+  <li><b>Run, or single-step.</b> Run goes straight to the end; single-step executes one instruction and stops, which is what you want while you are still learning.</li>
+  <li><b>Inspect.</b> Watch the <b>Registers</b> pane (changed values are highlighted), the <b>Text segment</b> pane (address, machine word and your source, side by side) and the <b>Data segment</b> pane (your <code>.data</code>, starting at 0x10010000).</li>
+  <li><b>Reset before re-running.</b> Otherwise you start with the previous run's register values, and a bug can look fixed when it is not.</li>
+</ol>
+<div class="callout tip"><b>Where to look for each thing</b><p>The <b>Text segment</b> pane is the single most useful view on this page's material: it shows, for every line you wrote, the address, the 32-bit machine word in hex, and — for a pseudo-instruction — the <em>real</em> instruction(s) the assembler substituted. That is how you check an encoding you worked out by hand, and how you see that <code>la</code> really did cost two instructions.</p></div>
+<div class="callout trap"><b>Four things that bite in the simulator</b><ul>
+  <li><b>Forgetting the exit syscall.</b> Without <code>li $v0, 10</code> / <code>syscall</code> the CPU keeps fetching the next bytes in memory and tries to execute your data.</li>
+  <li><b>Running without resetting.</b> Registers keep their old values, so a bug looks fixed when it is not.</li>
+  <li><b>Stale <code>$v0</code>.</b> Every <code>syscall</code> reads <code>$v0</code> to pick the service. Set it <em>immediately</em> before each one.</li>
+  <li><b>Output text that does not match exactly.</b> The lab's auto-grader fails on one stray space or newline; match the starter code's output text character for character.</li>
+</ul></div>
+
+<h3>9.2 Anatomy of a program: two sections, labels, directives</h3>
+<div class="code">
+  <div class="code-head"><span><b>MIPS</b> · skeleton of every program</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        <span class="kw">.data</span></td><td class="n">Everything after this line is <b>data</b>, placed in memory, not instructions. The assembler starts laying it out at 0x10010000.</td></tr>
+    <tr><td class="c">msg:    <span class="kw">.asciiz</span> <span class="str">"Sum = "</span></td><td class="n"><code>msg:</code> is a <b>label</b> — a name for this address. <code>.asciiz</code> stores the characters <em>plus a terminating zero byte</em>; the print-string service stops at that zero.</td></tr>
+    <tr><td class="c">arr:    <span class="kw">.word</span> <span class="num">5</span>, <span class="num">13</span>, <span class="num">-7</span></td><td class="n">Three 4-byte words laid out back to back, so <code>arr</code>, <code>arr+4</code>, <code>arr+8</code>. This is the whole of "an array" in assembly.</td></tr>
+    <tr><td class="c">buf:    <span class="kw">.space</span> <span class="num">40</span></td><td class="n">Reserve 40 bytes and leave them uninitialised — room for 10 words or a 40-character string.</td></tr>
+    <tr><td class="c">        <span class="kw">.text</span></td><td class="n">Everything after this line is <b>code</b>, assembled into 32-bit words starting at 0x00400000.</td></tr>
+    <tr><td class="c">        <span class="kw">.globl</span> main</td><td class="n">"Export" the name <code>main</code> so the simulator knows where to begin. (<code>.global</code> spelt out is the same directive.)</td></tr>
+    <tr><td class="c">main:   <span class="kw">li</span> $v0, <span class="num">10</span></td><td class="n">The entry point. <code>li</code> = "load immediate": put the plain number 10 into <code>$v0</code>. 10 is the service number for "exit".</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Ask the operating-system layer to perform service <code>$v0</code>. Here: stop the program cleanly.</td></tr>
+  </table>
+</div>
+<div class="scroll"><table>
+  <tr><th>Directive</th><th>Meaning</th></tr>
+  <tr><td><code>.data</code> / <code>.text</code></td><td>Data segment / code segment.</td></tr>
+  <tr><td><code>.asciiz "…"</code></td><td>A string <b>plus</b> the terminating zero byte.</td></tr>
+  <tr><td><code>.ascii "…"</code></td><td>A string <b>without</b> a terminator — print-string will run past the end.</td></tr>
+  <tr><td><code>.word 5, 13, -7</code></td><td>One or more 4-byte values.</td></tr>
+  <tr><td><code>.byte 1, 2</code></td><td>One or more 1-byte values.</td></tr>
+  <tr><td><code>.space 40</code></td><td>Reserve 40 bytes, uninitialised.</td></tr>
+  <tr><td><code>.align 2</code></td><td>Push the next item to an address that is a multiple of 2² = 4. Needed after a <code>.byte</code> run, before the next <code>.word</code>.</td></tr>
+  <tr><td><code>.globl main</code></td><td>Export a label so the simulator can find the entry point.</td></tr>
+</table></div>
+<div class="callout trap"><b>Labels always end with a colon</b><p><code>msg: .asciiz "…"</code>, not <code>msg .asciiz "…"</code>. (Lab 11's errata slide flags exactly this typo on one of the reference sheets.) And use <code>main:</code> as the entry label; the <code>__start:</code> you may see in some sheet examples belongs to a different toolchain.</p></div>
+
+<h3>9.3 Program A: add two numbers and print the result</h3>
+<div class="code">
+  <div class="code-head"><span><b>MIPS</b> · Program A — prints "Sum = 12"</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        <span class="kw">.data</span></td><td class="n">Start of the data section.</td></tr>
+    <tr><td class="c">msg:    <span class="kw">.asciiz</span> <span class="str">"Sum = "</span></td><td class="n">Six characters and a zero byte sitting in memory. <code>msg</code> is the address of the first one.</td></tr>
+    <tr><td class="c">        <span class="kw">.text</span></td><td class="n">Start of the code section.</td></tr>
+    <tr><td class="c">        <span class="kw">.globl</span> main</td><td class="n">Make <code>main</code> visible as the entry point.</td></tr>
+    <tr><td class="c">main:</td><td class="n">The first instruction executed is the next one.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t0, <span class="num">7</span>          <span class="com"># a = 7</span></td><td class="n">Put the constant 7 into <code>$t0</code>. Registers <em>are</em> your variables — this is "a = 7".</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $t1, <span class="num">5</span>          <span class="com"># b = 5</span></td><td class="n">Put 5 into <code>$t1</code>. "b = 5".</td></tr>
+    <tr><td class="c">        <span class="kw">add</span>  $t2, $t0, $t1   <span class="com"># sum = a + b</span></td><td class="n"><b>Destination first</b>, then the two sources: <code>$t2</code> = <code>$t0</code> + <code>$t1</code> = 12.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">4</span>          <span class="com"># 4: print string</span></td><td class="n">Choose the service <em>before</em> calling it. 4 = print string.</td></tr>
+    <tr><td class="c">        <span class="kw">la</span>   $a0, msg        <span class="com"># $a0 = &amp;msg</span></td><td class="n"><code>la</code> = "load <b>address</b>". <code>$a0</code> now holds <em>where</em> the string is, not the characters. Print-string wants an address.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>Sum = </code>.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span>          <span class="com"># 1: print int</span></td><td class="n">Switch the service to "print integer". The previous syscall left 4 in <code>$v0</code>, so this line is not optional.</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $t2        <span class="com"># $a0 = sum</span></td><td class="n">Copy the sum into the argument register. <code>move</code> is a pseudo-instruction for <code>addu $a0, $zero, $t2</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>12</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span>         <span class="com"># 10: exit</span></td><td class="n">Service 10 = exit.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Stop. Leave this out and the CPU reads whatever bytes come next as instructions.</td></tr>
+  </table>
+</div>
+<p><b>Output:</b> <code>Sum = 12</code>. The lab's "predict, then run" variations: swap <code>add</code> for <code>sub</code> and you get <code>2</code>; use <code>mult $t0,$t1</code> followed by <code>mflo $t2</code> and you get <code>35</code>; add <code>\n</code> inside the string to end the line.</p>
+<p><code>syscall</code> is <b>not an ALU operation</b>. It traps out to the OS layer, which reads <code>$v0</code> to decide which service you asked for.</p>
+
+<h3>9.4 <code>syscall</code>: your only window to the outside world</h3>
+<div class="scroll"><table>
+  <tr><th><code>$v0</code></th><th>Service</th><th>Arguments</th><th>Result</th></tr>
+  <tr><td>1</td><td>print integer</td><td><code>$a0</code> = the value</td><td>—</td></tr>
+  <tr><td>4</td><td>print string</td><td><code>$a0</code> = the <b>address</b> of a <code>.asciiz</code> string</td><td>—</td></tr>
+  <tr><td>5</td><td>read integer</td><td>—</td><td>the value lands in <code>$v0</code></td></tr>
+  <tr><td>8</td><td>read string</td><td><code>$a0</code> = buffer address, <code>$a1</code> = n + 1</td><td>—</td></tr>
+  <tr><td>9</td><td>allocate memory</td><td><code>$a0</code> = bytes wanted</td><td><code>$v0</code> = address</td></tr>
+  <tr><td>10</td><td>exit</td><td>—</td><td>—</td></tr>
+</table></div>
+<p>The <b>three-beat pattern</b> for every call: <span style="white-space:nowrap">(1) <code>li $v0, service</code></span> → <span style="white-space:nowrap">(2) put the argument in <code>$a0</code></span> → <span style="white-space:nowrap">(3) <code>syscall</code></span>.</p>
+<div class="code">
+  <div class="code-head"><span><b>MIPS</b> · read an integer and print it back</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Service 5 = read an integer from the console.</td></tr>
+    <tr><td class="c"><span class="kw">syscall</span>              <span class="com"># value -> $v0</span></td><td class="n">The number the user typed is returned <b>in <code>$v0</code></b>, overwriting the 5.</td></tr>
+    <tr><td class="c"><span class="kw">move</span> $a0, $v0</td><td class="n">Copy it out of <code>$v0</code> straight away — the next <code>li $v0</code> will destroy it.</td></tr>
+    <tr><td class="c"><span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Service 1 = print integer.</td></tr>
+    <tr><td class="c"><span class="kw">syscall</span></td><td class="n">Prints the number.</td></tr>
+    <tr><td class="c"><span class="kw">li</span>   $v0, <span class="num">10</span>  <span class="com"># always exit</span></td><td class="n">Service 10 = exit.</td></tr>
+    <tr><td class="c"><span class="kw">syscall</span></td><td class="n">Stop.</td></tr>
+  </table>
+</div>
+<div class="callout trap"><b>The classic syscall bug</b><p>Writing <code>li $a0, 42</code> and then <code>syscall</code> without setting <code>$v0</code>: whatever service number happened to be left in <code>$v0</code> runs instead. The symptom is "prints nothing, or something bizarre".</p></div>
+
+<h3>9.5 Pseudo-instructions: what you write vs what the CPU runs</h3>
+<p>Several of the most convenient instructions do not exist in hardware. The assembler expands them, usually using <code>$at</code> as scratch — which is exactly why you must never use <code>$at</code> yourself.</p>
+<div class="scroll"><table>
+  <tr><th>You write</th><th>Assembler emits</th><th>Why</th></tr>
+  <tr><td><code>li $t0, 7</code></td><td><code>addiu $t0, $zero, 7</code></td><td>Constant fits in 16 bits: one real instruction.</td></tr>
+  <tr><td><code>li $t0, 0xabcd1234</code></td><td><code>lui $at, 0xabcd</code> ; <code>ori $t0, $at, 0x1234</code></td><td>The immediate field is only 16 bits, so a 32-bit constant needs two.</td></tr>
+  <tr><td><code>la $t0, label</code></td><td><code>lui $at, hi</code> ; <code>ori $t0, $at, lo</code></td><td>An address is 32 bits. <b><code>la</code> costs two instructions.</b></td></tr>
+  <tr><td><code>lw $t0, var</code></td><td><code>lui $at, hi(var)</code> ; <code>lw $t0, lo(var)($at)</code></td><td><code>$at</code> holds the upper half of the address.</td></tr>
+  <tr><td><code>move $t0, $t1</code></td><td><code>addu $t0, $zero, $t1</code></td><td>Add zero. <code>$zero</code> buys you a free "copy".</td></tr>
+  <tr><td><code>b L</code></td><td><code>beq $zero, $zero, L</code></td><td>A compare that is always true.</td></tr>
+  <tr><td><code>blt $t0, $t1, L</code></td><td><code>slt $at, $t0, $t1</code> ; <code>bne $at, $zero, L</code></td><td>Real MIPS has only <code>beq</code> and <code>bne</code>; everything else is <code>slt</code> + a branch.</td></tr>
+  <tr><td><code>bge $t0, $t1, L</code></td><td><code>slt $at, $t0, $t1</code> ; <code>beq $at, $zero, L</code></td><td>"not (a &lt; b)".</td></tr>
+  <tr><td><code>ble $t0, $t1, L</code></td><td><code>slt $at, $t1, $t0</code> ; <code>beq $at, $zero, L</code></td><td>Note the <b>swapped operands</b>: "not (b &lt; a)".</td></tr>
+  <tr><td><code>nop</code></td><td><code>sll $zero, $zero, 0</code></td><td>Shift zero into zero: the machine word is literally <code>0x00000000</code>.</td></tr>
+</table></div>
+<div class="callout tip"><b>Consequence: count the <em>real</em> instructions</b><p>If an exam asks how many instructions a fragment executes, <code>la</code> is 2 and <code>bge</code> is 2. The simulator's text pane shows you the expansion, so you can always check.</p></div>
+
+<h3>9.6 Arithmetic, and the HI/LO pair</h3>
+<div class="code">
+  <div class="code-head"><span><b>MIPS</b> · x = (a + b) − c, with a=7, b=3, c=4</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c"><span class="kw">li</span>  $t0, <span class="num">7</span>           <span class="com"># a</span></td><td class="n"><code>$t0</code> is the variable <code>a</code>.</td></tr>
+    <tr><td class="c"><span class="kw">li</span>  $t1, <span class="num">3</span>           <span class="com"># b</span></td><td class="n"><code>$t1</code> is <code>b</code>.</td></tr>
+    <tr><td class="c"><span class="kw">li</span>  $t2, <span class="num">4</span>           <span class="com"># c</span></td><td class="n"><code>$t2</code> is <code>c</code>.</td></tr>
+    <tr><td class="c"><span class="kw">add</span> $t3, $t0, $t1     <span class="com"># t = a+b</span></td><td class="n"><code>$t3</code> = 7 + 3 = 10. A fresh register holds the running result.</td></tr>
+    <tr><td class="c"><span class="kw">sub</span> $t3, $t3, $t2     <span class="com"># t = t-c</span></td><td class="n"><code>$t3</code> = 10 − 4 = <b>6</b>. A register may be both a source and the destination — this is legal and extremely common.</td></tr>
+  </table>
+</div>
+<div class="callout tip"><b>There is no <code>subi</code></b><p>To subtract a constant, add a negative one: <code>addi $t0, $t0, -1</code>. The hardware sign-extends the 16-bit <code>0xFFFF</code> back to −1.</p></div>
+<p><b>Multiplication and division do not write a normal register.</b> They write the two special registers HI and LO, and you fetch the halves you want with <code>mfhi</code> ("move from HI") and <code>mflo</code>.</p>
+<figure class="diagram">
+  <svg viewBox="0 0 640 190" width="640" role="img" aria-label="mult writes a 64-bit product split across HI, the top 32 bits, and LO, the bottom 32; div writes the remainder to HI and the quotient to LO; mfhi and mflo copy them into normal registers">
+    <text x="160" y="20" class="m b" text-anchor="middle">mult $t0, $t1   (32 × 32 → 64 bits)</text>
+    <rect x="40" y="32" width="110" height="38" class="box-b"/><text x="95" y="50" class="m b" text-anchor="middle">HI</text><text x="95" y="64" class="m dim" text-anchor="middle">bits 63–32</text>
+    <rect x="170" y="32" width="110" height="38" class="box-hi"/><text x="225" y="50" class="m b" text-anchor="middle">LO</text><text x="225" y="64" class="m dim" text-anchor="middle">bits 31–0</text>
+    <path class="w" d="M95 72 V96"/><polygon points="95,104 90,92 100,92" class="fill-ink"/>
+    <path class="w" d="M225 72 V96"/><polygon points="225,104 220,92 230,92" class="fill-ink"/>
+    <text x="95" y="122" class="m" text-anchor="middle">mfhi $t3</text>
+    <text x="225" y="122" class="m" text-anchor="middle">mflo $t2</text>
+    <text x="480" y="20" class="m b" text-anchor="middle">div $t0, $t1   ($t0 ÷ $t1)</text>
+    <rect x="360" y="32" width="110" height="38" class="box-b"/><text x="415" y="50" class="m b" text-anchor="middle">HI</text><text x="415" y="64" class="m dim" text-anchor="middle">remainder</text>
+    <rect x="490" y="32" width="110" height="38" class="box-hi"/><text x="545" y="50" class="m b" text-anchor="middle">LO</text><text x="545" y="64" class="m dim" text-anchor="middle">quotient</text>
+    <path class="w" d="M415 72 V96"/><polygon points="415,104 410,92 420,92" class="fill-ink"/>
+    <path class="w" d="M545 72 V96"/><polygon points="545,104 540,92 550,92" class="fill-ink"/>
+    <text x="415" y="122" class="m" text-anchor="middle">mfhi $t3</text>
+    <text x="545" y="122" class="m" text-anchor="middle">mflo $t2</text>
+    <text x="320" y="158" class="b" text-anchor="middle">LO is the quotient. HI is the remainder. Getting this backwards is Lab 11's bug S4.</text>
+    <text x="320" y="178" class="dim" text-anchor="middle">Mnemonic: LO sounds like "lot" — how many times it goes in.</text>
+  </svg>
+  <figcaption>Neither <code>mult</code> nor <code>div</code> names a destination register, which is why beginners' code prints 0: nothing was written to <code>$t2</code> until <code>mflo</code> ran.</figcaption>
+</figure>
+<div class="scroll"><table>
+  <tr><th>Operation</th><th>HI</th><th>LO</th><th>Reading</th></tr>
+  <tr><td>100000 × 100000</td><td><code>0x00000002</code></td><td><code>0x540BE400</code></td><td>product = 10,000,000,000 = 2 × 2³² + 1,410,065,408 — too big for 32 bits, so it spills into HI</td></tr>
+  <tr><td>12! = 479,001,600</td><td><code>0x00000000</code></td><td><code>0x1C8CFC00</code></td><td>fits in 32 bits, so HI is 0</td></tr>
+  <tr class="hl"><td>13! = 12! × 13</td><td><code>0x00000001</code></td><td><code>0x7328CC00</code></td><td>true value 6,227,020,800; <b>LO alone reads 1,932,053,504</b> — the overflow is only visible in HI</td></tr>
+  <tr><td>17 ÷ 5</td><td>2</td><td>3</td><td>quotient 3 in LO, remainder 2 in HI</td></tr>
+  <tr><td>−17 ÷ 5</td><td>−2</td><td>−3</td><td>truncates toward zero; the remainder takes the <b>dividend's</b> sign</td></tr>
+</table></div>
+<div class="callout tip"><b>Why HI matters later</b><p>Lab 13's "iterative factorial of any number" overflows at 13!. HI is the only thing that tells you. The single-instruction <code>mul rd, rs, rt</code> (a Sheet-K instruction: opcode 28, funct 2) keeps only the low 32 bits, so it <em>cannot</em> warn you. Also: <b>divide by zero is undefined on MIPS and does not trap</b> — guarding it needs a branch, which is Lab 13.</p></div>
+
+<h3>9.7 Logic and shifts: bits in, bits out</h3>
+<p>Take <code>$t0</code> = <code>1100 1010</code> (0xCA) and <code>$t1</code> = <code>0000 1111</code> (0x0F), shown here as 8-bit patterns for readability:</p>
+<div class="scroll"><table class="tt">
+  <tr><th>Instruction</th><th>Result (8-bit view)</th><th>Hex</th><th>What it does</th></tr>
+  <tr><td><code>and $t2,$t0,$t1</code></td><td><code>0000 1010</code></td><td>0x0A</td><td>1 only where <b>both</b> are 1 — this is a <b>mask</b>.</td></tr>
+  <tr><td><code>or $t2,$t0,$t1</code></td><td><code>1100 1111</code></td><td>0xCF</td><td>1 where <b>either</b> is 1 — used to <b>set</b> bits.</td></tr>
+  <tr><td><code>xor $t2,$t0,$t1</code></td><td><code>1100 0101</code></td><td>0xC5</td><td>1 where they <b>differ</b> — used to <b>flip</b> bits.</td></tr>
+  <tr><td><code>nor $t2,$t0,$t1</code></td><td><code>0011 0000</code></td><td>0x30</td><td>NOT(OR): 1 only where <b>both</b> are 0.</td></tr>
+</table></div>
+<div class="callout tip"><b>Careful with the 8-bit view</b><p>The <code>nor</code> row is the honest answer for 8-bit registers. In a real 32-bit MIPS register, <code>$t0</code> = <code>0x000000CA</code> and <code>$t1</code> = <code>0x0000000F</code>, so <code>nor $t2,$t0,$t1</code> actually gives <code>0xFFFFFF30</code> — the top 24 bits were 0, and NOR turns them into 1s. <code>and</code>, <code>or</code> and <code>xor</code> are unaffected because their upper bits stay 0. The lab's table says "8-bit view" for exactly this reason.</p></div>
+<div class="scroll"><table>
+  <tr><th>Instruction</th><th>Starting value</th><th>Result</th><th>Meaning</th></tr>
+  <tr><td><code>sll $t1,$t0,3</code></td><td><code>0x0000000F</code></td><td><code>0x00000078</code></td><td>Shift left 3 = multiply by 2³: 15 × 8 = 120.</td></tr>
+  <tr><td><code>srl $t1,$t0,4</code></td><td><code>0xFFFFFFF0</code> (= −16)</td><td><code>0x0FFFFFFF</code></td><td><b>Zero</b>-fill from the left. Treats the value as unsigned — the answer is not −1.</td></tr>
+  <tr><td><code>sra $t1,$t0,4</code></td><td><code>0xFFFFFFF0</code> (= −16)</td><td><code>0xFFFFFFFF</code></td><td><b>Sign</b>-fill from the left: −16 ÷ 16 = −1. This is the one you want for signed division by a power of 2.</td></tr>
+</table></div>
+<p><b>Idioms the lab says you will reuse:</b></p>
+<ul>
+  <li><code>andi $t1, $t0, 1</code> — keep only bit 0. 1 means odd, 0 means even (Lab 13's even/odd problem).</li>
+  <li><code>sll $t1, $t0, 2</code> — multiply an array index by 4 to turn it into a byte offset (Lab 12's arrays).</li>
+  <li><code>nor $t1, $t0, $zero</code> — bitwise NOT, since NOT(x OR 0) = NOT x.</li>
+  <li><code>srl $t1, $t0, 26</code> — slide the opcode field down to the bottom of the register, so you can read it as a plain number.</li>
+</ul>
+<div class="callout trap"><b><code>srl</code> vs <code>sra</code> is the classic mix-up</b><p><code>srl</code> zero-fills, <code>sra</code> sign-fills. On a negative number they give wildly different answers, as the table above shows.</p></div>
+
+<h3>9.8 Scalar memory: <code>la</code> gives the address, <code>lw</code> the value, <code>sw</code> writes</h3>
+<figure class="diagram">
+  <svg viewBox="0 0 660 160" width="660" role="img" aria-label="la puts the address B into a register; lw copies the value 10 out of memory into a register; sw copies a register value into memory, changing y from 20 to 10">
+    <text x="105" y="20" class="m b" text-anchor="middle">la $t0, x</text>
+    <rect x="20" y="34" width="80" height="40" class="box-hi"/><text x="60" y="59" class="m" text-anchor="middle">$t0 = B</text>
+    <path class="w-hi" d="M102 54 H142" stroke-dasharray="5 4"/><polygon points="150,54 138,49 138,59" class="fill-hi"/>
+    <rect x="152" y="34" width="80" height="40" class="box"/><text x="192" y="59" class="m" text-anchor="middle">x = 10</text>
+    <text x="192" y="26" class="m dim" text-anchor="middle">address B</text>
+    <text x="122" y="92" class="m dim" text-anchor="middle">"points at"</text>
+    <text x="330" y="20" class="m b" text-anchor="middle">lw $t1, x</text>
+    <rect x="252" y="34" width="80" height="40" class="box"/><text x="292" y="59" class="m" text-anchor="middle">x = 10</text>
+    <path class="w-g" d="M334 54 H374"/><polygon points="382,54 370,49 370,59" class="fill-ink"/>
+    <rect x="384" y="34" width="80" height="40" class="box-hi"/><text x="424" y="59" class="m" text-anchor="middle">$t1 = 10</text>
+    <text x="356" y="92" class="m dim" text-anchor="middle">"copies the value"</text>
+    <text x="566" y="20" class="m b" text-anchor="middle">sw $t1, y</text>
+    <rect x="478" y="34" width="76" height="40" class="box-hi"/><text x="516" y="59" class="m" text-anchor="middle">$t1 = 10</text>
+    <path class="w-g" d="M556 54 H570"/><polygon points="578,54 566,49 566,59" class="fill-ink"/>
+    <rect x="580" y="34" width="72" height="40" class="box-b"/><text x="616" y="59" class="m" text-anchor="middle">y: 20→10</text>
+    <text x="566" y="92" class="m dim" text-anchor="middle">"writes the value"</text>
+    <text x="330" y="132" class="b" text-anchor="middle">la = where it lives · lw = what is in it · sw = put this there</text>
+    <text x="330" y="152" class="dim" text-anchor="middle">Effective address = base register + sign-extended offset</text>
+  </svg>
+  <figcaption><code>la</code> never touches memory — it just computes an address into a register. <code>lw</code> and <code>sw</code> are the only instructions that read or write memory.</figcaption>
+</figure>
+<div class="callout trap"><b>The classic memory bug</b><p><code>la $a0, x</code> followed by print-integer prints the <em>address</em> of <code>x</code> — a large number like 268,500,992 — not the value 10. Use <code>lw $a0, x</code> when you want the value. Remember too that <code>lw $t1, x</code> (a label, no base register) is itself a pseudo-instruction: it expands to <code>lui $at, hi(x)</code> then <code>lw $t1, lo(x)($at)</code>.</p></div>
+<div class="code">
+  <div class="code-head"><span><b>MIPS</b> · Program D — update a variable, reach the next word</span><span>code → what it means</span></div>
+  <table class="ann">
+    <tr><td class="c">        <span class="kw">.data</span></td><td class="n">Data section.</td></tr>
+    <tr><td class="c">x:      <span class="kw">.word</span> <span class="num">10</span></td><td class="n">One word holding 10. Call its address <b>B</b>.</td></tr>
+    <tr><td class="c">y:      <span class="kw">.word</span> <span class="num">20</span></td><td class="n">The very next word, so its address is <b>B + 4</b>. Two adjacent words are already the smallest array.</td></tr>
+    <tr><td class="c">        <span class="kw">.text</span></td><td class="n">Code section.</td></tr>
+    <tr><td class="c">        <span class="kw">.globl</span> main</td><td class="n">Entry point export.</td></tr>
+    <tr><td class="c">main:   <span class="kw">lw</span>   $t0, x        <span class="com"># $t0 = 10</span></td><td class="n">Copy the <b>value</b> at <code>x</code> into <code>$t0</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">addi</span> $t0, $t0, <span class="num">5</span>   <span class="com"># $t0 = 15</span></td><td class="n">Add the constant 5 inside the register. Memory is untouched so far.</td></tr>
+    <tr><td class="c">        <span class="kw">sw</span>   $t0, x        <span class="com"># x = 15</span></td><td class="n">Write the register back out to memory. <b>Now</b> <code>x</code> is 15.</td></tr>
+    <tr><td class="c">        <span class="kw">la</span>   $t1, x        <span class="com"># $t1 = &amp;x</span></td><td class="n">Put the <b>address</b> B into <code>$t1</code>, so we can do pointer arithmetic.</td></tr>
+    <tr><td class="c">        <span class="kw">lw</span>   $t2, <span class="num">4</span>($t1)    <span class="com"># $t2 = y = 20</span></td><td class="n">Read the word at B + 4 — that is <code>y</code>. The <code>offset(base)</code> pattern: rs is the base register, the immediate is the offset in <b>bytes</b>.</td></tr>
+    <tr><td class="c">        <span class="kw">add</span>  $t2, $t2, $t0 <span class="com"># 35</span></td><td class="n">20 + 15 = 35.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Service 1 = print integer.</td></tr>
+    <tr><td class="c">        <span class="kw">move</span> $a0, $t2</td><td class="n">The value to print goes in <code>$a0</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span>              <span class="com"># prints 35</span></td><td class="n">Output: <code>35</code>.</td></tr>
+    <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">Service 10 = exit.</td></tr>
+    <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Stop.</td></tr>
+  </table>
+</div>
+<div class="scroll"><table>
+  <tr><th>Address</th><th>Before</th><th>After</th></tr>
+  <tr><td>B (<code>x</code>)</td><td>10</td><td><b>15</b></td></tr>
+  <tr><td>B + 4 (<code>y</code>)</td><td>20</td><td>20</td></tr>
+</table></div>
+<p><b>Negative offsets are fine:</b> <code>lw $t2, -4($t1)</code> reads the word <em>before</em> <code>x</code>. And the lab's one-sentence preview of Lab 12: <em>two adjacent words are the smallest array — give the base register a longer list and step it by 4.</em></p>
+
+<h3>9.9 The one-page cheat sheet</h3>
+<div class="scroll"><table>
+  <tr><th>Job</th><th>Recipe</th></tr>
+  <tr><td>PRINT INT</td><td><code>li $v0,1 ; move $a0,$reg ; syscall</code></td></tr>
+  <tr><td>PRINT STR</td><td><code>li $v0,4 ; la $a0,label ; syscall</code></td></tr>
+  <tr><td>READ INT</td><td><code>li $v0,5 ; syscall</code> → value in <code>$v0</code> (<b>copy it out!</b>)</td></tr>
+  <tr><td>EXIT</td><td><code>li $v0,10 ; syscall</code></td></tr>
+  <tr><td>MULTIPLY</td><td><code>mult $a,$b ; mflo $r</code> (low 32) ; <code>mfhi $h</code> (high 32)</td></tr>
+  <tr><td>DIVIDE</td><td><code>div $a,$b ; mflo $q</code> (quotient) ; <code>mfhi $r</code> (remainder)</td></tr>
+  <tr><td>SHIFT / MASK</td><td><code>sll $r,$x,k</code> (× 2<sup>k</sup>) ; <code>andi $r,$x,1</code> (bit 0)</td></tr>
+  <tr><td>ADDRESS</td><td><code>la $t0,x</code> → the address</td></tr>
+  <tr><td>VALUE</td><td><code>lw $t1,x</code> or <code>lw $t1,0($t0)</code> → the value</td></tr>
+  <tr><td>STORE</td><td><code>sw $t1,x</code> or <code>sw $t1,4($t0)</code></td></tr>
+</table></div>
+<p><b>Rules in one line:</b> word = 4 bytes · <code>lw</code>/<code>sw</code> address must be a multiple of 4 · destination first · LO = quotient.</p>
+
+<h2>10. Lab 11 bug hunt: five broken snippets</h2>
+<p>The lab's pair exercise. For each one: find the bug, state the symptom, fix it in one line. The lab's <b>debugging order</b>, used all semester: (1) read the symptom, (2) write the trace table, (3) find the first row that differs from what you expected, (4) fix <em>that</em> line only.</p>
+<div data-practice>
+  <details class="q"><summary>S1 — prints nothing, or something bizarre. <code>li $a0, 42</code> then <code>syscall</code></summary><div class="a">
+    <p><b>Root cause:</b> <code>$v0</code> was never set, so <code>syscall</code> runs whatever service number happened to be left in it.</p>
+    <p><b>Fix:</b> add <code>li $v0, 1</code> before the <code>syscall</code>. The three-beat pattern is service, argument, call — in that order, every time.</p>
+  </div></details>
+  <details class="q"><summary>S2 — prints a huge number, not 42. <code>x: .word 42</code> … <code>la $a0, x</code> / <code>li $v0, 1</code> / <code>syscall</code></summary><div class="a">
+    <p><b>Root cause:</b> <code>la</code> loads the <em>address</em> of <code>x</code>; print-integer then prints that address (something like 268500992).</p>
+    <p><b>Fix:</b> <code>lw $a0, x</code> — load the <em>value</em>.</p>
+  </div></details>
+  <details class="q"><summary>S3 — prints 0, wanted 42. <code>li $t0,6</code> / <code>li $t1,7</code> / <code>mult $t0,$t1</code> / <code>li $v0,1</code> / <code>move $a0,$t2</code> / <code>syscall</code></summary><div class="a">
+    <p><b>Root cause:</b> <code>mult</code> writes HI and LO, <b>not</b> a general-purpose register. <code>$t2</code> was never assigned, so it still holds 0.</p>
+    <p><b>Fix:</b> add <code>mflo $a0</code> after the <code>mult</code> (or <code>mflo $t2</code>, keeping the <code>move</code>). 6 × 7 = 42, and 42 fits in 32 bits so HI is 0.</p>
+  </div></details>
+  <details class="q"><summary>S4 — quotient and remainder swapped. <code>div $t0,$t1</code> (17 ÷ 5) / <code>mfhi $s0</code> / <code>mflo $s1</code></summary><div class="a">
+    <p><b>Root cause:</b> the roles are reversed. <b>LO holds the quotient</b> (3) and <b>HI holds the remainder</b> (2).</p>
+    <p><b>Fix:</b> <code>mflo $s0</code> ; <code>mfhi $s1</code>.</p>
+  </div></details>
+  <details class="q"><summary>S5 — address error. <code>la $t0, x</code> / <code>lw $t1, 2($t0)</code></summary><div class="a">
+    <p><b>Root cause:</b> a word load at an address that is not a multiple of 4. <code>x</code> is word-aligned, so <code>x + 2</code> is not, and the CPU raises an address error exception.</p>
+    <p><b>Fix:</b> use offsets 0, 4, 8… for <code>lw</code>/<code>sw</code>. If you genuinely want the byte at <code>x + 2</code>, use <code>lb</code> (or <code>lbu</code>).</p>
+  </div></details>
+</div>
+
+<h2>11. Lab 11 practice problems, with worked solutions</h2>
+<p>Four problems in 25 minutes, plus three optional finishers. Write your own first — the lab's rule was "have a trace table on paper before you raise a hand". The code-craft marks (10 points) went on: comments 3, register discipline 2, exit syscall 2, sensible labels 2, no <code>$at</code> 1.</p>
+<div class="scroll"><table>
+  <tr><th>#</th><th>Problem</th><th>Tools</th><th>Test cases</th></tr>
+  <tr><td>1</td><td>Hello, MIPS!</td><td><code>.asciiz</code>, <code>la</code>, syscall 4</td><td>prints <code>Hello, MIPS!</code></td></tr>
+  <tr><td>2</td><td>Add Two Inputs</td><td>syscall 5 twice, <code>move</code>, <code>add</code></td><td>(3, 4) → 7 ; (−5, 12) → 7</td></tr>
+  <tr><td>3</td><td>Quotient and Remainder</td><td><code>div</code>, <code>mflo</code>, <code>mfhi</code></td><td>(17, 5) → 3, 2 ; (100, 7) → 14, 2</td></tr>
+  <tr><td>4</td><td>Swap Two Memory Variables</td><td><code>lw</code>, <code>sw</code>, labels</td><td>x = 10, y = 20 → prints 20 then 10</td></tr>
+  <tr><td>★</td><td>Celsius to Fahrenheit</td><td><code>mult</code>, <code>div</code>, <code>addi</code></td><td>100 → 212 ; 37 → 98 ; −40 → −40</td></tr>
+  <tr><td>★</td><td>Multiply by 10 with shifts</td><td><code>sll</code>, <code>add</code></td><td>7 → 70 ; −3 → −30</td></tr>
+  <tr><td>★</td><td>(a + b)(a − b)</td><td>registers as variables</td><td>(7, 3) → 40 ; (2, 9) → −77</td></tr>
+</table></div>
+
+<div data-practice>
+<details class="q"><summary>Problem 1 — Hello, MIPS!</summary><div class="a">
+  <div class="code">
+    <div class="code-head"><span><b>MIPS</b> · problem 1</span><span>code → what it means</span></div>
+    <table class="ann">
+      <tr><td class="c">        <span class="kw">.data</span></td><td class="n">Data section.</td></tr>
+      <tr><td class="c">msg:    <span class="kw">.asciiz</span> <span class="str">"Hello, MIPS!\n"</span></td><td class="n">The characters, a newline, and a terminating zero byte. <code>msg</code> names the address of the first character.</td></tr>
+      <tr><td class="c">        <span class="kw">.text</span></td><td class="n">Code section.</td></tr>
+      <tr><td class="c">        <span class="kw">.globl</span> main</td><td class="n">Export the entry point.</td></tr>
+      <tr><td class="c">main:   <span class="kw">li</span> $v0, <span class="num">4</span></td><td class="n">Service 4 = print string.</td></tr>
+      <tr><td class="c">        <span class="kw">la</span> $a0, msg</td><td class="n">Print-string wants an <b>address</b>, so <code>la</code>, not <code>lw</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints <code>Hello, MIPS!</code> and a newline.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span> $v0, <span class="num">10</span></td><td class="n">Service 10 = exit.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Stop.</td></tr>
+    </table>
+  </div>
+  <p>The <b>z</b> in <code>.asciiz</code> is what adds the terminating zero. Use plain <code>.ascii</code> and print-string runs past the end of your text into whatever bytes follow.</p>
+</div></details>
+
+<details class="q"><summary>Problem 2 — Add Two Inputs</summary><div class="a">
+  <div class="code">
+    <div class="code-head"><span><b>MIPS</b> · problem 2</span><span>code → what it means</span></div>
+    <table class="ann">
+      <tr><td class="c">        <span class="kw">.text</span></td><td class="n">No <code>.data</code> needed — nothing is stored in memory.</td></tr>
+      <tr><td class="c">        <span class="kw">.globl</span> main</td><td class="n">Export the entry point.</td></tr>
+      <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Service 5 = read an integer.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">The typed number arrives in <code>$v0</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $t0, $v0   <span class="com"># first value out of $v0</span></td><td class="n"><b>The whole point of the problem.</b> Copy it somewhere safe before the next read overwrites <code>$v0</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Service 5 again.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Second number arrives in <code>$v0</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $t1, $v0</td><td class="n">Copy it to <code>$t1</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">add</span>  $t2, $t0, $t1</td><td class="n">The sum. Destination <code>$t2</code> first.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Service 1 = print integer.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $a0, $t2</td><td class="n">The value to print goes in <code>$a0</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints the sum.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">Exit.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Stop.</td></tr>
+    </table>
+  </div>
+  <p><b>Trace (inputs 3 and 4):</b> <code>$t0</code> = 3, <code>$t1</code> = 4, <code>$t2</code> = 7. With (−5, 12) you also get 7 — the read-integer service handles the minus sign for you.</p>
+</div></details>
+
+<details class="q"><summary>Problem 3 — Quotient and Remainder</summary><div class="a">
+  <div class="code">
+    <div class="code-head"><span><b>MIPS</b> · problem 3</span><span>code → what it means</span></div>
+    <table class="ann">
+      <tr><td class="c">        <span class="kw">.data</span></td><td class="n">We need one string: the newline between the two numbers.</td></tr>
+      <tr><td class="c">nl:     <span class="kw">.asciiz</span> <span class="str">"\n"</span></td><td class="n">A one-character string (plus its zero byte).</td></tr>
+      <tr><td class="c">        <span class="kw">.text</span></td><td class="n">Code section.</td></tr>
+      <tr><td class="c">        <span class="kw">.globl</span> main</td><td class="n">Export the entry point.</td></tr>
+      <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Read the first integer…</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">…into <code>$v0</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $t0, $v0     <span class="com"># a</span></td><td class="n">Save it as <code>a</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Read the second integer…</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">…into <code>$v0</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $t1, $v0     <span class="com"># b</span></td><td class="n">Save it as <code>b</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">div</span>  $t0, $t1     <span class="com"># LO = a/b, HI = a mod b</span></td><td class="n">One instruction does both. It names <b>no destination register</b> — the answers go into LO and HI.</td></tr>
+      <tr><td class="c">        <span class="kw">mflo</span> $t2          <span class="com"># quotient</span></td><td class="n">"Move from LO": fetch the quotient into a register you can use.</td></tr>
+      <tr><td class="c">        <span class="kw">mfhi</span> $t3          <span class="com"># remainder</span></td><td class="n">"Move from HI": fetch the remainder.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Print integer.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $a0, $t2</td><td class="n">Quotient into the argument register.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span>             <span class="com"># print quotient</span></td><td class="n">Prints 3 for (17, 5).</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">4</span></td><td class="n">Print string.</td></tr>
+      <tr><td class="c">        <span class="kw">la</span>   $a0, nl</td><td class="n">Address of the newline string.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span>             <span class="com"># newline</span></td><td class="n">Ends the line.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Print integer again — <code>$v0</code> currently holds 4, so this is required.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $a0, $t3</td><td class="n">Remainder into the argument register.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span>             <span class="com"># print remainder</span></td><td class="n">Prints 2 for (17, 5).</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">Exit.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Stop.</td></tr>
+    </table>
+  </div>
+  <p><b>Trace (17, 5):</b> <code>$t0</code> = 17, <code>$t1</code> = 5; after <code>div</code>, LO = 3 and HI = 2; prints <code>3</code>, newline, <code>2</code>. For (100, 7): 14 and 2. For (−17, 5): <b>−3 and −2</b> — MIPS truncates toward zero and the remainder takes the dividend's sign.</p>
+  <p><b>Why is the print sequence repeated?</b> Because <code>$v0</code> and <code>$a0</code> are overwritten by every syscall setup. Lab 14 turns this repetition into a function.</p>
+</div></details>
+
+<details class="q"><summary>Problem 4 — Swap Two Memory Variables</summary><div class="a">
+  <div class="code">
+    <div class="code-head"><span><b>MIPS</b> · problem 4</span><span>code → what it means</span></div>
+    <table class="ann">
+      <tr><td class="c">        <span class="kw">.data</span></td><td class="n">Data section.</td></tr>
+      <tr><td class="c">x:      <span class="kw">.word</span> <span class="num">10</span></td><td class="n">The first variable in memory.</td></tr>
+      <tr><td class="c">y:      <span class="kw">.word</span> <span class="num">20</span></td><td class="n">The second, in the very next word.</td></tr>
+      <tr><td class="c">nl:     <span class="kw">.asciiz</span> <span class="str">"\n"</span></td><td class="n">A newline for between the two printed values.</td></tr>
+      <tr><td class="c">        <span class="kw">.text</span></td><td class="n">Code section.</td></tr>
+      <tr><td class="c">        <span class="kw">.globl</span> main</td><td class="n">Export the entry point.</td></tr>
+      <tr><td class="c">main:   <span class="kw">lw</span>   $t0, x     <span class="com"># t0 = 10</span></td><td class="n">Pull <b>both</b> values into registers before writing anything back.</td></tr>
+      <tr><td class="c">        <span class="kw">lw</span>   $t1, y     <span class="com"># t1 = 20</span></td><td class="n">The two registers are the temporary storage the swap needs.</td></tr>
+      <tr><td class="c">        <span class="kw">sw</span>   $t1, x     <span class="com"># x = 20</span></td><td class="n">Write 20 over <code>x</code>. The old 10 is safe in <code>$t0</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">sw</span>   $t0, y     <span class="com"># y = 10</span></td><td class="n">Write 10 over <code>y</code>. Swap complete.</td></tr>
+      <tr><td class="c">        <span class="kw">lw</span>   $a0, x</td><td class="n">Reload from memory so you are printing what is really stored, not what you hoped.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Print integer.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span>            <span class="com"># prints 20</span></td><td class="n">First line of output.</td></tr>
+      <tr><td class="c">        <span class="kw">la</span>   $a0, nl</td><td class="n">Address of the newline.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">4</span></td><td class="n">Print string.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Newline.</td></tr>
+      <tr><td class="c">        <span class="kw">lw</span>   $a0, y</td><td class="n">Reload <code>y</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Print integer.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span>            <span class="com"># prints 10</span></td><td class="n">Second line of output.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">Exit.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Stop.</td></tr>
+    </table>
+  </div>
+  <div class="scroll"><table>
+    <tr><th>Step</th><th><code>$t0</code></th><th><code>$t1</code></th><th><code>x</code></th><th><code>y</code></th></tr>
+    <tr><td>start</td><td>—</td><td>—</td><td>10</td><td>20</td></tr>
+    <tr><td><code>lw $t0, x</code></td><td>10</td><td>—</td><td>10</td><td>20</td></tr>
+    <tr><td><code>lw $t1, y</code></td><td>10</td><td>20</td><td>10</td><td>20</td></tr>
+    <tr><td><code>sw $t1, x</code></td><td>10</td><td>20</td><td><b>20</b></td><td>20</td></tr>
+    <tr><td><code>sw $t0, y</code></td><td>10</td><td>20</td><td>20</td><td><b>10</b></td></tr>
+  </table></div>
+  <p><b>The trap:</b> if you <code>sw</code> before loading <em>both</em> values, one of them is gone forever. The registers are the temporary — exactly like <code>tmp = x; x = y; y = tmp</code> in any other language.</p>
+</div></details>
+
+<details class="q"><summary>Finisher ★ — Celsius to Fahrenheit</summary><div class="a">
+  <p>F = C × 9 ÷ 5 + 32. <b>Multiply first, then divide</b>, so that integer division throws away as little as possible. (Dividing first, 37 ÷ 5 = 7, would give 7 × 9 + 32 = 95 instead of the correct 98.)</p>
+  <div class="code">
+    <div class="code-head"><span><b>MIPS</b> · Celsius → Fahrenheit</span><span>code → what it means</span></div>
+    <table class="ann">
+      <tr><td class="c">        <span class="kw">.text</span></td><td class="n">No data needed.</td></tr>
+      <tr><td class="c">        <span class="kw">.globl</span> main</td><td class="n">Entry point.</td></tr>
+      <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Read an integer: the Celsius temperature.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Value arrives in <code>$v0</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $t0, $v0</td><td class="n">Save it as C.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $t1, <span class="num">9</span></td><td class="n">The constant 9. <code>mult</code> needs both operands in registers.</td></tr>
+      <tr><td class="c">        <span class="kw">mult</span> $t0, $t1</td><td class="n">C × 9 → HI:LO. The product always fits in 32 bits for sane temperatures, so HI is just the sign extension.</td></tr>
+      <tr><td class="c">        <span class="kw">mflo</span> $t2</td><td class="n">Fetch the low 32 bits: that is C × 9.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $t3, <span class="num">5</span></td><td class="n">The constant 5.</td></tr>
+      <tr><td class="c">        <span class="kw">div</span>  $t2, $t3</td><td class="n">(C × 9) ÷ 5 → LO = quotient, HI = remainder (which we discard).</td></tr>
+      <tr><td class="c">        <span class="kw">mflo</span> $t4</td><td class="n">Fetch the quotient.</td></tr>
+      <tr><td class="c">        <span class="kw">addi</span> $t4, $t4, <span class="num">32</span></td><td class="n">Add 32. A constant, so <code>addi</code>, not <code>add</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Print integer.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $a0, $t4</td><td class="n">The answer.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints F.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">Exit.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Stop.</td></tr>
+    </table>
+  </div>
+  <p><b>Check the test cases:</b> C = 100 → 900 ÷ 5 = 180, + 32 = <b>212</b>. C = 37 → 333 ÷ 5 = 66 (truncated), + 32 = <b>98</b>. C = −40 → −360 ÷ 5 = −72, + 32 = <b>−40</b> (the famous crossing point).</p>
+</div></details>
+
+<details class="q"><summary>Finisher ★ — Multiply by 10 using only shifts and an add</summary><div class="a">
+  <p>10 = 8 + 2, and 8 = 2³ and 2 = 2¹. So <b>x × 10 = (x &lt;&lt; 3) + (x &lt;&lt; 1)</b> — two shifts and one add, no multiplier needed.</p>
+  <div class="code">
+    <div class="code-head"><span><b>MIPS</b> · x × 10 with shifts</span><span>code → what it means</span></div>
+    <table class="ann">
+      <tr><td class="c">        <span class="kw">.text</span></td><td class="n">No data needed.</td></tr>
+      <tr><td class="c">        <span class="kw">.globl</span> main</td><td class="n">Entry point.</td></tr>
+      <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Read x.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">x arrives in <code>$v0</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $t0, $v0</td><td class="n">Save it.</td></tr>
+      <tr><td class="c">        <span class="kw">sll</span>  $t1, $t0, <span class="num">3</span></td><td class="n">Shift left 3 places = × 8. Written <code>sll rd, rt, shamt</code>: the register being shifted is the <b>middle</b> operand.</td></tr>
+      <tr><td class="c">        <span class="kw">sll</span>  $t2, $t0, <span class="num">1</span></td><td class="n">Shift left 1 place = × 2.</td></tr>
+      <tr><td class="c">        <span class="kw">add</span>  $t3, $t1, $t2</td><td class="n">8x + 2x = 10x.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Print integer.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $a0, $t3</td><td class="n">The answer.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints 10x.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">Exit.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Stop.</td></tr>
+    </table>
+  </div>
+  <p><b>Check:</b> 7 → 56 + 14 = <b>70</b>. −3 → −24 + −6 = <b>−30</b>. Left shift works on negatives too, because two's complement multiplication by a power of two is just a shift. (Right shift is the one where you must choose <code>sra</code>, not <code>srl</code>.)</p>
+</div></details>
+
+<details class="q"><summary>Finisher ★ — compute (a + b)(a − b)</summary><div class="a">
+  <div class="code">
+    <div class="code-head"><span><b>MIPS</b> · (a + b)(a − b)</span><span>code → what it means</span></div>
+    <table class="ann">
+      <tr><td class="c">        <span class="kw">.text</span></td><td class="n">No data needed.</td></tr>
+      <tr><td class="c">        <span class="kw">.globl</span> main</td><td class="n">Entry point.</td></tr>
+      <tr><td class="c">main:   <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Read a.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">a arrives in <code>$v0</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $t0, $v0     <span class="com"># a</span></td><td class="n">Save it <b>before</b> the next read.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">5</span></td><td class="n">Read b.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">b arrives in <code>$v0</code>.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $t1, $v0     <span class="com"># b</span></td><td class="n">Save it.</td></tr>
+      <tr><td class="c">        <span class="kw">add</span>  $t2, $t0, $t1 <span class="com"># a+b</span></td><td class="n">First factor.</td></tr>
+      <tr><td class="c">        <span class="kw">sub</span>  $t3, $t0, $t1 <span class="com"># a-b</span></td><td class="n">Second factor. Two temporaries, then one multiply.</td></tr>
+      <tr><td class="c">        <span class="kw">mult</span> $t2, $t3</td><td class="n">Product → HI:LO.</td></tr>
+      <tr><td class="c">        <span class="kw">mflo</span> $t4</td><td class="n">Low 32 bits = the answer (HI holds only the sign extension for small inputs).</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">1</span></td><td class="n">Print integer.</td></tr>
+      <tr><td class="c">        <span class="kw">move</span> $a0, $t4</td><td class="n">The answer.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Prints it.</td></tr>
+      <tr><td class="c">        <span class="kw">li</span>   $v0, <span class="num">10</span></td><td class="n">Exit.</td></tr>
+      <tr><td class="c">        <span class="kw">syscall</span></td><td class="n">Stop.</td></tr>
+    </table>
+  </div>
+  <p><b>Check:</b> (7, 3) → 10 × 4 = <b>40</b>. (2, 9) → 11 × (−7) = <b>−77</b>. Which is of course a² − b²: 49 − 9 = 40 and 4 − 81 = −77.</p>
+</div></details>
+</div>
+
+<h2>12. The same model, refined: RISC-V</h2>
+<p>Lecture 11 closes by mapping everything above onto RISC-V, because the transferable skill is <b>the register-and-format model</b>, not the syntax. RV32I is a minimal 32-bit integer base: about 40 instructions, 32 registers <code>x0–x31</code> (with <code>x0</code> hardwired to zero, exactly like <code>$zero</code>), fixed 32-bit instructions, load/store only.</p>
+<div class="scroll"><table>
+  <tr><th></th><th>MIPS32</th><th>RISC-V (RV32)</th></tr>
+  <tr><td>Registers</td><td>32 (<code>$0–$31</code>)</td><td>32 (<code>x0–x31</code>)</td></tr>
+  <tr><td>Zero register</td><td><code>$zero</code> (<code>$0</code>)</td><td><code>x0</code></td></tr>
+  <tr><td>Instruction width</td><td>Fixed 32-bit</td><td>32-bit (+ 16-bit with the C extension)</td></tr>
+  <tr><td>Formats</td><td>R, I, J</td><td>R, I, S, B, U, J — a refinement with cleaner branch and immediate encodings</td></tr>
+  <tr><td>ISA model</td><td>One fixed set: you get everything at once</td><td>A minimal base you <b>extend</b></td></tr>
+  <tr><td>Licensing</td><td>Proprietary (MIPS Inc.)</td><td>Open and royalty-free</td></tr>
+</table></div>
+<p><b>The six extension letters</b> you bolt onto the RV32I base: <b>M</b> multiply/divide · <b>A</b> atomic operations · <b>F</b> single-precision float · <b>D</b> double-precision float · <b>C</b> compressed 16-bit instructions · <b>V</b> vector (SIMD). So <code>RV32IMAFD</code> = base + multiply + atomics + float + double. Pick your letters, get your ISA. More on the philosophy behind this on the <a href="m3-02-cisc-risc-riscv.html">CISC vs RISC page</a>.</p>
 
 <h2>Common mistakes &amp; exam traps</h2>
-<div class="callout trap"><b>Slips that cost marks</b>
+<div class="callout trap"><b>The lecture's own six</b>
 <ul>
-  <li><b>Field order ≠ written order.</b> You write <code>add rd, rs, rt</code>, but the bits are ordered <code>rs rt rd</code>.</li>
-  <li>In <code>lw</code>/<code>addi</code>, the destination is <b>rt</b>, not rd (I-type has no rd).</li>
+  <li><b>Writing to <code>$zero</code>.</b> It is hardwired to 0 and writes are silently ignored. Never use it as a destination.</li>
+  <li><b>Forgetting PC + 4.</b> Instructions are 4 bytes, the PC advances by 4, and branch targets are measured from PC + 4.</li>
+  <li><b>Skipping sign extension.</b> The 16-bit immediate is sign-extended to 32 bits: <code>0xFFFB</code> is −5, not 65531.</li>
+  <li><b>Confusing rd, rs, rt.</b> In R-format rd is the <b>destination</b>; rs and rt are the sources. The order in the binary is <code>rs rt rd</code> — it is <b>not</b> the order you write them.</li>
+  <li><b><code>$t</code> vs <code>$s</code> saving.</b> <code>$t</code> is caller-saved (not preserved), <code>$s</code> is callee-saved (preserved). Do not swap them.</li>
+  <li><b>Forgetting the <code>&lt;&lt; 2</code>.</b> Branch and jump offsets are counted in <b>words</b> and shifted left 2 to make bytes. Miss it and every target is wrong by 4×.</li>
+</ul></div>
+<div class="callout trap"><b>Plus the ones from Lab 11 and the encoding drills</b>
+<ul>
+  <li>In <code>lw</code>/<code>addi</code>, the destination is <b>rt</b>, not rd — I-type has no rd field.</li>
   <li>In <code>sll</code>, the source register goes in <b>rt</b> and rs = 0. In <code>jr</code>, the register goes in <b>rs</b>.</li>
-  <li>Branch offsets are counted from <b>PC + 4</b>, and in <b>instructions</b>, not bytes.</li>
-  <li>Negative immediates: write the 16-bit two's complement (−1 = <code>FFFF</code>, −8 = <code>FFF8</code>). Don't write 32 bits into a 16-bit field.</li>
-  <li>Using decimal where hex is expected: funct for add is 32 decimal = <code>0x20</code>.</li>
-  <li>A J-type target keeps the top 4 bits of <b>PC + 4</b> and adds two 0s at the bottom.</li>
+  <li>Negative immediates: write the <b>16-bit</b> two's complement (−1 = <code>FFFF</code>, −8 = <code>FFF8</code>). Don't write 32 bits into a 16-bit field.</li>
+  <li>Decimal where hex is expected: <code>funct</code> for <code>add</code> is 32 decimal = <code>0x20</code>.</li>
   <li>Register numbers: <code>$t0</code> is 8 (not 0), <code>$s0</code> is 16, <code>$sp</code> is 29, <code>$ra</code> is 31.</li>
+  <li><b>LO is the quotient, HI is the remainder.</b> And <code>mult</code>/<code>div</code> write neither to a normal register until you run <code>mflo</code>/<code>mfhi</code>.</li>
+  <li><code>la</code> gives an <b>address</b>, <code>lw</code> gives a <b>value</b>. Printing the former gives a huge meaningless number.</li>
+  <li>A word load or store needs an address that is a multiple of 4, or you get an address-error exception.</li>
+  <li><code>srl</code> zero-fills, <code>sra</code> sign-fills — only <code>sra</code> is a correct signed divide by a power of two.</li>
+  <li>Count <em>real</em> instructions: <code>la</code>, <code>bge</code>, <code>blt</code>, <code>ble</code> and a big <code>li</code> are two each.</li>
+  <li>Never touch <code>$at</code> — the assembler is already using it to build your pseudo-instructions.</li>
 </ul></div>
 
 <h2>Practice</h2>
+<p>The first three are the lecture's homework; then its exit ticket; then the lab's; then a sample of the cold-call questions and the textbook drills.</p>
 <div data-practice>
-  <details class="q"><summary>Encode <code>sw $t0, 48($s3)</code> in hex.</summary><div class="a"><p>I-type: op = 43 (0x2B), rs = 19 (<code>$s3</code>), rt = 8 (<code>$t0</code>), imm = 48.<br><code>101011 10011 01000 0000000000110000</code> → <code>1010 1110 0110 1000 0000 0000 0011 0000</code> = <b><code>0xAE680030</code></b>.</p></div></details>
-  <details class="q"><summary>Encode <code>addi $sp, $sp, -8</code> in hex.</summary><div class="a"><p>op = 8, rs = rt = 29 (<code>11101</code>), imm = −8 = <code>0xFFF8</code>.<br><code>001000 11101 11101 1111111111111000</code> → <b><code>0x23BDFFF8</code></b>.</p></div></details>
-  <details class="q"><summary>Encode <code>slt $t1, $t0, $s1</code> in hex.</summary><div class="a"><p>R-type: rs = 8, rt = 17, rd = 9, shamt = 0, funct = 42 (0x2A).<br><code>000000 01000 10001 01001 00000 101010</code> → <code>0000 0001 0001 0001 0100 1000 0010 1010</code> = <b><code>0x0111482A</code></b>.</p></div></details>
-  <details class="q"><summary>Decode <code>0x1674FFF4</code>. If it sits at address 0x0040002C, where does it jump?</summary><div class="a"><p><code>000101 10011 10100 1111111111110100</code>: op 5 = <code>bne</code>, rs = 19 (<code>$s3</code>), rt = 20 (<code>$s4</code>), offset = −12.<br><b><code>bne $s3, $s4, …</code></b>. Target = 0x0040002C + 4 + (−12 × 4) = 0x00400030 − 0x30 = <b>0x00400000</b>.</p></div></details>
-  <details class="q"><summary>A <code>jal func</code> has the address field 0x0100012 and sits at 0x0040001C. What is the target, and what goes into <code>$ra</code>?</summary><div class="a"><p>Target = {0000, 0x0100012, 00} = 0x0100012 × 4 = <b>0x00400048</b>. <code>$ra</code> = PC + 4 = <b>0x00400020</b>. (The factorial program on the <a href="m3-05-functions-stack.html">functions page</a> has exactly these numbers in MARS.)</p></div></details>
-  <details class="q"><summary>Why do <code>andi</code>/<code>ori</code> zero-extend but <code>addi</code> sign-extends?</summary><div class="a"><p>Logic operations treat the constant as a bit pattern (a mask), so the upper bits should be 0. <code>addi</code> does arithmetic, so a negative constant must stay negative, which needs sign extension.</p></div></details>
-  <details class="q"><summary>How many bits hold a register number, and why?</summary><div class="a"><p>5 bits, because 2⁵ = 32 registers.</p></div></details>
-  <details class="q"><summary>What 32-bit value does <code>lui $t0, 0x1001</code> put in <code>$t0</code>?</summary><div class="a"><p><code>0x10010000</code>: the immediate goes into the upper 16 bits and the lower 16 bits are 0. (That is the start of MARS's data segment.)</p></div></details>
+  <details class="q"><summary><b>Homework 1.</b> Decode <code>0x012A4020</code> to MIPS assembly. Show every field and the final mnemonic.</summary><div class="a"><p><b>Binary:</b> <code>0000 0001 0010 1010 0100 0000 0010 0000</code><br>
+  op = <code>000000</code> = 0 → <b>R-type</b>, so slice 6 | 5 | 5 | 5 | 5 | 6:<br>
+  <code>000000 | 01001 | 01010 | 01000 | 00000 | 100000</code><br>
+  rs = 01001 = 9 = <code>$t1</code> · rt = 01010 = 10 = <code>$t2</code> · rd = 01000 = 8 = <code>$t0</code> · shamt = 0 · funct = <code>100000</code> = 0x20 = <code>add</code>.<br>
+  Written in assembly order (rd, rs, rt): <b><code>add $t0, $t1, $t2</code></b>, i.e. <code>$t0 = $t1 + $t2</code>.</p></div></details>
+  <details class="q"><summary><b>Homework 2.</b> Convert <code>lw $t1, 16($sp)</code> into 32-bit binary, then to hex. Show the fields.</summary><div class="a"><p>I-type, written <code>lw rt, imm(rs)</code>. op(<code>lw</code>) = 0x23 = <code>100011</code>; rs = <code>$sp</code> = 29 = <code>11101</code> (the base); rt = <code>$t1</code> = 9 = <code>01001</code> (the destination); imm = 16 = <code>0000000000010000</code>.<br>
+  <code>100011 11101 01001 0000000000010000</code><br>
+  Regroup in 4s: <code>1000 1111 1010 1001 0000 0000 0001 0000</code> = <b><code>0x8FA90010</code></b>.</p>
+  <p><b>Watch the slice.</b> The lecture's slide shows these same fields but writes the hex nowhere — a common slip is to read the rs field as <code>11101</code> and then forget that its top bit lands in the <em>second</em> hex digit (giving <code>0x8D…</code> instead of <code>0x8F…</code>). Always regroup the full 32 bits in fours before converting.</p></div></details>
+  <details class="q"><summary><b>Homework 3.</b> Explain the difference between <code>$t</code>-registers and <code>$s</code>-registers in the calling convention.</summary><div class="a"><p><code>$t0–$t9</code> are <b>caller-saved temporaries</b>: a function you call is free to destroy them, so if <em>you</em> still need a value after a call, <em>you</em> (the caller) must save it first. <code>$s0–$s7</code> are <b>callee-saved</b>: any function that wants to use one must save the old value on the stack and restore it before returning, so the caller can trust the value survives.</p>
+  <p>Practical rule: short-lived scratch values go in <code>$t</code>; anything you still need after a <code>jal</code> goes in <code>$s</code>. The hardware enforces none of this — it is a pure agreement between programmers, which is why it is a <em>convention</em>.</p></div></details>
+  <details class="q"><summary><b>Exit ticket (L11) 1.</b> Which fields does the R-format have, in order?</summary><div class="a"><p><code>op(6) | rs(5) | rt(5) | rd(5) | shamt(5) | funct(6)</code> — from bit 31 down to bit 0, adding up to exactly 32.</p></div></details>
+  <details class="q"><summary><b>Exit ticket (L11) 2.</b> What value does <code>$zero</code> always hold, and what happens if you write to it?</summary><div class="a"><p>It always reads as <b>0</b> — it is hardwired, not merely initialised. A write to it is <b>silently ignored</b>: no error, no change, the program carries on. That is what makes it safe to use as the "throw away the result" destination and as a free source of the constant 0.</p></div></details>
+  <details class="q"><summary><b>Exit ticket (L11) 3.</b> Name the six RISC-V extension letters and what each adds.</summary><div class="a"><p><b>M</b> integer multiply and divide · <b>A</b> atomic memory operations · <b>F</b> single-precision floating point · <b>D</b> double-precision floating point · <b>C</b> compressed 16-bit instruction encodings · <b>V</b> vector (SIMD). They bolt onto the RV32I base, so <code>RV32IMAFD</code> names a specific chip's ISA.</p></div></details>
+  <details class="q"><summary><b>Exit ticket (Lab 11) 1.</b> <code>lw $t0, 4($t1)</code> with <code>$t1</code> = 0x1000. What is the effective address?</summary><div class="a"><p>Effective address = base register + sign-extended offset = 0x1000 + 4 = <b>0x1004</b>. It is a multiple of 4, so the load is legal.</p></div></details>
+  <details class="q"><summary><b>Exit ticket (Lab 11) 2.</b> After <code>div $t0, $t1</code>, which instruction gives you the remainder?</summary><div class="a"><p><code>mfhi</code> — the remainder is in <b>HI</b>. <code>mflo</code> would give you the quotient.</p></div></details>
+  <details class="q"><summary><b>Exit ticket (Lab 11) 3.</b> <code>la $t0, x</code> versus <code>lw $t0, x</code>: which one puts 10 in <code>$t0</code> when <code>x: .word 10</code>?</summary><div class="a"><p><b><code>lw</code></b>. It loads the <em>value</em> stored at <code>x</code>. <code>la</code> loads the <em>address</em> of <code>x</code> — a number around 0x10010000, which prints as something like 268500992.</p></div></details>
+  <details class="q"><summary><b>Cold call.</b> Why can't you write <code>add $t0, var, $t1</code>?</summary><div class="a"><p>MIPS is a <b>load/store architecture</b>: the ALU's operands come from registers only. To use a variable in memory you must <code>lw</code> it into a register first. That restriction is what keeps every instruction 32 bits and the decode fast.</p></div></details>
+  <details class="q"><summary><b>Cold call.</b> Which pipeline stages does <code>add</code> skip? And <code>sw</code>?</summary><div class="a"><p><code>add</code> skips <b>Memory</b> (it never touches memory): Fetch, Decode, Execute, —, Write back. <code>sw</code> skips <b>Write back</b> (there is no register result): Fetch, Decode, Execute, Memory, —. Only <code>lw</code> uses all five.</p></div></details>
+  <details class="q"><summary><b>Cold call.</b> 13! does not fit in 32 bits. What does LO hold, and where do you see the overflow?</summary><div class="a"><p>13! = 6,227,020,800. In HI:LO that is HI = <code>0x00000001</code>, LO = <code>0x7328CC00</code>. <b>LO alone reads 1,932,053,504</b> — a perfectly plausible-looking wrong answer. The only sign anything went wrong is that <b>HI is not 0</b> (for a positive product). This is exactly why Lab 13's "factorial of any number" has to check HI, and why the single-instruction <code>mul rd, rs, rt</code> — which discards HI — cannot warn you.</p></div></details>
+  <details class="q"><summary><b>Cold call.</b> Why is <code>li $t0, 0xabcd1234</code> two instructions?</summary><div class="a"><p>The I-type immediate field is only <b>16 bits</b> wide, so no single instruction can carry a 32-bit constant. The assembler emits <code>lui $at, 0xabcd</code> (upper half into the top 16 bits) then <code>ori $t0, $at, 0x1234</code> (lower half OR-ed in). <code>ori</code> rather than <code>addi</code> because <code>ori</code> zero-extends — <code>addi</code> would sign-extend <code>0x1234</code>'s cousin <code>0x8234</code> and corrupt the upper half.</p></div></details>
+  <details class="q"><summary><b>Cold call.</b> Which R-type fields map onto the register file's ports?</summary><div class="a"><p><b>rs and rt are the two read ports</b>; <b>rd is the single write port</b>. That is precisely the 2-read / 1-write <a href="m2-05-register-file.html">register file</a> you built in Module 2 — the instruction format was designed around the hardware, not the other way round.</p></div></details>
+  <details class="q"><summary><b>Drill.</b> Encode <code>sw $t0, 48($s3)</code> in hex.</summary><div class="a"><p>I-type: op = 43 (0x2B), rs = 19 (<code>$s3</code>), rt = 8 (<code>$t0</code>), imm = 48.<br><code>101011 10011 01000 0000000000110000</code> → <code>1010 1110 0110 1000 0000 0000 0011 0000</code> = <b><code>0xAE680030</code></b>.</p></div></details>
+  <details class="q"><summary><b>Drill.</b> Encode <code>addi $sp, $sp, -8</code> in hex.</summary><div class="a"><p>op = 8, rs = rt = 29 (<code>11101</code>), imm = −8 = <code>0xFFF8</code>.<br><code>001000 11101 11101 1111111111111000</code> → <b><code>0x23BDFFF8</code></b>.</p></div></details>
+  <details class="q"><summary><b>Drill.</b> Encode <code>slt $t1, $t0, $s1</code> in hex.</summary><div class="a"><p>R-type: rs = 8, rt = 17, rd = 9, shamt = 0, funct = 42 (0x2A).<br><code>000000 01000 10001 01001 00000 101010</code> → <code>0000 0001 0001 0001 0100 1000 0010 1010</code> = <b><code>0x0111482A</code></b>.</p></div></details>
+  <details class="q"><summary><b>Drill.</b> Decode <code>0x1674FFF4</code>. If it sits at address 0x0040002C, where does it jump?</summary><div class="a"><p><code>000101 10011 10100 1111111111110100</code>: op 5 = <code>bne</code>, rs = 19 (<code>$s3</code>), rt = 20 (<code>$s4</code>), offset = −12.<br><b><code>bne $s3, $s4, …</code></b>. Target = 0x0040002C + 4 + (−12 × 4) = 0x00400030 − 0x30 = <b>0x00400000</b>.</p></div></details>
+  <details class="q"><summary><b>Drill.</b> A <code>jal func</code> has the address field 0x0100012 and sits at 0x0040001C. What is the target, and what goes into <code>$ra</code>?</summary><div class="a"><p>Target = {(PC+4)[31:28] = 0000, 0x0100012, 00} = 0x0100012 × 4 = <b>0x00400048</b>. <code>$ra</code> = PC + 4 = <b>0x00400020</b>. (The factorial program on the <a href="m3-05-functions-stack.html">functions page</a> has exactly these numbers in the simulator.)</p></div></details>
+  <details class="q"><summary><b>Drill.</b> Why do <code>andi</code>/<code>ori</code> zero-extend but <code>addi</code> sign-extends?</summary><div class="a"><p>Logic operations treat the constant as a <b>bit pattern</b> — a mask — so the bits you did not write should be 0. <code>addi</code> does <b>arithmetic</b>, so a negative constant must stay negative, which needs sign extension.</p></div></details>
+  <details class="q"><summary><b>Drill.</b> How many bits hold a register number, and why?</summary><div class="a"><p>5 bits, because 2⁵ = 32 registers. (And that is why the ISA has 32 and not 40: three 5-bit fields plus a 6-bit opcode and a 6-bit funct is exactly 32.)</p></div></details>
+  <details class="q"><summary><b>Drill.</b> What 32-bit value does <code>lui $t0, 0x1001</code> put in <code>$t0</code>?</summary><div class="a"><p><code>0x10010000</code>: the immediate goes into the upper 16 bits and the lower 16 bits are 0. (That is the start of the simulator's data segment.)</p></div></details>
+  <details class="q"><summary><b>Rapid-fire.</b> <code>$zero</code> always holds…? Every instruction is how many bits? RISC-V's M extension adds…?</summary><div class="a"><p><b>0</b> · <b>32</b> · <b>multiply</b> (and divide).</p></div></details>
 </div>
 
 <h2>Watch</h2>
